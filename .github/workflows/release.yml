@@ -36,6 +36,34 @@ jobs:
           "$h  flelink-${{ matrix.target }}.zip" | Out-File -Encoding ascii flelink-${{ matrix.target }}.zip.sha256
       - uses: actions/upload-artifact@v4
         with: { name: "flelink-${{ matrix.target }}", path: "flelink-${{ matrix.target }}.*" }
+  app:
+    # the desktop app (Tauri), unsigned for now: macOS asks to confirm the first start, Windows shows SmartScreen
+    strategy:
+      matrix:
+        include:
+          - { os: macos-latest,   args: "--target aarch64-apple-darwin" }
+          - { os: macos-13,       args: "--target x86_64-apple-darwin" }
+          - { os: ubuntu-latest,  args: "" }
+          - { os: windows-latest, args: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}" }
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: app
+          tauriScript: npx -y @tauri-apps/cli@2
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_name }}
+          releaseName: "FLE Link ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: true
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
   publish:
     needs: build
     runs-on: ubuntu-latest
