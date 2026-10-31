@@ -162,6 +162,10 @@ fn norm(v: &Value, port: i64, home: &Path, fake: &Path) -> Value {
         v["plan"]["port"] = json!("PORT");
     }
     v["rss"] = json!(!v["rss"].is_null());
+    // what is read from the engine's log depends on when the log was last read; the log itself is compared separately
+    v["cache"] = json!(v["cache"]["enabled"].clone());
+    v["accept_logged"] = json!(0);
+    v["log_seq"] = json!(0);
     v["load"]["read"] = json!(0);
     v["load"]["elapsed"] = json!(!v["load"]["elapsed"].is_null());
     if v["state"] == "starting" {
