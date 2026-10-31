@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix: { os: [ubuntu-latest, macos-latest, windows-latest] }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      # Specifications for the comparison tests: the Python FLE Studio core and the engine repo's Python helper, both at pinned commits.
+      - id: pin
+        shell: bash
+        run: |
+          echo "studio=$(cat STUDIO_PIN)" >> "$GITHUB_OUTPUT"
+          echo "engine=$(cat ENGINE_PIN)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v6
+        with: { repository: sirfyyn/fle-studio, ref: "${{ steps.pin.outputs.studio }}", path: spec-studio }
+      - uses: actions/checkout@v6
+        with: { repository: sirfyyn/FastLocalExperts, ref: "${{ steps.pin.outputs.engine }}", path: spec-engine, sparse-checkout: "fle\ntools" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "clippy, rustfmt" }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --all
+        env:
+          FLE_STUDIO_SRC: ${{ github.workspace }}/spec-studio/src
+          FLE_ENGINE_SRC: ${{ github.workspace }}/spec-engine
+          FLE_STUDIO_PYTHON: python

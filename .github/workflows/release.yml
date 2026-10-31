@@ -1,0 +1,48 @@
+name: release
+
+# Tag vX.Y.Z builds `flelink` for macOS (arm64, x64), Linux (x64) and Windows (x64) and attaches the files plus the installers.
+on:
+  push: { tags: ["v*"] }
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { os: macos-latest,   target: aarch64-apple-darwin }
+          - { os: macos-13,       target: x86_64-apple-darwin }
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ matrix.target }}" }
+      - run: cargo build --release -p flelink --target ${{ matrix.target }}
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release && tar -czf "$GITHUB_WORKSPACE/flelink-${{ matrix.target }}.tar.gz" flelink && cd "$GITHUB_WORKSPACE"
+          (shasum -a 256 flelink-${{ matrix.target }}.tar.gz 2>/dev/null || sha256sum flelink-${{ matrix.target }}.tar.gz) | awk '{print $1"  flelink-${{ matrix.target }}.tar.gz"}' > flelink-${{ matrix.target }}.tar.gz.sha256
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive target/${{ matrix.target }}/release/flelink.exe flelink-${{ matrix.target }}.zip
+          $h = (Get-FileHash flelink-${{ matrix.target }}.zip -Algorithm SHA256).Hash.ToLower()
+          "$h  flelink-${{ matrix.target }}.zip" | Out-File -Encoding ascii flelink-${{ matrix.target }}.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with: { name: "flelink-${{ matrix.target }}", path: "flelink-${{ matrix.target }}.*" }
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - run: cp install.sh install.ps1 dist/
+      - uses: softprops/action-gh-release@v2
+        with: { files: "dist/*", prerelease: true, name: "FLE Link ${{ github.ref_name }}" }
