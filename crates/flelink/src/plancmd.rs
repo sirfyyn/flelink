@@ -115,6 +115,7 @@ pub fn model_path(
     model: &Option<String>,
     s: &Map<String, Value>,
     required: bool,
+    home: &std::path::Path,
 ) -> Result<String> {
     let p = model.clone().filter(|m| !m.is_empty()).unwrap_or_else(|| {
         s.get("model")
@@ -125,11 +126,33 @@ pub fn model_path(
     if p.is_empty() && required {
         return Err(FleError::new(
             "No model given.",
-            "Pass MODEL, or run `flelink config set model /path/to/model.gguf`.",
+            "Pass MODEL (a name from `flelink models` or a .gguf file), or run `flelink config set model NAME`.",
         )
         .into());
     }
-    Ok(p)
+    Ok(resolve_model(&p, home))
+}
+
+/// A name from the catalog (`llama-3.2-1b`) stands for its file in the data folder, like in `flelink ask` and `run`.
+/// Anything else is taken as a path. A known name that is not downloaded yet stays a name, and the check reports it.
+pub fn resolve_model(p: &str, home: &std::path::Path) -> String {
+    if p.is_empty() || std::path::Path::new(p).exists() {
+        return p.to_string();
+    }
+    match flelink_core::catalog::builtin()
+        .into_iter()
+        .find(|m| m.id == p)
+    {
+        Some(m) => {
+            let f = flelink_core::flow::model_path(home, &m);
+            if f.exists() {
+                f.to_string_lossy().to_string()
+            } else {
+                p.to_string()
+            }
+        }
+        None => p.to_string(),
+    }
 }
 
 fn env_pairs(v: &[String]) -> Result<Vec<(String, String)>> {
@@ -155,7 +178,7 @@ fn env_pairs(v: &[String]) -> Result<Vec<(String, String)>> {
 fn installed(home: &std::path::Path) -> Vec<PathBuf> {
     flelink_core::engines::installed(home)
         .into_iter()
-        .filter_map(|(_, d)| flelink_core::engines::find_server(&d))
+        .map(|(_, server)| server)
         .collect()
 }
 
@@ -189,14 +212,15 @@ fn upstream_engine(explicit: &str, home: &std::path::Path) -> String {
             c.push(e.trim().into());
         }
     }
-    if let Some(p) = launch::which("llama-server") {
-        c.push(p.to_string_lossy().into());
-    }
+    // D12: engines this program installed come before a llama-server on the PATH
     c.extend(
         installed(home)
             .iter()
             .map(|p| p.to_string_lossy().to_string()),
     );
+    if let Some(p) = launch::which("llama-server") {
+        c.push(p.to_string_lossy().into());
+    }
     for cand in c {
         if !std::path::Path::new(&cand).is_file() {
             continue;
@@ -299,7 +323,7 @@ pub fn plan_for(
 
 pub fn run(a: PlanArgs, home: &std::path::Path) -> Result<()> {
     let s = settings(&a)?;
-    let path = model_path(&a.common.model, &s, true)?;
+    let path = model_path(&a.common.model, &s, true, home)?;
     let plan = plan_for(&a, &s, &path, home, &Host::detect())?;
     if a.common.json {
         println!("{}", gguf::py_json(&plan.as_json()));
@@ -315,7 +339,7 @@ pub fn run_doctor(c: Common, strict: bool, home: &std::path::Path) -> Result<i32
         ..Default::default()
     };
     let s = settings(&pa)?;
-    let path = model_path(&pa.common.model, &s, false)?;
+    let path = model_path(&pa.common.model, &s, false, home)?;
     let host = Host::detect();
     let system = flelink_core::doctor::system_summary(&path, &host);
     let r = flelink_core::doctor::run(&path, &s, &host, &system, &installed(home));
@@ -338,7 +362,7 @@ pub fn run_report(c: Common, out: String, zip: bool, home: &std::path::Path) -> 
         ..Default::default()
     };
     let s = settings(&pa)?;
-    let path = model_path(&pa.common.model, &s, false)?;
+    let path = model_path(&pa.common.model, &s, false, home)?;
     let host = Host::detect();
     let system = flelink_core::doctor::system_summary(&path, &host);
     let d = flelink_core::doctor::run(&path, &s, &host, &system, &installed(home));
@@ -415,7 +439,7 @@ pub fn run_fetch_sidecars(c: Common, dry_run: bool, force: bool) -> Result<i32> 
         ..Default::default()
     };
     let s = settings(&pa)?;
-    let path = model_path(&pa.common.model, &s, true)?;
+    let path = model_path(&pa.common.model, &s, true, &flelink_core::data_dir())?;
     let model = gguf::read_model(std::path::Path::new(&path))?;
     let sources = sc::known_sources();
     let Some(source) = sc::find_source(&model, &sources) else {
@@ -499,7 +523,7 @@ pub fn run_serve(
 ) -> Result<i32> {
     use flelink_core::serve;
     let s = settings(&a)?;
-    let path = model_path(&a.common.model, &s, true)?;
+    let path = model_path(&a.common.model, &s, true, home)?;
     let host = Host::detect();
     let plan = plan_for(&a, &s, &path, home, &host)?;
     if !no_preflight && !plan.fallback {

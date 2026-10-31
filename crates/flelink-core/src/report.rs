@@ -79,7 +79,20 @@ pub fn build(mut report: Value, settings: &Map<String, Value>) -> Result<Value> 
     );
     r.insert("settings".into(), Value::Object(shown));
     r.insert("file_settings".into(), redact(&Value::Object(raw)));
+    // paths name the user ("/Users/max/…"); the report is meant to be shared, so the home folder becomes "~"
+    if let Some(home) = dirs::home_dir().filter(|h| h.components().count() > 1) {
+        hide_home(&mut report, &home.to_string_lossy());
+    }
     Ok(report)
+}
+
+fn hide_home(v: &mut Value, home: &str) {
+    match v {
+        Value::String(s) if s.contains(home) => *s = s.replace(home, "~"),
+        Value::Array(a) => a.iter_mut().for_each(|x| hide_home(x, home)),
+        Value::Object(m) => m.values_mut().for_each(|x| hide_home(x, home)),
+        _ => {}
+    }
 }
 
 fn checks_text(r: &Value) -> String {

@@ -507,9 +507,13 @@ impl Engine {
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x0800_0000 | 0x0000_0200);
         }
+        // an engine left behind by a Studio or app that died (kill -9, crash) is stopped before a second one loads
+        let home = self.log_dir.parent().unwrap_or(&self.log_dir).to_path_buf();
+        flelink_core::orphans::reap(&home);
         let child = cmd.spawn().map_err(|e| e.to_string())?;
         drop(cmd); // the parent's copy of the write end of the pipe must go, or the reader never sees the end
         let pid = child.id();
+        flelink_core::orphans::record(&home, pid);
         let handle = Arc::new(Mutex::new(child));
         {
             let mut s = self.st.lock().unwrap();

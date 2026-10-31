@@ -8,6 +8,7 @@ pub struct Server {
     pub child: Child,
     pub base: String,
     pub log: std::path::PathBuf,
+    home: std::path::PathBuf,
 }
 
 impl Server {
@@ -32,13 +33,18 @@ impl Server {
             #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             let _ = dir; // Windows loads the engine's DLLs from the folder of the program itself
         }
+        // the data folder: an engine left behind by a program that died is stopped before a second one loads
+        let home = log_dir.parent().unwrap_or(log_dir).to_path_buf();
+        crate::orphans::reap(&home);
         let child = cmd
             .spawn()
             .with_context(|| format!("could not start {}", server.display()))?;
+        crate::orphans::record(&home, child.id());
         Ok(Server {
             child,
             base: format!("http://127.0.0.1:{}", plan.port),
             log,
+            home,
         })
     }
 
@@ -106,6 +112,7 @@ impl Server {
     pub fn stop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        crate::orphans::forget(&self.home, self.child.id());
     }
 }
 

@@ -1479,7 +1479,9 @@ fn static_file(st: &Studio, path: &str, head: bool) -> Response<Body> {
         return not_found();
     };
     if name == "index.html" {
-        let t = String::from_utf8_lossy(&data).replace("__FLE_TOKEN__", &st.token);
+        let t = String::from_utf8_lossy(&data)
+            .replace("__FLE_TOKEN__", &st.token)
+            .replace("__FLELINK_VERSION__", env!("CARGO_PKG_VERSION"));
         data = t.into_bytes();
     }
     let suffix = name

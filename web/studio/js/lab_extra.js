@@ -118,7 +118,7 @@ export function mountExtras(abaBox, qualityBox, { onQuality } = {}) {
   }
   async function importMkqa() {
     const ok = await confirmDialog({ title: "Download MKQA questions?",
-      body: `They come from the MKQA dataset (Apple), licensed ${quality.mkqa_license} They are saved in your data folder only and are not part of FLE Studio.`, ok: "Download" });
+      body: `They come from the MKQA dataset (Apple), licensed ${quality.mkqa_license} They are saved in your data folder only and are not part of FLE Link.`, ok: "Download" });
     if (!ok) return;
     try {
       const r = await post("/api/quality/mkqa", { lang: form.lang, count: 48 });

@@ -1,4 +1,4 @@
-// FLE Studio web app: shared state, the polling loop, the router and the sidebar.
+// FLE Link web app: shared state, the polling loop, the router and the sidebar.
 
 import { del, get } from "./api.js";
 import { initChatSearch, searchActive } from "./chat-search.js";
@@ -128,7 +128,7 @@ async function tick() {
       const finished = r.downloads.some((d) => (d.state === "done" || d.state === "failed") && before.get(d.id) && before.get(d.id) !== d.state);
       if (finished) refreshState().catch(() => {});
     }
-    if (!store.online) { store.online = true; toast("Connected to FLE Studio again", "good"); }
+    if (!store.online) { store.online = true; toast("Connected to FLE Link again", "good"); }
   } catch (e) {
     if (store.online && e.status === 0) { store.online = false; toast(e.message, "bad", 8000); }
   }
@@ -199,9 +199,10 @@ export function topbar(title, ...right) {
 
 // ----------------------------------------------------------------------------------------------- sidebar
 
+// Experiments (/lab: speed test, tuner) and Expert cache (/cache) need /api/bench, /api/tuning and /api/cache, which the
+// FLE Link server does not have yet (501). Their pages stay reachable by address; the sidebar shows them again once it does.
 const NAV = [
   ["/", "chat", "Chat"], ["/models", "models", "Models"], ["/engine", "engine", "Engine"],
-  ["/lab", "lab", "Experiments"], ["/cache", "grid", "Expert cache"],
   ["/settings", "settings", "Settings"],
 ];
 
@@ -312,7 +313,9 @@ async function start() {
     toast(e.message, "bad", 10000);
     return;
   }
-  document.getElementById("brand-ver").textContent = `v${store.state.version}`;
+  // the product version (FLE Link); state.version stays the Studio API version the page was written against
+  const product = document.querySelector('meta[name="flelink-version"]')?.content;
+  document.getElementById("brand-ver").textContent = `v${product && !product.startsWith("__") ? product : store.state.version}`;
   store.engine = store.state.engine;
   renderEngineCard();
   refreshChats().catch(() => {});

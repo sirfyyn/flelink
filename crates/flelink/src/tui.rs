@@ -263,7 +263,7 @@ impl App {
         .areas(area);
         let title = Line::from(vec![
             Span::styled(
-                " FLE ",
+                " FLE Link ",
                 Style::new()
                     .bg(Color::Magenta)
                     .fg(Color::White)
@@ -479,11 +479,17 @@ impl App {
             status,
         );
         let mut t = Text::default();
+        // the answer is labelled with the model that gave it
+        let model = self
+            .ready
+            .as_ref()
+            .map(|r| r.model.as_str())
+            .unwrap_or("model");
         for (role, text) in &self.history {
             let (name, col) = if role == "user" {
                 ("you", Color::Cyan)
             } else {
-                ("fle", Color::Green)
+                (model, Color::Green)
             };
             t.lines.push(Line::from(Span::styled(
                 name,

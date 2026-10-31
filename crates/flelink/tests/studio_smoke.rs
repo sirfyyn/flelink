@@ -104,7 +104,7 @@ fn fle_studio_serves_the_page_and_the_api_and_stops_on_a_signal() {
         .unwrap()
         .read_to_string(&mut out)
         .unwrap();
-    assert!(out.contains("Stopping FLE Studio"), "{out}");
+    assert!(out.contains("Stopping FLE Link"), "{out}");
     let _ = std::fs::remove_dir_all(&home);
 }
 

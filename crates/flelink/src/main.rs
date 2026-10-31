@@ -52,7 +52,7 @@ enum Cmd {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// The models FLE knows, and whether each fits this machine
+    /// The models FLE Link knows, and whether each fits this machine
     Models,
     /// Load a model and keep serving it (OpenAI-compatible API) until Ctrl+C
     Run { model: String },
@@ -69,7 +69,7 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
-    /// Start FLE Studio: the web page and the local API (`http://127.0.0.1:8642`)
+    /// Start the Studio: the web page and the local API (`http://127.0.0.1:8642`)
     Studio {
         /// data folder (settings, chats, engines, models); default: per-user app data
         #[arg(long, value_name = "DIR")]
@@ -103,7 +103,7 @@ enum Cmd {
         #[arg(long)]
         strict: bool,
     },
-    /// What this computer has and which engines `fle` could install
+    /// What this computer has and which engines FLE Link could install
     System,
     /// Start llama-server with the plan
     Serve {
@@ -191,14 +191,24 @@ fn print_event(e: &Event) {
 
 pub fn main() {
     if let Err(e) = run() {
-        // same words as the Python helper: "fle: message", then "hint: ..."; exit code 2
+        // like the Python helper: "<program>: message", then "hint: ..."; exit code 2. The name is the one it was called
+        // by, so `fle` still says "fle:" and `flelink` says "flelink:".
+        let prog = std::env::args_os()
+            .next()
+            .and_then(|a| {
+                std::path::Path::new(&a)
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+            })
+            .filter(|s| s == "fle")
+            .unwrap_or_else(|| "flelink".into());
         if let Some(fe) = e.downcast_ref::<flelink_core::FleError>() {
-            eprintln!("fle: {fe}");
+            eprintln!("{prog}: {fe}");
             if !fe.hint.is_empty() {
                 eprintln!("hint: {}", fe.hint);
             }
         } else {
-            eprintln!("fle: {e:#}");
+            eprintln!("{prog}: {e:#}");
         }
         std::process::exit(2);
     }
@@ -376,11 +386,54 @@ fn run_config(config: Option<String>, json: bool, action: ConfigAction) -> Resul
                 )
                 .into());
             }
+            // a typo would otherwise be saved and silently do nothing
+            const KNOWN: [&str; 13] = [
+                "profile",
+                "spec",
+                "engine",
+                "model",
+                "host",
+                "port",
+                "context",
+                "threads",
+                "gpu_cache_mib",
+                "fit_target_mib",
+                "mtp",
+                "pinned_load",
+                "env",
+            ];
+            const NUMBERS: [&str; 5] = [
+                "port",
+                "context",
+                "threads",
+                "gpu_cache_mib",
+                "fit_target_mib",
+            ];
+            let top = key.split('.').next().unwrap_or("");
+            if !KNOWN.contains(&top) || (top == "env" && !key.starts_with("env.")) {
+                return Err(FleError::new(
+                    format!("Unknown setting '{key}'"),
+                    format!("Known: {}, env.NAME.", KNOWN[..12].join(", ")),
+                )
+                .into());
+            }
             let v = if key.starts_with("env.") {
-                serde_json::Value::String(value)
+                serde_json::Value::String(value.clone())
             } else {
                 config::parse_value(&value)
             };
+            if NUMBERS.contains(&key.as_str()) && !v.is_number() {
+                return Err(
+                    FleError::new(format!("{key} needs a number, got '{value}'"), "").into(),
+                );
+            }
+            if key == "port" && !v.as_f64().is_some_and(|p| (1.0..=65535.0).contains(&p)) {
+                return Err(FleError::new(
+                    format!("port must be between 1 and 65535, got {value}"),
+                    "",
+                )
+                .into());
+            }
             config::set_dotted(&mut data, &key, v);
             println!("{}", config::save(&data, config.as_deref())?.display());
         }

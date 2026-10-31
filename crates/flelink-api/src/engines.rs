@@ -345,6 +345,49 @@ fn py_name(s: &str) -> String {
     out
 }
 
+/// Engines the terminal installed (`flelink run`, `ask`) sit in `engines/<variant>-<tag>/` like the Studio's own, but
+/// without an entry in engines.json. Add those entries, so both see the same engines. True when something was added.
+fn adopt_unlisted(dir: &Path, items: &mut Vec<Value>) -> bool {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    let mut added = false;
+    for e in rd.flatten() {
+        let folder = e.path();
+        let name = e.file_name().to_string_lossy().to_string();
+        if !folder.is_dir() || name.starts_with('_') {
+            continue;
+        }
+        let listed = items
+            .iter()
+            .any(|i| Path::new(i["path"].as_str().unwrap_or("")).starts_with(&folder));
+        if listed {
+            continue;
+        }
+        let Some(server) = flelink_core::engines::find_server(&folder) else {
+            continue;
+        };
+        let (variant, tag) = name.rsplit_once('-').unwrap_or((name.as_str(), ""));
+        let kind = if variant.starts_with("fle") {
+            "fle"
+        } else {
+            "upstream"
+        };
+        let backend = variant.split_once('-').map(|(_, b)| b).unwrap_or("");
+        let when = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        items.push(json!({"id": name, "variant": variant, "kind": kind, "flavor": kind, "backend": backend, "tag": tag,
+            "path": server.to_string_lossy(), "version": "", "installed": when, "ok": true, "problem": ""}));
+        added = true;
+    }
+    added
+}
+
 impl Engines {
     pub fn new(
         data_dir: &Path,
@@ -355,13 +398,18 @@ impl Engines {
         let dir = data_dir.join("engines");
         let _ = std::fs::create_dir_all(&dir);
         let file = dir.join("engines.json");
-        let items = match std::fs::read_to_string(&file)
+        let mut items = match std::fs::read_to_string(&file)
             .ok()
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
         {
             Some(Value::Array(a)) => a,
             _ => vec![],
         };
+        if adopt_unlisted(&dir, &mut items) {
+            let tmp = file.with_extension("tmp");
+            let _ = std::fs::write(&tmp, serde_json::to_string_pretty(&items).unwrap())
+                .and_then(|_| std::fs::rename(&tmp, &file));
+        }
         let e = Engines {
             inner: Arc::new(Inner {
                 dir,

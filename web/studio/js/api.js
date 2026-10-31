@@ -1,4 +1,4 @@
-// Talking to the FLE Studio server. Every call that changes something carries the per-run token from the page.
+// Talking to the FLE Link server. Every call that changes something carries the per-run token from the page.
 
 const TOKEN = document.querySelector('meta[name="fle-token"]')?.content || "";
 
@@ -30,7 +30,7 @@ export const hostUrl = (path) => transport.url(path);
 const nativeFetch = window.fetch.bind(window);
 window.fetch = (input, init) => nativeFetch(typeof input === "string" ? hostUrl(input) : input, init);
 
-// FLE Studio was restarted and this page still holds the old run's token: reload once to get the new one.
+// FLE Link was restarted and this page still holds the old run's token: reload once to get the new one.
 // At most every 15 s, so a server that keeps refusing cannot put the page into a reload loop.
 function reloadForNewSession(res) {
   if (res.status !== 403 || res.headers.get("X-FLE-Session") !== "expired") return false;
@@ -55,13 +55,13 @@ async function api(method, path, body) {
   try {
     res = await fetch(path, opts);
   } catch {
-    throw new ApiError(0, "FLE Studio is not reachable. Is it still running?");
+    throw new ApiError(0, "FLE Link is not reachable. Is it still running?");
   }
   if (res.status === 401) {
     location.href = "/login";
     throw new ApiError(401, "Sign in first");
   }
-  if (reloadForNewSession(res)) throw new ApiError(403, "FLE Studio was restarted; reloading the page");
+  if (reloadForNewSession(res)) throw new ApiError(403, "FLE Link was restarted; reloading the page");
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
@@ -100,7 +100,7 @@ export async function streamChat(body, { signal, onChunk }) {
     signal,
   });
   if (!res.ok) {
-    if (reloadForNewSession(res)) throw new ApiError(403, "FLE Studio was restarted; reloading the page");
+    if (reloadForNewSession(res)) throw new ApiError(403, "FLE Link was restarted; reloading the page");
     let msg = `${res.status} ${res.statusText}`;
     let details = null;
     try { details = (await res.json())?.error || null; msg = details?.message || msg; } catch { /* keep status text */ }

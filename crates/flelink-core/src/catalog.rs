@@ -18,7 +18,7 @@ pub fn builtin() -> Vec<Model> {
         Model {
             id: "llama-3.2-1b",
             title: "Llama 3.2 1B Instruct (Q4_K_M)",
-            note: "Tiny, runs on any laptop. Good for trying FLE out.",
+            note: "Tiny, runs on any laptop. Good for trying FLE Link out.",
             repo: "bartowski/Llama-3.2-1B-Instruct-GGUF",
             file: "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
             size: 807_694_464,

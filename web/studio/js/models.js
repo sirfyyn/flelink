@@ -299,6 +299,8 @@ export function mount(main) {
       }
     }
 
+    // A server without the Hugging Face search (501, FLE Link before it has one) gets no card that fails on first use.
+    get("/api/hf/search?q=").catch((e) => { if (e.status === 501) hfBox.hidden = true; });
     clear(hfBox,
       h("div", { class: "card-head" }, icon("search"), h("div", null, h("h3", null, "Any GGUF from Hugging Face"),
         h("p", null, "Works with the upstream llama.cpp engine too. Big MoE models run best with the FLE engine."))),

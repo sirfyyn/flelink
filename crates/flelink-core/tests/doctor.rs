@@ -254,6 +254,16 @@ fn doctor_matches_the_python_helper() {
         if sc.name == "no engine at all" && flelink_core::launch::which("llama-server").is_some() {
             continue; // a llama-server on PATH is found by Rust and (patched out) not by the Python driver
         }
+        if theirs["profile"] == "auto" && got["profile"] == "off" {
+            // D11: without an NVIDIA GPU or with a plain llama.cpp, `auto` means plain settings here (as `flelink run`
+            // does), where Python reports the FLE profile's GPU and engine-flag checks as failures
+            for c in got["checks"].as_array().unwrap() {
+                let bad =
+                    c["status"] == "fail" && (c["name"] == "GPU" || c["name"] == "engine flags");
+                assert!(!bad, "[{}] {c} although auto became off", sc.name);
+            }
+            continue;
+        }
         for (k, v) in got.as_object().unwrap() {
             assert_eq!(v, &theirs[k], "[{}] field {k} differs", sc.name);
         }

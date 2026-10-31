@@ -198,6 +198,7 @@ pub fn install(
     })?;
     std::fs::create_dir_all(&target)?;
     extract(&archive, &target)?;
+    let _ = std::fs::remove_file(&archive); // unpacked; the archive would only take space (up to a few hundred MB)
     let server = find_server(&target).context("llama-server not found in the archive")?;
     #[cfg(unix)]
     {

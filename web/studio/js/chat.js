@@ -21,6 +21,8 @@ const SUGGESTIONS = [
 const imageCache = new Map(); // picture file name → data URL, for requests
 const PAINT_MS = 80; // an answer that streams is drawn at most about 12 times a second
 const CURSOR = '<span class="cursor"></span>';
+// The engine could not read the tool call the model wrote (llama.cpp: "does not match the expected … format").
+const BROKEN_CALL = /does not match the expected .*format|failed to parse tool call/i;
 
 async function loadImages(nodes) {
   for (const blob of usedImages(nodes)) {
@@ -342,7 +344,7 @@ export function mount(main, chatId) {
       box.append(
         h("div", { style: { width: "44px", height: "44px" } }, mark(44)),
         h("h2", null, h("span", { class: "grad" }, svc.unit), e.state === "stopping" ? " is stopping" : e.state === "crashed" ? " stopped with an error" : " is not running"),
-        h("p", { class: "lead" }, "FLE Studio is connected to this service. Starting it runs the service's own command, which loads its model."),
+        h("p", { class: "lead" }, "FLE Link is connected to this service. Starting it runs the service's own command, which loads its model."),
         e.error ? h("div", { class: "callout bad" }, icon("alert"), h("div", null, e.error)) : null,
         h("div", { class: "row wrap", style: { justifyContent: "center" } },
           e.state === "stopping" ? null : h("button", { class: "btn primary", onclick: startService }, icon("play"), "Start the service"),
@@ -350,20 +352,22 @@ export function mount(main, chatId) {
       return box;
     }
     const hasModel = models.length > 0;
+    const first = models.find((m) => m.id === st.settings?.last_model) || models[0];
     box.append(
       h("div", { style: { width: "44px", height: "44px" } }, mark(44)),
-      h("h2", null, "Run ", h("span", { class: "grad" }, "Qwen3.8-Flash-Next"), " on your own machine"),
-      h("p", { class: "lead" }, "FLE Studio downloads a model, starts the FLE engine with settings that fit your hardware, and shows what the engine is doing while you chat."));
+      // the model this machine has, not a showcase model that may not fit it
+      h("h2", null, "Run ", h("span", { class: "grad" }, hasModel ? first.name : "a language model"), " on your own machine"),
+      h("p", { class: "lead" }, "FLE Link downloads a model, picks the engine and the settings that fit your hardware, and shows what the engine is doing while you chat."));
     if (e.state === "crashed") {
       box.append(h("div", { class: "callout bad" }, icon("alert"), h("div", null,
         h("b", null, "The engine stopped. "), e.error || "", e.hint ? h("div", { class: "small", style: { marginTop: "4px" } }, e.hint) : null,
         h("div", { style: { marginTop: "8px" } }, h("a", { href: "/engine", "data-link": true }, "Open the engine log")))));
     }
-    const last = models.find((m) => m.id === st.settings?.last_model) || models[0];
+    const last = first;
     box.append(h("div", { class: "steps" },
       step(1, hasModel ? "done" : "now", "Get a model", hasModel ? `${models.length} in your library` : "Pick an FLE quant that fits your memory, or any GGUF from Hugging Face.",
         hasModel ? null : h("a", { class: "btn primary", href: "/models", "data-link": true }, icon("download"), "Choose a model")),
-      step(2, hasModel ? "now" : "", "Load it", hasModel ? last.name : "FLE Studio picks the launch settings for your GPU and RAM.",
+      step(2, hasModel ? "now" : "", "Load it", hasModel ? last.name : "FLE Link picks the launch settings for your GPU and RAM.",
         hasModel ? h("button", { class: "btn primary", onclick: () => loadModel(last.id) }, icon("play"), "Load") : null),
       step(3, "", "Chat", "Ask anything. Nothing leaves this computer.", null)));
     if (!hasModel) {
@@ -423,6 +427,7 @@ export function mount(main, chatId) {
     }
     for (const call of m.tool_calls || []) body.append(toolCardEl(call, infoFor(call.name)));
     if (m.error) body.append(h("div", { class: "callout bad" }, icon("alert"), h("div", null, m.error)));
+    if (m.note) body.append(h("div", { class: "small faint" }, m.note));
     if (m.stopped) body.append(h("div", { class: "small faint" }, "Stopped."));
     const stats = statsEl(m);
     if (stats) body.append(stats);
@@ -772,7 +777,15 @@ export function mount(main, chatId) {
       await streamChat(requestFor(asst, useTools, images, lastRound), { signal: ctrl.signal, onChunk });
     } catch (e) {
       if (e.name === "AbortError") asst.stopped = true;
-      else {
+      else if (useTools && BROKEN_CALL.test(e.message)) {
+        // Small models often write a tool call the engine cannot read. Ask once more without tools instead of failing.
+        Object.assign(asst, { content: "", reasoning: "",
+          note: "This model wrote a tool call the engine could not read, so it answered without tools." });
+        delete asst.tool_calls;
+        delete asst.stats;
+        clearTimeout(streaming.frame);
+        return generateInto(asst, false, ctrl, lastRound);
+      } else {
         asst.error = e.message;
         if (useTools && e.status === 400 && /tool|jinja/i.test(e.message)) {
           asst.error += " If this model cannot call tools, turn them off with the Tools button in the message box.";

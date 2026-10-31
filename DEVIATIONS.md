@@ -13,6 +13,8 @@ text or skips the Python call, and asserts the intended behaviour on the Rust si
 | D7 | `/api/chat/capabilities` `pdf` is true when `pypdf` is installed | always false | no PDF text extraction yet |
 | D8 | The page's `system.python` is the Python version | empty string | this server is not Python |
 | D9 | A pure-Python crash for `{"results": 5}` from a search server | an empty result | robustness |
+| D10 | The page is the FLE Studio page | FLE Link's own page: its name, navigation without pages whose API is missing (Experiments, Expert cache, Hugging Face search), a second try without tools when a model writes an unreadable tool call. The tests check that the binary serves exactly `web/studio`; `/api/state` is still compared with Python | FLE Link is its own product; the page was a frozen copy until 0.1.0 |
+| D11 | `doctor` keeps `auto` on a machine without NVIDIA GPU or with an upstream engine and reports the FLE checks as failures | `auto` becomes `off` there, like `flelink run` | `doctor` failed on every Mac and with every plain llama.cpp |
 
 Gone from the list because Python fixed them itself (0.4.1): D1, a plan error with a hint was printed as a tuple; now the two
 sentences are joined, as here. D6 (the update panel) and the hosts list are plugins of the Python Studio now; the core, which is
