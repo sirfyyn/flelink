@@ -385,10 +385,12 @@ pub fn engine_candidates(installed: &[PathBuf]) -> Vec<String> {
             c.push(e.trim().to_string());
         }
     }
+    // D12: the engines FLE Link installed itself come before a llama-server somewhere on the PATH (the Python helper looks
+    // at the PATH first, so a Homebrew llama.cpp would win over the engine this program chose and checked)
+    c.extend(installed.iter().map(|p| p.to_string_lossy().to_string()));
     if let Some(p) = which("llama-server") {
         c.push(p.to_string_lossy().to_string());
     }
-    c.extend(installed.iter().map(|p| p.to_string_lossy().to_string()));
     let mut seen = vec![];
     c.into_iter()
         .map(|s| expand(&s).to_string_lossy().to_string())

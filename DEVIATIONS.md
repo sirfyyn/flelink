@@ -34,3 +34,9 @@ from the IANA zone, Python from the C library). Same zone, same offset; the test
 
 Hints, error texts and the saved config header say `flelink ...` where the Python helper says `fle ...`. The comparison tests
 apply one rule to Python's output (`common::brand`) and compare everything else word for word.
+
+## D12: installed engines before the PATH
+
+`find_engine` looks at the explicit path, then `FLE_ENGINE`, then the engines FLE Link installed itself, and only then at a
+`llama-server` on the PATH. The Python helper looks at the PATH before its own installs, so a Homebrew llama.cpp would win
+over the engine the program chose and checked.
