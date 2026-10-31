@@ -1,0 +1,23 @@
+# The desktop app. Its own workspace on purpose: the main workspace (CLI, server, tests, CI on three systems) must not need a
+# web view or the Linux system libraries that go with it.
+[workspace]
+
+[package]
+name = "flelink-app"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "FLE Link, the desktop app"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+flelink-api = { path = "../crates/flelink-api" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

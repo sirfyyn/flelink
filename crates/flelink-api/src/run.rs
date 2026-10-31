@@ -269,3 +269,84 @@ pub fn run(o: RunOptions) -> i32 {
         }
     }
 }
+
+/// A Studio server that lives inside another program (the desktop app): own thread, own runtime, a free port on the loopback
+/// address. `stop` ends the server and any model it started.
+pub struct Embedded {
+    pub url: String,
+    pub port: u16,
+    pub home: PathBuf,
+    stop: Option<tokio::sync::oneshot::Sender<()>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Embedded {
+    pub fn stop(&mut self) {
+        if let Some(tx) = self.stop.take() {
+            let _ = tx.send(());
+        }
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+}
+
+impl Drop for Embedded {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+/// Start the server on `127.0.0.1:<free port>` and return when it accepts connections.
+pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result<Embedded, String> {
+    let home = home.unwrap_or_else(data_dir);
+    let _ = std::fs::create_dir_all(&home);
+    let st = new_studio(Options {
+        home: home.clone(),
+        web_dir,
+        version: STUDIO_VERSION.into(),
+        github_api: crate::engines::GITHUB_API.into(),
+    });
+    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<u16, String>>();
+    let thread = std::thread::spawn(move || {
+        let rt = match tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = ready_tx.send(Err(e.to_string()));
+                return;
+            }
+        };
+        rt.block_on(async {
+            let listener =
+                match tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).await {
+                    Ok(l) => l,
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(format!("no port for the web server: {e}")));
+                        return;
+                    }
+                };
+            let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
+            let _ = ready_tx.send(Ok(port));
+            let _ = serve_listener(st.clone(), listener, async {
+                let _ = stop_rx.await;
+            })
+            .await;
+            st.engine.shutdown();
+        });
+    });
+    match ready_rx.recv_timeout(Duration::from_secs(15)) {
+        Ok(Ok(port)) => Ok(Embedded {
+            url: format!("http://127.0.0.1:{port}/"),
+            port,
+            home,
+            stop: Some(stop_tx),
+            thread: Some(thread),
+        }),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err("the web server did not start in time".into()),
+    }
+}
