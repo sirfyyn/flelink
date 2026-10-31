@@ -357,7 +357,16 @@ fn the_engine_matches_the_python_studio() {
             }
             status(addr)
         };
-        (g(rs), g(py.addr))
+        let (mut a, mut b) = (g(rs), g(py.addr));
+        // each side learns about the engine on its own beat (health, props, log): give both until they have caught up
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(30)
+            && norm(&a, port_of(&a), &hr, &fr) != norm(&b, port_of(&b), &hp, &fp)
+        {
+            std::thread::sleep(Duration::from_millis(300));
+            (a, b) = (status(rs), status(py.addr));
+        }
+        (a, b)
     };
     let same = |label: &str, a: &Value, b: &Value| {
         let (pa, pb) = (port_of(a), port_of(b));
