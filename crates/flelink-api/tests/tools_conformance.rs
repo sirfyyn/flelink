@@ -283,6 +283,8 @@ fn fake_search() -> SocketAddr {
 }
 
 fn norm_time(s: &str) -> String {
+    // a runner whose zone is "GMT" (Rust, from the IANA name) is "UTC" for Python's strftime: same zone, two spellings
+    let s = &s.replace(", GMT,", ", UTC,");
     // the clock moves between the two calls: drop the seconds
     let b: Vec<char> = s.chars().collect();
     let mut out = String::new();

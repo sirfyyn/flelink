@@ -24,3 +24,8 @@ Moving the pin is a deliberate act: change the file, run the comparison tests, p
 
 Things that stay the same on purpose even though they look odd (and are candidates for a later, announced change): a start without a
 model name uses the last model; chat lists with equal times keep the file system's order; a page is sent with `Cache-Control` twice.
+
+## D10: zone abbreviation of the local clock
+
+On a machine whose zone is the IANA name `GMT`, the clock tool says `GMT` where Python says `UTC` (Rust takes the abbreviation
+from the IANA zone, Python from the C library). Same zone, same offset; the test treats the two spellings as equal.
