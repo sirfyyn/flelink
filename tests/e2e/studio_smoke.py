@@ -30,7 +30,8 @@ try:
             return json.loads(r.read().decode())
     # the stand-in engine is "my own build" of llama-server, the model a tiny GGUF
     fake = work / "llama-server"
-    fake.write_text('#!/bin/sh\nexec %s "%s" "$@"\n' % (sys.executable, "/Users/maxbitzer/fle-studio-main/tests/fake_llama_server.py"))
+    studio_src = Path(os.environ.get("FLE_STUDIO_SRC", str(Path.home() / "fle-studio-main/src")))
+    fake.write_text('#!/bin/sh\nexec %s "%s" "$@"\n' % (sys.executable, studio_src.parent / "tests/fake_llama_server.py"))
     fake.chmod(0o755)
     gguf = work / "stub.gguf"; gguf.write_bytes(E.gguf_stub())
     api("POST", "/api/settings", {"engine": {"choice": "custom", "custom_path": str(fake)}})

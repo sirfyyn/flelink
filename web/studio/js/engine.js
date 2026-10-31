@@ -713,7 +713,7 @@ export function mount(main) {
     const st = settings();
     const e = store.engine || {};
     const systemd = !!store.state?.systemd;
-    const unit = systemd ? h("input", { class: "input mono", value: st.attach_service || "", placeholder: "rhea.service",
+    const unit = systemd ? h("input", { class: "input mono", value: st.attach_service || "", placeholder: "llama.service",
       spellcheck: false }) : null;
     const url = h("input", { class: "input mono", value: st.attach_url || "",
       placeholder: systemd ? "From the service, or http://127.0.0.1:8080" : "http://127.0.0.1:8080" });

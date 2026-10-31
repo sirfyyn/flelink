@@ -1,0 +1,24 @@
+name: Something does not work
+description: A command, the Studio or the app does something wrong.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: Output of `flelink report MODEL --out -` (tokens are removed, the home folder shows as ~).
+      render: json
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `flelink --version`.
+    validations:
+      required: true
