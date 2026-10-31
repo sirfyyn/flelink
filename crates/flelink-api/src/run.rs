@@ -55,6 +55,26 @@ pub fn data_dir() -> PathBuf {
     }
 }
 
+/// A new access key: 12 random bytes in URL-safe base64 (16 characters), like `secrets.token_urlsafe(12)`.
+fn new_access_key() -> String {
+    use base64::Engine as _;
+    let mut b = [0u8; 12];
+    getrandom::getrandom(&mut b).expect("random bytes");
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b)
+}
+
+/// Where to listen: the address named by `--host` / settings (`0.0.0.0` for the whole network), loopback for the local names.
+fn bind_addr(host: &str, port: u16) -> SocketAddr {
+    let ip: std::net::IpAddr = match host {
+        "localhost" | "" => [127, 0, 0, 1].into(),
+        h => h
+            .trim_matches(|c| c == '[' || c == ']')
+            .parse()
+            .unwrap_or([127, 0, 0, 1].into()),
+    };
+    SocketAddr::new(ip, port)
+}
+
 /// Is an FLE Studio already answering on this port?
 fn running(port: u16) -> bool {
     let agent = ureq::AgentBuilder::new()
@@ -118,10 +138,20 @@ pub fn run(o: RunOptions) -> i32 {
         .unwrap_or_else(|| cfg("server.port").and_then(|v| v.as_u64()).unwrap_or(8642) as u16);
     let local = matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1");
     if !local {
-        eprintln!("FLE Studio: listening beyond this machine (host mode with an access key, TLS and pairing) is not in the Rust server yet. Use the Python FLE Studio for that, or an SSH tunnel to this one.");
-        return 1;
+        st.set_lan(true);
+        let have = cfg("access_key")
+            .and_then(|v| v.as_str().map(|s| !s.is_empty()))
+            .unwrap_or(false);
+        if !have {
+            let key = new_access_key();
+            let mut patch = serde_json::Map::new();
+            patch.insert("access_key".into(), Value::String(key.clone()));
+            let _ = st.config.lock().unwrap().update(&patch);
+            println!("FLE Studio is open to the network. Access key for other machines (also in Settings → Network):");
+            println!("  {key}");
+        }
     }
-    if running(port) {
+    if local && running(port) {
         let url = format!("http://127.0.0.1:{port}/");
         println!("FLE Studio is already running: {url}");
         if !o.no_browser {
@@ -143,7 +173,7 @@ pub fn run(o: RunOptions) -> i32 {
             (port..port.saturating_add(20)).collect()
         };
         for p in tries {
-            match tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], p))).await {
+            match tokio::net::TcpListener::bind(bind_addr(&host, p)).await {
                 Ok(l) => {
                     bound = Some(l);
                     break;

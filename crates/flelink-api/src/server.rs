@@ -45,7 +45,7 @@ pub struct Studio {
     pub engine: Engine,
     pub live: Live,
     /// the server listens beyond this machine (host mode); set by the starter
-    pub lan: bool,
+    pub lan: std::sync::atomic::AtomicBool,
 }
 
 /// An error the page shows as `{"error": {"message": ...}}`.
@@ -60,6 +60,11 @@ fn make_token() -> String {
 }
 
 pub fn new_studio(opts: Options) -> Ctx {
+    new_studio_lan(opts, false)
+}
+
+/// `lan`: the server listens beyond this machine (host mode); other machines need the access key.
+pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
     let config = Config::load(&opts.home.join("settings.json"));
     let home = opts.home.clone();
     let config = Arc::new(Mutex::new(config));
@@ -93,7 +98,7 @@ pub fn new_studio(opts: Options) -> Ctx {
         chat_lock: Mutex::new(()),
         library: Mutex::new(Library::new(&home)),
         engines,
-        lan: false,
+        lan: std::sync::atomic::AtomicBool::new(lan),
         live: Live::new(engine.clone(), 1.0),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
@@ -169,7 +174,7 @@ fn error_json(status: u16, msg: &str, head: bool) -> Response<Body> {
     send_json(status, &json!({"error": {"message": msg}}), head)
 }
 
-fn host_ok(headers: &HeaderMap) -> bool {
+fn host_ok(st: &Studio, headers: &HeaderMap) -> bool {
     let host = headers
         .get(header::HOST)
         .and_then(|v| v.to_str().ok())
@@ -184,7 +189,106 @@ fn host_ok(headers: &HeaderMap) -> bool {
             .unwrap_or(&host)
             .to_string()
     };
-    LOOPBACK_NAMES.contains(&name.to_lowercase().as_str())
+    let name = name.to_lowercase();
+    if LOOPBACK_NAMES.contains(&name.as_str()) {
+        return true;
+    }
+    if !st.is_lan() {
+        return false;
+    }
+    if name.parse::<std::net::IpAddr>().is_ok() {
+        return true;
+    }
+    let own = machine_name().to_lowercase();
+    let configured = st
+        .config
+        .lock()
+        .unwrap()
+        .get("server.allowed_hosts")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_default();
+    let mut allowed: Vec<String> = vec![own.split('.').next().unwrap_or("").to_string(), own];
+    allowed.extend(
+        configured
+            .split(',')
+            .map(|h| h.trim().to_lowercase())
+            .filter(|h| !h.is_empty()),
+    );
+    allowed
+        .iter()
+        .any(|a| !a.is_empty() && (name == *a || name.starts_with(&format!("{a}."))))
+}
+
+/// This machine's name, as `socket.gethostname()` says it.
+fn machine_name() -> String {
+    #[cfg(unix)]
+    {
+        let mut b = [0u8; 256];
+        // SAFETY: the buffer is 256 bytes long and gethostname writes at most that many
+        let rc = unsafe { libc::gethostname(b.as_mut_ptr() as *mut libc::c_char, b.len()) };
+        if rc == 0 {
+            let n = b.iter().position(|c| *c == 0).unwrap_or(b.len());
+            return String::from_utf8_lossy(&b[..n]).to_string();
+        }
+        String::new()
+    }
+    #[cfg(not(unix))]
+    {
+        std::env::var("COMPUTERNAME").unwrap_or_default()
+    }
+}
+
+/// The cookie that proves a sign-in: derived from the access key, so the key itself never sits in a cookie.
+fn session_cookie(st: &Studio) -> String {
+    use hmac::{Hmac, Mac};
+    let key = access_key(st);
+    if key.is_empty() {
+        return String::new();
+    }
+    let mut m = <Hmac<sha2::Sha256> as Mac>::new_from_slice(key.as_bytes()).expect("hmac key");
+    m.update(b"fle-studio-session");
+    hex::encode(m.finalize().into_bytes())
+}
+
+fn access_key(st: &Studio) -> String {
+    st.config
+        .lock()
+        .unwrap()
+        .get("access_key")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_default()
+}
+
+/// This machine itself, or another one that has the access key (a cookie after signing in, or a Bearer header).
+fn authed(st: &Studio, headers: &HeaderMap, peer: &SocketAddr) -> bool {
+    if peer.ip().is_loopback() {
+        return true;
+    }
+    let expected = session_cookie(st);
+    if expected.is_empty() {
+        return false;
+    }
+    let key = access_key(st);
+    if let Some(b) = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+    {
+        if ct_eq(b.trim(), &key) {
+            return true;
+        }
+    }
+    let cookies = headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .collect::<Vec<_>>()
+        .join(";");
+    cookies.split(';').any(|part| {
+        part.trim()
+            .split_once('=')
+            .is_some_and(|(k, v)| k == "fle_session" && ct_eq(v, &expected))
+    })
 }
 
 /// The Origin must be this page's own host (a request from another site is refused), and a mutating call carries the
@@ -197,7 +301,7 @@ fn guard(
     peer: &SocketAddr,
     head: bool,
 ) -> Option<Response<Body>> {
-    if !host_ok(headers) {
+    if !host_ok(st, headers) {
         return Some(send(
             403,
             b"FLE Studio: this host name is not allowed.".to_vec(),
@@ -209,8 +313,17 @@ fn guard(
     if path == "/login" || path == "/api/remote/pair" {
         return None;
     }
-    if !peer.ip().is_loopback() {
-        return Some(error_json_auth(head));
+    if !authed(st, headers, peer) {
+        if path.starts_with("/api/") || path.starts_with("/v1/") {
+            return Some(error_json_auth(head));
+        }
+        return Some(send(
+            303,
+            vec![],
+            "text/plain",
+            &[("Location", "/login")],
+            head,
+        ));
     }
     if matches!(
         *method,
@@ -322,6 +435,15 @@ fn chat_id(p: &str) -> Option<&str> {
 }
 
 impl Studio {
+    /// Does the server listen beyond this machine?
+    pub fn is_lan(&self) -> bool {
+        self.lan.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn set_lan(&self, on: bool) {
+        self.lan.store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub fn models_dir(&self) -> std::path::PathBuf {
         self.config.lock().unwrap().models_dir()
     }
@@ -710,7 +832,7 @@ impl Studio {
         json!({
             "app": "fle-studio", "version": self.opts.version, "platform": info["platform"],
             "systemd": cfg!(target_os = "linux") && flelink_core::launch::which("systemctl").is_some(),
-            "data_dir": self.opts.home.to_string_lossy(), "lan": self.lan,
+            "data_dir": self.opts.home.to_string_lossy(), "lan": self.is_lan(),
             "settings": self.config.lock().unwrap().public(), "system": info.clone(), "engine": self.engine.status(), "models": models,
             "catalog": self.catalog_view(), "extras": self.extras_view(),
             "profiles": self.profiles.lock().unwrap().all().iter().map(|p| p.public()).collect::<Vec<_>>(),
@@ -1398,6 +1520,9 @@ async fn handler(
     if let Some(r) = guard(&st, &parts.method, &path, &parts.headers, &peer, head) {
         return r;
     }
+    if path == "/login" {
+        return login(&st, &parts.method, body, head).await;
+    }
     if path.starts_with("/v1/") {
         return proxy(&st, parts, body, head).await;
     }
@@ -1443,6 +1568,61 @@ async fn handler(
             None => error_json(404, "Not found", head),
         },
     }
+}
+
+const LOGIN_PAGE: &str = r#"<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>FLE Studio · sign in</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0e14;color:#e9edf3;
+font:15px/1.5 system-ui,sans-serif}form{background:#10141c;border:1px solid #1f2633;border-radius:14px;padding:28px;
+width:min(360px,90vw);display:grid;gap:12px}input{background:#151a24;border:1px solid #1f2633;border-radius:8px;
+color:inherit;padding:10px 12px;font:inherit}button{background:#7aa7ff;color:#0b0e14;border:0;border-radius:8px;
+padding:10px;font-weight:600;cursor:pointer}p{margin:0;color:#94a0b2;font-size:13px}.err{color:#ff8a8a}</style></head>
+<body><form method="post" action="/login"><strong>FLE Studio</strong><p>This FLE Studio is open to the local network.
+Enter its access key (Settings → Network on the machine that runs it).</p>__ERR__
+<input type="password" name="key" autocomplete="current-password" autofocus placeholder="Access key">
+<button type="submit">Sign in</button></form></body></html>"#;
+
+/// The sign-in page and the form that turns the access key into a cookie.
+async fn login(st: &Ctx, method: &Method, body: Body, head: bool) -> Response<Body> {
+    if *method != Method::POST {
+        return send(
+            200,
+            LOGIN_PAGE.replace("__ERR__", "").into_bytes(),
+            "text/html; charset=utf-8",
+            &[],
+            head,
+        );
+    }
+    let raw = to_bytes(body, 4096).await.unwrap_or_default();
+    let key = form_urlencoded::parse(&raw)
+        .filter(|(k, _)| k == "key")
+        .map(|(_, v)| v.to_string())
+        .last()
+        .unwrap_or_default();
+    let real = access_key(st);
+    if !real.is_empty() && ct_eq(&key, &real) {
+        let cookie = format!(
+            "fle_session={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000",
+            session_cookie(st)
+        );
+        return send(
+            303,
+            vec![],
+            "text/plain",
+            &[("Location", "/"), ("Set-Cookie", &cookie)],
+            head,
+        );
+    }
+    tokio::time::sleep(Duration::from_secs(1)).await; // slow down guessing
+    send(
+        401,
+        LOGIN_PAGE
+            .replace("__ERR__", "<p class=\"err\">That key is not right.</p>")
+            .into_bytes(),
+        "text/html; charset=utf-8",
+        &[],
+        head,
+    )
 }
 
 /// Features of the Python Studio that this server does not have yet: a clear 501 instead of a 404 that looks like a bug.

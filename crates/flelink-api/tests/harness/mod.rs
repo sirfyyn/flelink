@@ -333,3 +333,69 @@ pub fn compare(label: &str, a: &Resp, b: &Resp, ta: &str, tb: &str) {
         assert_eq!(x, y, "[{label}] body differs");
     }
 }
+
+/// The Python Studio in host mode (`--host 0.0.0.0 --no-tls`). The access key is read from `settings.json` of `home`.
+#[allow(clippy::zombie_processes)] // `Py` kills and waits for the child when it is dropped
+pub fn start_python_lan(src: &Path, home: &Path) -> Py {
+    let port = free_port();
+    let code = "import sys\nfrom fle_studio.__main__ import main\nsys.exit(main(sys.argv[1:]))";
+    let child =
+        Command::new(std::env::var("FLE_STUDIO_PYTHON").unwrap_or_else(|_| "python3".into()))
+            .args(["-c", code, "--home"])
+            .arg(home)
+            .args([
+                "--host",
+                "0.0.0.0",
+                "--no-tls",
+                "--port",
+                &port.to_string(),
+                "--no-browser",
+            ])
+            .env("PYTHONPATH", src)
+            .env("FLE_STUDIO_NO_BUNDLED", "1")
+            .env("FLE_STUDIO_HOME", home)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+    let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+    for _ in 0..100 {
+        if TcpStream::connect(addr).is_ok() {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            return Py { child, addr };
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    panic!("the Python Studio did not start");
+}
+
+/// The Rust server in host mode on all interfaces; returns the port.
+pub fn start_rust_lan(src: &Path, home: &Path) -> u16 {
+    let st = flelink_api::server::new_studio_lan(
+        Options {
+            home: home.to_path_buf(),
+            web_dir: Some(src.join("fle_studio/web")),
+            version: python_version(src),
+            github_api: flelink_api::engines::GITHUB_API.to_string(),
+        },
+        true,
+    );
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(serve(st, "0.0.0.0:0".parse().unwrap(), Some(tx)))
+            .unwrap();
+    });
+    rx.recv().unwrap().port()
+}
+
+/// An address of this machine that is not loopback (a request from it is "another machine" to the servers).
+pub fn lan_ip() -> Option<std::net::IpAddr> {
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("192.0.2.1:9").ok()?; // nothing is sent; this only picks the interface
+    let ip = s.local_addr().ok()?.ip();
+    (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
+}
