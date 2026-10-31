@@ -186,18 +186,16 @@ fn host_mode_matches_the_python_studio() {
     assert_eq!(a.status, 403);
 
     // this machine itself needs no key
-    for (label, addr_rs, addr_py) in [("loopback", rs_port, py.addr.port())] {
-        let go = |port: u16| {
-            http(
-                std::net::SocketAddr::from(([127, 0, 0, 1], port)),
-                "GET",
-                "/api/ping",
-                &[],
-                None,
-            )
-        };
-        let (a, b) = (go(addr_rs), go(addr_py));
-        compare(label, &a, &b, "", "");
-        assert_eq!(a.status, 200);
-    }
+    let go = |port: u16| {
+        http(
+            std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+            "GET",
+            "/api/ping",
+            &[],
+            None,
+        )
+    };
+    let (a, b) = (go(rs_port), go(py.addr.port()));
+    compare("loopback", &a, &b, "", "");
+    assert_eq!(a.status, 200);
 }
