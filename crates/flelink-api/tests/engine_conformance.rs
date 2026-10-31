@@ -168,6 +168,14 @@ fn norm(v: &Value, port: i64, home: &Path, fake: &Path) -> Value {
     v["log_seq"] = json!(0);
     v["load"]["read"] = json!(0);
     v["load"]["elapsed"] = json!(!v["load"]["elapsed"].is_null());
+    if v["state"] == "crashed" {
+        // an engine that dies moments after it became ready: whether the 0.5 s health check saw "ready" first (and so read the
+        // build, the context and the slots) is a matter of timing on both sides
+        v["ready_at"] = json!(false);
+        for k in ["n_ctx", "slots", "build"] {
+            v[k] = json!(0);
+        }
+    }
     if v["state"] == "starting" {
         // the moment a status is taken decides whether the first log line is in yet
         v["load"]["progress"] = json!(0);
