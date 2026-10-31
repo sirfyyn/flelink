@@ -3,6 +3,7 @@ name: ci
 on:
   push: { branches: [main] }
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,7 +12,9 @@ jobs:
   test:
     strategy:
       fail-fast: false
-      matrix: { os: [ubuntu-latest, macos-latest, windows-latest] }
+      # private repository = paid minutes (macOS counts ten times, Windows twice): a push runs Linux only, a pull request, a tag or
+      # a manual run runs all three
+      matrix: { os: "${{ (github.event_name == 'push' && github.ref_type == 'branch') && fromJSON('[\"ubuntu-latest\"]') || fromJSON('[\"ubuntu-latest\",\"macos-latest\",\"windows-latest\"]') }}" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
