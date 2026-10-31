@@ -430,7 +430,13 @@ fn an_engine_install_matches_the_python_studio() {
     let job_id = |r: &Resp| {
         serde_json::from_slice::<Value>(&r.body).unwrap()["id"]
             .as_str()
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "no job id: status {} body {}",
+                    r.status,
+                    String::from_utf8_lossy(&r.body)
+                )
+            })
             .to_string()
     };
     both("engines at the start", "GET", "/api/engines", None);
