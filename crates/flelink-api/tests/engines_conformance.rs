@@ -460,7 +460,19 @@ fn an_engine_install_matches_the_python_studio() {
     );
     let offered: Value =
         serde_json::from_slice(&http(rs, "GET", "/api/engines", &[], None).body).unwrap();
-    let variant = offered["variants"][0]["id"].as_str().unwrap().to_string();
+    // the first offer depends on the machine (a Vulkan driver in the container puts Vulkan first); the fake release has the CPU
+    // and Metal builds, so take those when they are offered
+    let ids: Vec<String> = offered["variants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v["id"].as_str().unwrap().to_string())
+        .collect();
+    let variant = ["upstream-cpu", "upstream-metal"]
+        .iter()
+        .find(|w| ids.iter().any(|i| i == **w))
+        .map(|w| w.to_string())
+        .unwrap_or_else(|| ids[0].clone());
     let set = |tag: &str| {
         for (addr, tok) in [(rs, &tr), (py.addr, &tp)] {
             let r = http(
