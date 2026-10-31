@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FLE Link: lokale KI, eine Datei, ein Befehl</title>
+<meta name="description" content="FLE Link richtet lokale KI-Modelle ein und startet sie: Rechner prüfen, passende Engine und passendes Modell laden, Einstellungen wählen, API und Browser-Oberfläche bereitstellen.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body><main>
+<h1>FLE <span>Link</span></h1>
+<p class="lead">Lokale KI zum Laufen bringen. Eine Datei, ein Befehl.</p>
+<p>FLE Link sitzt zwischen einer Inferenz-Engine und den Werkzeugen, die sie benutzen (Chat-Oberfläche, Editor, Agent). Es schaut sich den Rechner an, installiert die passende Engine, lädt ein passendes Modell, wählt die Startwerte und stellt eine OpenAI-kompatible Schnittstelle samt Browser-Oberfläche bereit. Nichts einzutippen, keine Variablen zu setzen.</p>
+<div class="card"><div class="flow">Werkzeug (Chat, Editor, Agent)  ──►  FLE Link  ──►  Engine (FLE, llama.cpp, …)</div></div>
+
+<h2>Installieren</h2>
+<p>macOS und Linux:</p>
+<pre>curl -fsSL https://flelink.run/install.sh | sh</pre>
+<p>Windows (PowerShell):</p>
+<pre>irm https://flelink.run/install.ps1 | iex</pre>
+<p>Eine Datei, kein Python, kein git, kein sudo. Das Programm wird gegen seine SHA-256-Summe geprüft und landet im eigenen Benutzerordner.</p>
+
+<h2>Benutzen</h2>
+<pre>flelink            # Terminal-Oberfläche (beim ersten Start wird alles eingerichtet)
+flelink studio     # Browser-Oberfläche auf http://127.0.0.1:8642
+flelink system     # was dieser Rechner kann und welche Engine passt
+flelink models     # bekannte Modelle und ob sie passen
+flelink run MODELL # Modell laden und bereitstellen, bis Strg+C
+fle                # Kurzname, dasselbe Programm</pre>
+
+<h2>Was es ausmacht</h2>
+<table>
+<tr><td><b>Engine austauschbar</b></td><td>FLE (Fast Local Experts) ist die mitgelieferte Engine für große MoE-Modelle auf kleiner Hardware. Reines llama.cpp ist der Rückfall, eine eigene Engine lässt sich eintragen.</td></tr>
+<tr><td><b>Prüft vor dem Download</b></td><td>Zeigt, ob ein Modell auf diesen Rechner passt, bevor Gigabytes geladen werden. Downloads sind wiederaufnehmbar und gegen SHA-256 geprüft.</td></tr>
+<tr><td><b>Lokal</b></td><td>Läuft auf deinem Rechner und hört nur auf deinem Rechner. Nichts wird an uns gesendet.</td></tr>
+<tr><td><b>Ehrliche Befehle</b></td><td>Startprofile zeigen den vollständigen Befehl, bevor er läuft.</td></tr>
+</table>
+
+<h2>Quellen</h2>
+<p>FLE Link steht unter der MIT-Lizenz. Die Engine und der technische Bericht sind bei <a href="https://github.com/sirfyyn/FastLocalExperts">FastLocalExperts</a>.</p>
+
+<footer>
+<a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a> · © 2026 Max Bitzer
+</footer>
+</main></body></html>

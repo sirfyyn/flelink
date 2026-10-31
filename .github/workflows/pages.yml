@@ -1,0 +1,26 @@
+name: pages
+
+# Publishes site/ plus the two installers to https://flelink.run. Manual until the repository is public
+# (GitHub Pages needs a public repository on the free plan): Actions, pages, Run workflow.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency: { group: pages, cancel-in-progress: false }
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - uses: actions/checkout@v6
+      - run: cp install.sh install.ps1 site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+      - id: d
+        uses: actions/deploy-pages@v4
