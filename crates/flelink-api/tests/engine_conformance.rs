@@ -402,10 +402,21 @@ fn the_engine_matches_the_python_studio() {
                     })
                     .collect()
             };
-        let (la, lb) = (
-            clean(log_texts(rs), port_of(a), &hr, &fr),
-            clean(log_texts(py.addr), port_of(b), &hp, &fp),
-        );
+        // each side reads the engine's log on its own beat: give both until they have caught up with the same lines
+        let get = || {
+            (
+                clean(log_texts(rs), port_of(a), &hr, &fr),
+                clean(log_texts(py.addr), port_of(b), &hp, &fp),
+            )
+        };
+        let (mut la, mut lb) = get();
+        for _ in 0..40 {
+            if la == lb {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+            (la, lb) = get();
+        }
         assert_eq!(la, lb, "[{label}] log");
         n.set(n.get() + 1);
     };
