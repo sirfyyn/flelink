@@ -570,6 +570,23 @@ fn gpu_selection(setting: &str, nvidia: &[Value]) -> R<GpuPick> {
     } else {
         setting.trim().to_lowercase()
     };
+    // D12: CUDA_VISIBLE_DEVICES set by whoever started FLE Link (a shared machine keeps other GPUs free this way) is not
+    // overruled by `auto`: the engine inherits it, and the choice is made among those GPUs only
+    if s == "auto" {
+        if let Some(cvd) = std::env::var_os("CUDA_VISIBLE_DEVICES").filter(|v| !v.is_empty()) {
+            let want: Vec<String> = cvd
+                .to_string_lossy()
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .collect();
+            let allowed: Vec<Value> = nvidia
+                .iter()
+                .filter(|g| want.contains(&g["index"].to_string()))
+                .cloned()
+                .collect();
+            return Ok((allowed, vec![], String::new()));
+        }
+    }
     if s == "all" || (nvidia.len() == 1 && s == "auto") {
         return Ok((nvidia.to_vec(), vec![], String::new()));
     }
