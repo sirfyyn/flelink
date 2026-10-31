@@ -24,6 +24,9 @@ First version of FLE Link: the layer between an inference engine and the tools t
   FLE Link installed; without an NVIDIA GPU or with a plain llama.cpp, `auto` means plain llama.cpp settings, not a failure.
 - The Studio asks once more without tools when a small model writes a tool call the engine cannot read, and says so under the
   answer.
+- **Any GGUF from Hugging Face:** search, open a repo, see per quant whether it fits this machine, download (resumable,
+  checked against the repo's SHA-256).
+- GPU `auto` takes the card with the most free memory and keeps a `CUDA_VISIBLE_DEVICES` it was started with (D12, D13).
 - Not in this version: pairing and per-client rights, the client that passes everything through to a host, systemd service
-  control, MCP, Forge, Tuner, Hugging Face search, updates. They answer `501` instead of a 404 that looks like a bug; the
-  Studio hides Experiments, Expert cache and the Hugging Face search until the server has them.
+  control, MCP, Forge, Tuner, updates. They answer `501` instead of a 404 that looks like a bug; the Studio hides
+  Experiments and Expert cache until the server has them.

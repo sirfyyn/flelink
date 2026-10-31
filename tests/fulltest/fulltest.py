@@ -742,7 +742,7 @@ def s_surface():
         paths = ["/api/system", "/api/state", "/api/settings", "/api/models", "/api/engines", "/api/profiles",
                  "/api/live", "/api/engine", "/api/engine/log", "/api/catalog", "/api/downloads", "/api/chats",
                  "/api/tools", "/api/plugins", "/api/chat/capabilities",
-                 "/api/hf/search?q=llama", "/api/bench", "/api/forge", "/api/tuning", "/api/quality", "/api/cache",
+                 "/api/bench", "/api/forge", "/api/tuning", "/api/quality", "/api/cache",
                  "/api/flags", "/api/mcp", "/api/remote", "/api/update", "/api/does-not-exist"]
         codes = {p: st.api("GET", p).get("code") for p in paths}
         five01 = [p for p, c in codes.items() if c == 501]
@@ -750,6 +750,41 @@ def s_surface():
         if errs:
             return "fail", f"server errors on {errs}", codes
         return "warn" if five01 else "pass", f"{len(paths)} routes, {len(five01)} answer 501 not yet: {five01}", codes
+    finally:
+        st.stop()
+
+
+@scenario("studio-hf-search", "studio")
+def s_hf():
+    h = primed_home("hf")
+    st = Studio(h)
+    try:
+        if not st.wait():
+            return "fail", "studio not up", {}
+        short = st.api("GET", "/api/hf/search?q=l")
+        found = st.api("GET", "/api/hf/search?q=Llama-3.2-1B-Instruct", timeout=60)
+        repo = st.api("GET", "/api/hf/repo?repo=bartowski/Llama-3.2-1B-Instruct-GGUF", timeout=60)
+        bad = st.api("GET", "/api/hf/repo?repo=not%20a%20repo")
+        trick = st.api("POST", "/api/hf/download", {"repo": "bartowski/Llama-3.2-1B-Instruct-GGUF", "files": ["../../x.gguf"]},
+                       timeout=60)
+        res = (found.get("json") or {}).get("results") or []
+        groups = (repo.get("json") or {}).get("groups") or []
+        data = {"short": short.get("json"), "n_results": len(res), "n_groups": len(groups), "bad": bad.get("code"),
+                "trick": (trick.get("code"), (trick.get("text") or "")[:120]),
+                "first_group": groups[0] if groups else None}
+        problems = []
+        if (short.get("json") or {}).get("results") != []:
+            problems.append("one-letter query not empty")
+        if not res:
+            problems.append("search found nothing")
+        if not groups or not all("fit" in g for g in groups):
+            problems.append("repo has no groups with fit")
+        if bad.get("code") != 400:
+            problems.append(f"bad repo answered {bad.get('code')}")
+        if trick.get("code") not in (400,):
+            problems.append(f"path trick answered {trick.get('code')}")
+        return check(not problems, f"search {len(res)} repos, repo {len(groups)} quants with fit, bad input refused",
+                     "; ".join(problems), data)
     finally:
         st.stop()
 

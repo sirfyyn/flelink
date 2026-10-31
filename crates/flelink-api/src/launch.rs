@@ -591,11 +591,15 @@ fn gpu_selection(setting: &str, nvidia: &[Value]) -> R<GpuPick> {
         return Ok((nvidia.to_vec(), vec![], String::new()));
     }
     let pick: Vec<Value> = if s == "auto" {
-        // max() keeps the first of equal values
+        // D13: the GPU with the most *free* memory (Python: the largest), so a card another service fills is not taken;
+        // without a free figure the total counts. max() keeps the first of equal values
+        let room = |g: &Value| {
+            let total = g["memory_total"].as_i64().unwrap_or(0);
+            total - g["memory_used"].as_i64().unwrap_or(0)
+        };
         let mut best = &nvidia[0];
         for g in nvidia {
-            if g["memory_total"].as_i64().unwrap_or(0) > best["memory_total"].as_i64().unwrap_or(0)
-            {
+            if room(g) > room(best) {
                 best = g;
             }
         }

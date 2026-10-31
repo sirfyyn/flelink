@@ -61,7 +61,8 @@ fle                      # short name, same program
 | [Qwen3.8-Flash-Next · FLE](https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF) | 125B MoE, 88.9 GB | decode **91 tok/s** (Strata 74, llama.cpp 36) | one 32 GB RTX PRO 4500, 120 GB RAM, same machine for all three (6 Oct 2026); smaller than Unsloth IQ4_XS at the same KL divergence |
 | [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, 231–266 GB | numbers follow | runs through FLE Link on llama.cpp b11870+; FLE engine support in progress |
 
-Small models such as Llama 3.2 1B run on any laptop and are in the built-in catalog (`flelink models`).
+Small models such as Llama 3.2 1B run on any laptop and are in the built-in catalog (`flelink models`). Any other GGUF on
+Hugging Face can be searched, checked for fit and downloaded from the Studio's Models page.
 
 ## How it works
 
@@ -118,7 +119,7 @@ Without the two source folders the comparison tests skip themselves. See [CONTRI
 
 ## Roadmap
 
-Search and download any GGUF from Hugging Face inside the Studio · plugins (recipes and engine adapters as files) ·
+Plugins (recipes and engine adapters as files) ·
 quantization for your machine · LoRA training. Until then, adapters load with `--arg=--lora`.
 
 ## Licence

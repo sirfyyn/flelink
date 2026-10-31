@@ -15,6 +15,7 @@ text or skips the Python call, and asserts the intended behaviour on the Rust si
 | D9 | A pure-Python crash for `{"results": 5}` from a search server | an empty result | robustness |
 | D10 | The page is the FLE Studio page | FLE Link's own page: its name, navigation without pages whose API is missing (Experiments, Expert cache, Hugging Face search), a second try without tools when a model writes an unreadable tool call. The tests check that the binary serves exactly `web/studio`; `/api/state` is still compared with Python | FLE Link is its own product; the page was a frozen copy until 0.1.0 |
 | D12 | GPU `auto` sets `CUDA_VISIBLE_DEVICES` to the GPU with the most memory, also when the variable was already set | A `CUDA_VISIBLE_DEVICES` the program was started with is kept, and `auto` chooses among those GPUs | On a shared machine the Studio put its engine on a GPU that belonged to another service |
+| D13 | GPU `auto` takes the GPU with the most total memory | the GPU with the most free memory | A large card that another service fills is the worst place for a new engine |
 | D11 | `doctor` keeps `auto` on a machine without NVIDIA GPU or with an upstream engine and reports the FLE checks as failures | `auto` becomes `off` there, like `flelink run` | `doctor` failed on every Mac and with every plain llama.cpp |
 
 Gone from the list because Python fixed them itself (0.4.1): D1, a plan error with a hint was printed as a tuple; now the two

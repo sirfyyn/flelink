@@ -969,6 +969,117 @@ impl Studio {
         ))
     }
 
+    fn hf_token(&self) -> String {
+        self.config
+            .lock()
+            .unwrap()
+            .get("hf_token")
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_default()
+    }
+
+    /// `/api/hf/search?q=`: GGUF repos on Hugging Face, most downloaded first.
+    pub fn hf_search(&self, q: &str) -> Result<Value, ApiError> {
+        let q = q.trim();
+        if q.chars().count() < 2 {
+            return Ok(json!({"results": []}));
+        }
+        crate::hf::search(q, 20, &self.hf_token())
+            .map(|r| json!({"results": r}))
+            .map_err(|e| ApiError(502, format!("Could not reach Hugging Face: {e}")))
+    }
+
+    /// `/api/hf/repo?repo=`: the GGUF units of a repo, each with whether it fits this machine.
+    pub fn hf_repo(&self, text: &str) -> Result<Value, ApiError> {
+        let (repo, revision, hint) = crate::hf::parse_repo(text).map_err(|e| ApiError(400, e))?;
+        let token = self.hf_token();
+        let files = crate::hf::tree(&repo, &revision, &token)
+            .and_then(|f| crate::hf::repo_info(&repo, &token).map(|i| (f, i)));
+        let (files, info) =
+            files.map_err(|e| ApiError(404, format!("Could not open {repo}: {e}")))?;
+        let sys = self.sysinfo();
+        let mut groups = crate::hf::gguf_groups(&files, &hint);
+        for g in groups.iter_mut() {
+            g["fit"] = if g["kind"] == "model" {
+                crate::catalog::fit(g["size"].as_i64().unwrap_or(0), &sys)
+            } else {
+                Value::Null
+            };
+        }
+        Ok(json!({"repo": repo, "revision": revision, "info": info, "groups": groups}))
+    }
+
+    /// `POST /api/hf/download {repo, revision, files}`: one download job for the chosen files of a repo.
+    pub fn hf_download(&self, body: &Map<String, Value>) -> Result<Value, ApiError> {
+        let text = body.get("repo").and_then(Value::as_str).unwrap_or("");
+        let (repo, rev0, _) = crate::hf::parse_repo(text).map_err(|e| ApiError(400, e))?;
+        let revision = body
+            .get("revision")
+            .and_then(Value::as_str)
+            .filter(|r| !r.is_empty())
+            .map(String::from)
+            .unwrap_or(rev0);
+        let wanted: Vec<String> = body
+            .get("files")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+        let tree = crate::hf::tree(&repo, &revision, &self.hf_token())
+            .map_err(|e| ApiError(404, format!("Could not open {repo}: {e}")))?;
+        let missing = wanted
+            .iter()
+            .find(|p| !tree.iter().any(|f| f["path"].as_str() == Some(p.as_str())));
+        // a path from the repo stays inside the models folder
+        let unsafe_path = wanted.iter().find(|p| {
+            std::path::Path::new(p.as_str())
+                .components()
+                .any(|c| !matches!(c, std::path::Component::Normal(_)))
+        });
+        if let Some(p) = unsafe_path {
+            return Err(ApiError(400, format!("Refusing the path {p}")));
+        }
+        if wanted.is_empty() || missing.is_some() {
+            let tail = missing
+                .map(|m| format!(": {m} does not"))
+                .unwrap_or_default();
+            return Err(ApiError(
+                400,
+                format!("Pick files that exist in the repo{tail}"),
+            ));
+        }
+        let root = self.models_dir();
+        let files: Vec<Value> = wanted
+            .iter()
+            .map(|p| {
+                let f = tree
+                    .iter()
+                    .find(|f| f["path"].as_str() == Some(p.as_str()))
+                    .unwrap();
+                json!({"url": crate::hf::resolve_url(&repo, p, &revision),
+                    "dest": root.join(&repo).join(p).to_string_lossy(),
+                    "size": f["size"].as_i64().unwrap_or(0),
+                    "sha256": f["lfs"].get("oid").cloned().unwrap_or(Value::Null)})
+            })
+            .collect();
+        let first = wanted[0].rsplit('/').next().unwrap_or(&wanted[0]);
+        let title = format!(
+            "{} · {}",
+            repo.rsplit('/').next().unwrap_or(&repo),
+            crate::hf::quant_label(first)
+        );
+        let mut sorted = wanted.clone();
+        sorted.sort();
+        Ok(self.downloads.add(
+            &title,
+            &files,
+            "model",
+            json!({}),
+            &format!("hf:{repo}:{}", sorted.join(",")),
+        ))
+    }
+
     /// The catalog with what is already on disk and what is being downloaded (`catalog_view`).
     pub fn catalog_view(&self) -> Value {
         let info = crate::system::info(&self.models_dir());
@@ -1382,6 +1493,13 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .action(id, what)
                 .ok_or(ApiError(404, "Not found".into()))
         }
+        ("GET", "/api/hf/search") => {
+            st.hf_search(r.query.get("q").and_then(|v| v.as_str()).unwrap_or(""))
+        }
+        ("GET", "/api/hf/repo") => {
+            st.hf_repo(r.query.get("repo").and_then(|v| v.as_str()).unwrap_or(""))
+        }
+        ("POST", "/api/hf/download") => r.json(MAX_JSON).and_then(|body| st.hf_download(&body)),
         ("GET", "/api/downloads") => Ok(json!({"downloads": st.downloads.list()})),
         ("GET", "/api/chats") => Ok(json!({"chats": st.chats.list()})),
         ("POST", "/api/chats") => r.json(MAX_CHAT).and_then(|body| {
@@ -1630,9 +1748,7 @@ async fn login(st: &Ctx, method: &Method, body: Body, head: bool) -> Response<Bo
 /// Features of the Python Studio that this server does not have yet: a clear 501 instead of a 404 that looks like a bug.
 fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
     let is = |p: &str| path == p || path.starts_with(&format!("{p}/"));
-    Some(if is("/api/hf") {
-        "Searching and downloading from Hugging Face"
-    } else if is("/api/bench") {
+    Some(if is("/api/bench") {
         "The speed test"
     } else if is("/api/forge") {
         "The model forge"
