@@ -74,9 +74,12 @@ enum Cmd {
         /// data folder (settings, chats, engines, models); default: per-user app data
         #[arg(long, value_name = "DIR")]
         home: Option<std::path::PathBuf>,
-        /// address to listen on (only this machine for now)
+        /// address to listen on; 0.0.0.0 opens it to the network (other machines need the access key)
         #[arg(long)]
         host: Option<String>,
+        /// in host mode: plain http instead of https with a certificate of its own
+        #[arg(long)]
+        no_tls: bool,
         /// port (default 8642; the next free one when it is taken)
         #[arg(long)]
         port: Option<u16>,
@@ -411,6 +414,7 @@ fn run() -> Result<()> {
         Some(Cmd::Studio {
             home,
             host,
+            no_tls,
             port,
             no_browser,
             attach,
@@ -418,6 +422,7 @@ fn run() -> Result<()> {
         }) => exit(flelink_api::run::run(flelink_api::run::RunOptions {
             home,
             host,
+            no_tls,
             port,
             no_browser,
             attach: attach.unwrap_or_default(),

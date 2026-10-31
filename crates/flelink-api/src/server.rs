@@ -220,7 +220,7 @@ fn host_ok(st: &Studio, headers: &HeaderMap) -> bool {
 }
 
 /// This machine's name, as `socket.gethostname()` says it.
-fn machine_name() -> String {
+pub(crate) fn machine_name() -> String {
     #[cfg(unix)]
     {
         let mut b = [0u8; 256];

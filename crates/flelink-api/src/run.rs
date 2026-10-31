@@ -15,6 +15,8 @@ pub struct RunOptions {
     pub host: Option<String>,
     pub port: Option<u16>,
     pub no_browser: bool,
+    /// host mode: plain http (default is https with a certificate of its own)
+    pub no_tls: bool,
     /// use an already running llama.cpp / FLE server
     pub attach: String,
     /// serve the page from this folder instead of the copy inside the binary
@@ -188,8 +190,22 @@ pub fn run(o: RunOptions) -> i32 {
             ));
         };
         let actual = listener.local_addr().map(|a| a.port()).unwrap_or(port);
-        let url = format!("http://127.0.0.1:{actual}/");
+        let identity = if local || o.no_tls {
+            None
+        } else {
+            match crate::tls::load_or_create(&home.join("tls")) {
+                Ok(i) => Some(i),
+                Err(e) => return Err(format!("could not set up TLS: {e}")),
+            }
+        };
+        let scheme = if identity.is_some() { "https" } else { "http" };
+        let url = format!("{scheme}://127.0.0.1:{actual}/");
         println!("FLE Studio {STUDIO_VERSION} — {url}");
+        if let Some(i) = &identity {
+            println!("Certificate fingerprint (SHA-256): {}", i.fingerprint);
+        } else if !local {
+            println!("Host mode without TLS: the access key travels in the clear. Use it on a network you trust.");
+        }
         println!("Data folder: {}", home.display());
         println!("Press Ctrl+C to stop (this also stops a model FLE Studio started).");
         let key = cfg("attach_key")
@@ -284,9 +300,11 @@ pub fn run(o: RunOptions) -> i32 {
                 let _ = tokio::signal::ctrl_c().await;
             }
         };
-        serve_listener(st.clone(), listener, stop)
-            .await
-            .map_err(|e| e.to_string())?;
+        match identity {
+            Some(i) => crate::tls::serve_tls(st.clone(), listener, i.config, stop).await,
+            None => serve_listener(st.clone(), listener, stop).await,
+        }
+        .map_err(|e| e.to_string())?;
         println!("Stopping FLE Studio …");
         st.engine.shutdown();
         Ok(())

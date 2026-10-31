@@ -29,6 +29,18 @@ curl -fsSL https://flelink.run/install.sh | sh     # macOS, Linux
 irm https://flelink.run/install.ps1 | iex          # Windows
 ```
 
+## Host mode (look at another machine)
+
+```bash
+flelink studio --host 0.0.0.0 --attach http://127.0.0.1:18420     # on the machine with the GPU
+```
+
+It prints an access key (also in Settings) and the SHA-256 fingerprint of its own certificate (made once, kept in
+`<data>/tls/`). Another machine opens `https://HOST:8642/`, signs in with the key (a cookie afterwards; API clients send
+`Authorization: Bearer KEY`) and checks the fingerprint once. `--no-tls` serves plain http for a network you trust.
+Pairing, per-client tokens and rights, and a client Studio that passes everything through to a host are not in yet; use
+the access key, or an SSH tunnel to a host that listens on 127.0.0.1.
+
 ## Layout
 
 | Path | What |
