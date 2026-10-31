@@ -105,14 +105,15 @@
       </article>
       <article class="flag">
         <header>
-          <p class="flag-tag next">In progress</p>
+          <p class="flag-tag">Measured</p>
           <h3>DeepSeek-V4.1-Flash-1017</h3>
-          <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO GGUF by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 231 to 266 GB</p>
+          <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO IQ2_XXS by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 232 GiB</p>
         </header>
+        <div class="big-num">23.5 <span>tok/s</span></div>
         <ul class="flag-list">
-          <li><b>Runs today</b> through FLE Link on llama.cpp b11870 or newer</li>
-          <li><b>FLE engine support</b> is being built: first runs on one 32 GB GPU</li>
-          <li><b>Numbers</b> follow when they are measured the same way as above</li>
+          <li><b>One 32 GB GPU</b> RTX PRO 4500, 18 GB expert cache, RAM capped at 102 GB, the rest read from NVMe; decode after warm-up, 16k context, loads in 30 s</li>
+          <li><b>FLE engine</b> DeepSeek-V4.1 support is merged; FLE Link installs it with the next engine release</li>
+          <li><b>Today</b> it also runs through FLE Link on llama.cpp b11870 or newer</li>
         </ul>
       </article>
     </div>

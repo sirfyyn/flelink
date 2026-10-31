@@ -196,3 +196,5 @@ section[id]{scroll-margin-top:64px}
 .flag-list b{display:block;color:var(--text)}
 @media (max-width:900px){.flags{grid-template-columns:minmax(0,1fr)}}
 .bar.v91{--v:91}.bar.v74{--v:74}.bar.v36{--v:36}
+.big-num{font:700 2.6rem/1 var(--font);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.big-num span{font-size:1rem;font-weight:500;color:var(--muted)}

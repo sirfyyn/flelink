@@ -59,7 +59,7 @@ fle                      # short name, same program
 | Model | Size | Measured | Notes |
 |---|---|---|---|
 | [Qwen3.8-Flash-Next · FLE](https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF) | 125B MoE, 88.9 GB | decode **91 tok/s** (Strata 74, llama.cpp 36) | one 32 GB RTX PRO 4500, 120 GB RAM, same machine for all three (6 Oct 2026); smaller than Unsloth IQ4_XS at the same KL divergence |
-| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, 231–266 GB | numbers follow | runs through FLE Link on llama.cpp b11870+; FLE engine support in progress |
+| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, IQ2_XXS 232 GiB | decode **23.5 tok/s** | one 32 GB RTX PRO 4500, 18 GB expert cache, RAM capped at 102 GB, rest from NVMe (1 Nov 2026); FLE engine main, in FLE Link with the next engine release |
 
 Small models such as Llama 3.2 1B run on any laptop and are in the built-in catalog (`flelink models`). Any other GGUF on
 Hugging Face can be searched, checked for fit and downloaded from the Studio's Models page.
