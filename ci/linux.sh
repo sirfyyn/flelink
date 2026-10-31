@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # The Linux checks (fmt, clippy, tests with the Python comparison) in a throw-away container. Same steps as .github/workflows/ci.yml.
-# On titan, builds run in the measurement frame: cores 16-31, never 0-15 (Rhea). FLE_CI_CPUSET passes that on to the container.
+# On titan the runner pod keeps builds inside the measurement frame by itself (job containers on cores 24-31, dockerd limited
+# to 6 CPUs and 10 GiB), and the daemon in it only sees a few cores: so no --cpuset here. FLE_CI_CPUSET sets one if wanted.
 # The source goes in with `docker cp`, not a bind mount: the runner's workspace is not a path the Docker daemon can see.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
-cpuset="${FLE_CI_CPUSET:-16-31}"
+cpuset="${FLE_CI_CPUSET:-}"
 image="${FLE_CI_IMAGE:-rust:1-bookworm}"
 
 cat > /tmp/flelink-ci-inside.sh <<'INSIDE'
@@ -25,7 +26,7 @@ cargo clippy --all-targets -- -D warnings
 FLE_STUDIO_SRC=/spec/studio/src FLE_ENGINE_SRC=/spec/engine FLE_STUDIO_PYTHON=python3 cargo test --all
 INSIDE
 
-c="$(docker create --cpuset-cpus="$cpuset" --memory=24g \
+c="$(docker create ${cpuset:+--cpuset-cpus="$cpuset"} --memory=8g \
   -v flelink-ci-cargo:/usr/local/cargo/registry -v flelink-ci-target:/target -v flelink-ci-spec:/spec \
   -e CARGO_TARGET_DIR=/target -e CARGO_TERM_COLOR=never \
   "$image" bash /inside.sh)"

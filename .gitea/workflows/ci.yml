@@ -1,6 +1,6 @@
 name: ci (Gitea)
 
-# Daily checks on our own runner `titan` (Linux, cores 16-31). macOS and Windows run on GitHub for pull requests, tags and
+# Daily checks on our own runner `titan` (Linux; the runner pod keeps builds off Rhea's cores). macOS and Windows run on GitHub for pull requests, tags and
 # releases only: private repositories pay for those minutes there.
 on:
   push: { branches: [main] }
