@@ -24,4 +24,4 @@ strip = true
 
 # Windows: the app puts itself in a job object that kills every child (the engine) when the app ends, however it ends.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
