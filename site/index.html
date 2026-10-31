@@ -97,9 +97,9 @@
           <p class="flag-sub">125B MoE · FLE quant, 88.9 GB · <a href="https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF">on Hugging Face</a></p>
         </header>
         <div class="bars" role="img" aria-label="Decode speed on the same machine: FLE 91, Strata 74, llama.cpp 36 tokens per second">
-          <div class="bar fle" style="--v:91"><span>FLE</span><b>91 tok/s</b></div>
-          <div class="bar" style="--v:74"><span>Strata</span><b>74 tok/s</b></div>
-          <div class="bar" style="--v:36"><span>llama.cpp</span><b>36 tok/s</b></div>
+          <div class="bar fle v91"><span>FLE</span><b>91 tok/s</b></div>
+          <div class="bar v74"><span>Strata</span><b>74 tok/s</b></div>
+          <div class="bar v36"><span>llama.cpp</span><b>36 tok/s</b></div>
         </div>
         <p class="fine">Decode, median over six tasks, same machine and model: one 32 GB RTX PRO 4500, 120 GB RAM, 16 cores (6 Oct 2026). Smaller than Unsloth's IQ4_XS at the same KL divergence to BF16. Prefill (reading long prompts) was where FLE trailed in this run; it has been reworked since, and new numbers follow when they are measured the same way.</p>
       </article>

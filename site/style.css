@@ -195,3 +195,4 @@ section[id]{scroll-margin-top:64px}
 .flag-list li{padding:10px 0;border-top:1px solid var(--line)}
 .flag-list b{display:block;color:var(--text)}
 @media (max-width:900px){.flags{grid-template-columns:minmax(0,1fr)}}
+.bar.v91{--v:91}.bar.v74{--v:74}.bar.v36{--v:36}
