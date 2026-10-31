@@ -2,6 +2,7 @@
 //! to "model answering": hardware, engines, model catalog, resumable downloads, start plan, server, chat.
 //! No Python, no uv, no git. One static binary on top of this.
 
+pub mod adapter;
 pub mod bench;
 pub mod catalog;
 pub mod chat;

@@ -186,7 +186,7 @@ fn print_event(e: &Event) {
     }
 }
 
-fn main() {
+pub fn main() {
     if let Err(e) = run() {
         // same words as the Python helper: "fle: message", then "hint: ..."; exit code 2
         if let Some(fe) = e.downcast_ref::<flelink_core::FleError>() {

@@ -8,10 +8,10 @@ license.workspace = true
 name = "flelink"
 path = "src/main.rs"
 
-# the short name: the same program under a second name
+# the short name `fle` is src/bin/fle.rs: the same program under a second name
 [[bin]]
 name = "fle"
-path = "src/main.rs"
+path = "src/bin/fle.rs"
 
 [dependencies]
 flelink-core = { path = "../flelink-core" }

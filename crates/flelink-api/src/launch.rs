@@ -1239,8 +1239,11 @@ impl Profiles {
                 }
             }
         };
-        if !["fle", "upstream", "custom"].contains(&engine.as_str()) {
-            return perr("engine must be fle, upstream or custom");
+        if flelink_core::adapter::get(&engine).is_none() {
+            return perr(format!(
+                "engine must be {}",
+                flelink_core::adapter::id_list()
+            ));
         }
         if engine == "custom" && binary.is_empty() {
             return perr("A custom-engine profile needs the path of its llama-server at the start of the command");
@@ -1473,7 +1476,7 @@ pub fn profile_plan(i: &ProfileInput) -> R<Plan> {
         let Some(e) = i.engine.filter(|e| py_truthy(e)) else {
             return perr(format!(
                 "Install the {} engine first (Engine page)",
-                if pengine == "fle" { "FLE" } else { "upstream" }
+                flelink_core::adapter::get(&pengine).map_or("upstream", |a| a.short())
             ));
         };
         (
