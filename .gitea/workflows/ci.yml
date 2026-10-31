@@ -1,0 +1,20 @@
+name: ci (Gitea)
+
+# Daily checks on our own runner `titan` (Linux, cores 16-31). macOS and Windows run on GitHub for pull requests, tags and
+# releases only: private repositories pay for those minutes there.
+on:
+  push: { branches: [main] }
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ gitea.workflow }}-${{ gitea.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: titan
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/linux.sh
