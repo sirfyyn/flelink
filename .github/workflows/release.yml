@@ -25,13 +25,13 @@ jobs:
       - name: Package (unix)
         if: runner.os != 'Windows'
         run: |
-          cd target/${{ matrix.target }}/release && tar -czf "$GITHUB_WORKSPACE/flelink-${{ matrix.target }}.tar.gz" flelink && cd "$GITHUB_WORKSPACE"
+          cd target/${{ matrix.target }}/release && tar -czf "$GITHUB_WORKSPACE/flelink-${{ matrix.target }}.tar.gz" flelink fle && cd "$GITHUB_WORKSPACE"
           (shasum -a 256 flelink-${{ matrix.target }}.tar.gz 2>/dev/null || sha256sum flelink-${{ matrix.target }}.tar.gz) | awk '{print $1"  flelink-${{ matrix.target }}.tar.gz"}' > flelink-${{ matrix.target }}.tar.gz.sha256
       - name: Package (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive target/${{ matrix.target }}/release/flelink.exe flelink-${{ matrix.target }}.zip
+          Compress-Archive -Path target/${{ matrix.target }}/release/flelink.exe,target/${{ matrix.target }}/release/fle.exe -DestinationPath flelink-${{ matrix.target }}.zip
           $h = (Get-FileHash flelink-${{ matrix.target }}.zip -Algorithm SHA256).Hash.ToLower()
           "$h  flelink-${{ matrix.target }}.zip" | Out-File -Encoding ascii flelink-${{ matrix.target }}.zip.sha256
       - uses: actions/upload-artifact@v4

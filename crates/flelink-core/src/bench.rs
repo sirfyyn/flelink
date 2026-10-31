@@ -229,7 +229,7 @@ pub fn load_baseline(path: &str) -> Result<Value> {
     let mut data: Value = serde_json::from_str(&text).map_err(|e| {
         FleError::new(
             format!("{path} is not valid JSON: {e}"),
-            "Use a file written by `fle bench --output`.",
+            "Use a file written by `flelink bench --output`.",
         )
     })?;
     if data["primary"].is_object() {
@@ -238,7 +238,7 @@ pub fn load_baseline(path: &str) -> Result<Value> {
     if !data.is_object() || !data["median_tok_s"].is_number() {
         return Err(FleError::new(
             format!("{path} has no bench result (median_tok_s is missing)."),
-            "Use a file written by `fle bench --output`.",
+            "Use a file written by `flelink bench --output`.",
         )
         .into());
     }

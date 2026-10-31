@@ -243,7 +243,8 @@ fn doctor_matches_the_python_helper() {
         "python driver failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let py: Vec<Value> = serde_json::from_slice(&out.stdout).unwrap();
+    let py: Vec<Value> =
+        serde_json::from_str(&common::brand(&String::from_utf8_lossy(&out.stdout))).unwrap();
     std::env::set_var("XDG_CONFIG_HOME", &cfg_home);
     std::env::remove_var("FLE_CONFIG");
     std::env::remove_var("FLE_ENGINE");
@@ -280,8 +281,8 @@ fn doctor_text_and_status_logic() {
     assert_eq!(
         cmds,
         [
-            "fle plan '/m/a b.gguf' --profile nvme",
-            "fle plan '/m/a b.gguf' --profile off"
+            "flelink plan '/m/a b.gguf' --profile nvme",
+            "flelink plan '/m/a b.gguf' --profile off"
         ]
     );
     assert!(doctor::suggest(&checks, "auto", "", false).is_empty());

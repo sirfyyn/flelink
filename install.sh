@@ -62,6 +62,8 @@ tar -xzf "$tmp/$file" -C "$tmp"
 [ -f "$tmp/flelink" ] || die "the archive has no 'flelink' program"
 install -m 0755 "$tmp/flelink" "$BIN_DIR/flelink"
 say "Installed $BIN_DIR/flelink"
+# the short name `fle`: a link to the same file, unless another program of that name is already there
+if [ ! -e "$BIN_DIR/fle" ] || [ -L "$BIN_DIR/fle" ]; then ln -sf flelink "$BIN_DIR/fle"; say "Installed $BIN_DIR/fle (short name)"; fi
 
 case ":$PATH:" in *":$BIN_DIR:"*) ;; *) printf '\nAdd this to your shell profile so you can type `flelink`:\n  export PATH="%s:$PATH"\n' "$BIN_DIR" ;; esac
 printf '\nDone. Start with:\n'

@@ -84,7 +84,7 @@ pub fn build(mut report: Value, settings: &Map<String, Value>) -> Result<Value> 
 
 fn checks_text(r: &Value) -> String {
     let mut lines = vec![format!(
-        "fle doctor: {}",
+        "flelink doctor: {}",
         r["status"].as_str().unwrap_or("None")
     )];
     for c in r["checks"].as_array().into_iter().flatten() {

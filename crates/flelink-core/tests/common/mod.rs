@@ -115,3 +115,13 @@ pub fn engine(dir: &Path, name: &str, fle: bool, spec: bool) -> String {
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
     p.to_string_lossy().to_string()
 }
+
+/// The Python original calls the program `fle`; this one calls itself `flelink` (DEVIATIONS D11). Same words otherwise.
+pub fn brand(s: &str) -> String {
+    s.replace("`fle ", "`flelink ")
+        .replace("`fle`", "`flelink`")
+        .replace("fle doctor:", "flelink doctor:")
+        .replace("try: fle models", "try: flelink models")
+        .replace("# fle settings", "# flelink settings")
+        .replace("fle plan ", "flelink plan ")
+}

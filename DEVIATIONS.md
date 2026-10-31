@@ -29,3 +29,8 @@ model name uses the last model; chat lists with equal times keep the file system
 
 On a machine whose zone is the IANA name `GMT`, the clock tool says `GMT` where Python says `UTC` (Rust takes the abbreviation
 from the IANA zone, Python from the C library). Same zone, same offset; the test treats the two spellings as equal.
+
+## D11: the program is called `flelink`
+
+Hints, error texts and the saved config header say `flelink ...` where the Python helper says `fle ...`. The comparison tests
+apply one rule to Python's output (`common::brand`) and compare everything else word for word.

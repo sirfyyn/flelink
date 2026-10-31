@@ -4,6 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "flelink"
+path = "src/main.rs"
+
+# the short name: the same program under a second name
+[[bin]]
+name = "fle"
+path = "src/main.rs"
+
 [dependencies]
 flelink-core = { path = "../flelink-core" }
 flelink-api = { path = "../flelink-api" }

@@ -293,7 +293,8 @@ fn plans_match_the_python_helper() {
         "python driver failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let py: Vec<Value> = serde_json::from_slice(&out.stdout).unwrap();
+    let py: Vec<Value> =
+        serde_json::from_str(&common::brand(&String::from_utf8_lossy(&out.stdout))).unwrap();
     assert_eq!(py.len(), all.len());
 
     std::env::set_var("XDG_CONFIG_HOME", &cfg_home);

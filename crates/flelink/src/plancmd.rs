@@ -125,7 +125,7 @@ pub fn model_path(
     if p.is_empty() && required {
         return Err(FleError::new(
             "No model given.",
-            "Pass MODEL, or run `fle config set model /path/to/model.gguf`.",
+            "Pass MODEL, or run `flelink config set model /path/to/model.gguf`.",
         )
         .into());
     }
@@ -423,7 +423,7 @@ pub fn run_fetch_sidecars(c: Common, dry_run: bool, force: bool) -> Result<i32> 
             "fle: no known source for this model ({}).",
             model.first.file_name().unwrap().to_string_lossy()
         );
-        eprintln!("hint: only models with a published MTP head are covered; pass --mtp-head and --mtp-vocab to `fle plan` if you have the files.");
+        eprintln!("hint: only models with a published MTP head are covered; pass --mtp-head and --mtp-vocab to `flelink plan` if you have the files.");
         if pa.common.json {
             println!(
                 "{}",

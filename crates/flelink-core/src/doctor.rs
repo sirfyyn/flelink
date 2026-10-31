@@ -82,7 +82,7 @@ pub fn suggest(checks: &[Value], profile: &str, model_path: &str, dense: bool) -
         }
     }
     let q = shquote(model_path);
-    found.into_iter().map(|(t, r)| json!({"profile": t, "reason": r, "command": format!("fle plan {q} --profile {t}")})).collect()
+    found.into_iter().map(|(t, r)| json!({"profile": t, "reason": r, "command": format!("flelink plan {q} --profile {t}")})).collect()
 }
 
 /// `hardware.check_engine_flags`: problems with the engine for this profile.
@@ -153,7 +153,7 @@ pub fn run(
             "model",
             "warn",
             "no model selected",
-            "Pass a model, or set model in `fle config`.",
+            "Pass a model, or set model in `flelink config`.",
         ));
     } else {
         match gguf::read_model(std::path::Path::new(model_path)) {
@@ -243,7 +243,7 @@ pub fn run(
             "engine",
             "fail",
             "no llama-server found",
-            "Set engine in `fle config`, or pass --engine.",
+            "Set engine in `flelink config`, or pass --engine.",
         ));
     } else {
         let e = launch::detect_engine(&engine_path);
@@ -393,7 +393,7 @@ pub fn run(
             "plan",
             "warn",
             "no model to plan for",
-            "Pass a model or set model in `fle config`.",
+            "Pass a model or set model in `flelink config`.",
         ));
     }
     let status = worst(&checks);
@@ -415,7 +415,7 @@ pub fn run(
 
 pub fn print_report(r: &Value) -> String {
     let st = r["status"].as_str().unwrap_or("");
-    let mut s = format!("fle doctor: {st}\n");
+    let mut s = format!("flelink doctor: {st}\n");
     for c in r["checks"].as_array().into_iter().flatten() {
         let mark = match c["status"].as_str().unwrap_or("") {
             "ok" => "ok  ",

@@ -931,7 +931,7 @@ pub fn build(settings: &Map<String, Value>, model: &Model, o: &Options, h: &Host
         path = find_engine("", &o.installed_engines);
     }
     if path.is_empty() {
-        return Err(err("No llama-server found.", "Pass --engine /path/to/llama-server, set engine in `fle config`, or build this checkout."));
+        return Err(err("No llama-server found.", "Pass --engine /path/to/llama-server, set engine in `flelink config`, or build this checkout."));
     }
     let engine = detect_engine(&path);
     let eb = |k: &str| engine.get(k).and_then(Value::as_bool).unwrap_or(false);
@@ -1127,7 +1127,7 @@ pub fn build(settings: &Map<String, Value>, model: &Model, o: &Options, h: &Host
         "none" => notes.push("Speculation is off.".into()),
         "mtp" => {
             if !has_pair {
-                return Err(err("MTP was requested, but no MTP sidecar files (head and vocabulary) were found next to the model.", format!("Run `fle fetch-sidecars {}` to download them when a source is known, or use --spec auto / --spec ngram-mod.", shquote(&model.first.to_string_lossy()))));
+                return Err(err("MTP was requested, but no MTP sidecar files (head and vocabulary) were found next to the model.", format!("Run `flelink fetch-sidecars {}` to download them when a source is known, or use --spec auto / --spec ngram-mod.", shquote(&model.first.to_string_lossy()))));
             }
             if profile == "off" || profile == "nvme" {
                 warnings.push(format!("MTP is not used in the {profile} profile."));

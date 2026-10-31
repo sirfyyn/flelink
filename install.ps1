@@ -25,6 +25,7 @@ try {
   New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
   Copy-Item "$tmp\flelink.exe" "$BinDir\flelink.exe" -Force
   Write-Host "==> Installed $BinDir\flelink.exe"
+  if (-not (Test-Path "$BinDir\fle.exe")) { Copy-Item "$tmp\flelink.exe" "$BinDir\fle.exe" -Force; Write-Host "==> Installed $BinDir\fle.exe (short name)" }
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
   if (($userPath -split ';') -notcontains $BinDir) { [Environment]::SetEnvironmentVariable('Path', "$userPath;$BinDir", 'User'); Write-Host "==> Added $BinDir to your PATH (open a new terminal)" }
   Write-Host "`nDone. Start with:  flelink   (terminal)   |   flelink studio   (browser)   |   flelink system   (what this machine can do)"

@@ -603,7 +603,7 @@ fn run() -> Result<()> {
 // Wait for Ctrl+C without a dependency: block on a signal via a tiny thread reading stdin close is not enough; use libc-free approach.
 fn ctrlc_wait(tx: std::sync::mpsc::Sender<()>) -> std::io::Result<()> {
     std::thread::spawn(move || {
-        // `fle run` is meant to be stopped with Ctrl+C, which ends the process and its child (same process group).
+        // `flelink run` is meant to be stopped with Ctrl+C, which ends the process and its child (same process group).
         loop {
             std::thread::sleep(std::time::Duration::from_secs(3600));
             let _ = tx.send(());

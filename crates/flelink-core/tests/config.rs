@@ -1,4 +1,5 @@
 //! Settings file and precedence; the Python helper (`tools/fle/config.py`) is the specification.
+mod common;
 use flelink_core::config::*;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -263,7 +264,11 @@ fn matches_the_python_helper() {
     save(&data_rs, Some(rs.to_str().unwrap())).unwrap();
     // Python's write_text writes CRLF on Windows; both are valid TOML
     let text = |p: &Path| std::fs::read_to_string(p).unwrap().replace("\r\n", "\n");
-    assert_eq!(text(&rs), text(&pf), "the saved files differ");
+    assert_eq!(
+        text(&rs),
+        common::brand(&text(&pf)),
+        "the saved files differ"
+    );
     for envs in [
         vec![],
         vec![

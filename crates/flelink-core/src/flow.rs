@@ -21,7 +21,7 @@ pub fn ensure_and_start(
     let m = catalog::builtin()
         .into_iter()
         .find(|m| m.id == model_id)
-        .with_context(|| format!("unknown model '{model_id}' (try: fle models)"))?;
+        .with_context(|| format!("unknown model '{model_id}' (try: flelink models)"))?;
     if catalog::fit(&m, &sys) == catalog::Fit::TooBig {
         bail!(
             "{} does not fit this machine ({} RAM, {} free on disk)",

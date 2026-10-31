@@ -537,7 +537,11 @@ fn bench_matches_the_python_helper() {
                 // the OS wording of an I/O or JSON error is not ours to copy; the explanation and the hint are
                 let first = |s: &str| s.split(':').next().unwrap_or("").to_string();
                 assert_eq!(first(&e.message), first(m.as_str().unwrap()), "{inp}");
-                assert_eq!(e.hint, want["hint"].as_str().unwrap(), "{inp}");
+                assert_eq!(
+                    e.hint,
+                    common::brand(want["hint"].as_str().unwrap()),
+                    "{inp}"
+                );
             }
             (a, b) => panic!("outcome differs: rust {a:?} python {b:?} for {inp}"),
         }

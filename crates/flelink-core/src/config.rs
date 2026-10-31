@@ -202,8 +202,8 @@ pub fn save(data: &Map<String, Value>, explicit: Option<&str>) -> Result<PathBuf
         std::fs::create_dir_all(d)?;
     }
     let mut lines = vec![
-        "# fle settings. CLI flags > environment > this file > profile defaults.".to_string(),
-        "# Run `fle config show` to see the values in effect.".to_string(),
+        "# flelink settings. CLI flags > environment > this file > profile defaults.".to_string(),
+        "# Run `flelink config show` to see the values in effect.".to_string(),
         String::new(),
     ];
     let d = defaults();
