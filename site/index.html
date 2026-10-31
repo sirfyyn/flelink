@@ -21,6 +21,7 @@
       <img src="logo-mark.svg" alt="" width="34" height="34"><span><b>FLE</b> Link</span>
     </a>
     <nav class="top-nav" aria-label="Main">
+      <a href="#models">Models</a>
       <a href="#how">How it works</a>
       <a href="#ways">Ways in</a>
       <a href="#roadmap">Roadmap</a>
@@ -53,7 +54,7 @@
       <dl class="proof">
         <div><dt>66 s</dt><dd>from nothing to the first answer on Linux with an NVIDIA card</dd></div>
         <div><dt>92 s</dt><dd>the same on an 8 GB M2 MacBook, model download included</dd></div>
-        <div><dt>263 tok/s</dt><dd>Llama 3.2 1B on a 16 GB RTX PRO 2000, engine chosen automatically</dd></div>
+        <div><dt>91 tok/s</dt><dd>a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp</dd></div>
       </dl>
     </div>
 
@@ -77,6 +78,41 @@
 
 <span class="d">[2 tokens, 76.1 tok/s decode, 240 tok/s prompt]</span></pre>
     </figure>
+  </div>
+</section>
+
+<section id="models">
+  <div class="wrap">
+    <p class="eyebrow">Flagship models</p>
+    <h2>Big mixture-of-experts models on one workstation</h2>
+    <p class="intro">The FLE engine keeps the experts a token needs on the GPU and the rest in RAM. FLE Link picks the build and the settings for your machine.</p>
+    <div class="flags">
+      <article class="flag">
+        <header>
+          <p class="flag-tag">Measured</p>
+          <h3>Qwen3.8-Flash-Next · FLE</h3>
+          <p class="flag-sub">125B MoE · FLE quant, 88.9 GB · <a href="https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF">on Hugging Face</a></p>
+        </header>
+        <div class="bars" role="img" aria-label="Decode speed on the same machine: FLE 91, Strata 74, llama.cpp 36 tokens per second">
+          <div class="bar fle" style="--v:91"><span>FLE</span><b>91 tok/s</b></div>
+          <div class="bar" style="--v:74"><span>Strata</span><b>74 tok/s</b></div>
+          <div class="bar" style="--v:36"><span>llama.cpp</span><b>36 tok/s</b></div>
+        </div>
+        <p class="fine">Decode, median over six tasks, same machine and model: one 32 GB RTX PRO 4500, 120 GB RAM, 16 cores (6 Oct 2026). Smaller than Unsloth's IQ4_XS at the same KL divergence to BF16. Prefill (reading long prompts) was where FLE trailed in this run; it has been reworked since, and new numbers follow when they are measured the same way.</p>
+      </article>
+      <article class="flag">
+        <header>
+          <p class="flag-tag next">In progress</p>
+          <h3>DeepSeek-V4.1-Flash-1017</h3>
+          <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO GGUF by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 231 to 266 GB</p>
+        </header>
+        <ul class="flag-list">
+          <li><b>Runs today</b> through FLE Link on llama.cpp b11870 or newer</li>
+          <li><b>FLE engine support</b> is being built: first runs on one 32 GB GPU</li>
+          <li><b>Numbers</b> follow when they are measured the same way as above</li>
+        </ul>
+      </article>
+    </div>
   </div>
 </section>
 
