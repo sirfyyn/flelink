@@ -1,44 +1,265 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FLE Link: lokale KI, eine Datei, ein Befehl</title>
-<meta name="description" content="FLE Link richtet lokale KI-Modelle ein und startet sie: Rechner prüfen, passende Engine und passendes Modell laden, Einstellungen wählen, API und Browser-Oberfläche bereitstellen.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>FLE Link · local models, wired up in one command</title>
+<meta name="description" content="FLE Link sits between an inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API, a browser studio and a desktop app. Open source, MIT.">
+<meta name="theme-color" content="#0b0e14">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<meta property="og:title" content="FLE Link">
+<meta property="og:description" content="Local models, wired up in one command. The layer between your inference engine and your tools.">
+<meta property="og:url" content="https://flelink.run/">
+<meta property="og:type" content="website">
 <link rel="stylesheet" href="style.css">
 </head>
-<body><main>
-<h1>FLE <span>Link</span></h1>
-<p class="lead">Lokale KI zum Laufen bringen. Eine Datei, ein Befehl.</p>
-<p>FLE Link sitzt zwischen einer Inferenz-Engine und den Werkzeugen, die sie benutzen (Chat-Oberfläche, Editor, Agent). Es schaut sich den Rechner an, installiert die passende Engine, lädt ein passendes Modell, wählt die Startwerte und stellt eine OpenAI-kompatible Schnittstelle samt Browser-Oberfläche bereit. Nichts einzutippen, keine Variablen zu setzen.</p>
-<div class="card"><div class="flow">Werkzeug (Chat, Editor, Agent)  ──►  FLE Link  ──►  Engine (FLE, llama.cpp, …)</div></div>
+<body>
 
-<h2>Installieren</h2>
-<p>macOS und Linux:</p>
-<pre>curl -fsSL https://flelink.run/install.sh | sh</pre>
-<p>Windows (PowerShell):</p>
-<pre>irm https://flelink.run/install.ps1 | iex</pre>
-<p>Eine Datei, kein Python, kein git, kein sudo. Das Programm wird gegen seine SHA-256-Summe geprüft und landet im eigenen Benutzerordner.</p>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./" aria-label="FLE Link home">
+      <img src="logo.svg" alt="" width="28" height="28"><span><b>FLE</b> Link</span>
+    </a>
+    <nav class="top-nav" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#ways">Ways in</a>
+      <a href="#roadmap">Roadmap</a>
+      <a class="btn ghost" href="https://github.com/sirfyyn/flelink">GitHub</a>
+    </nav>
+  </div>
+</header>
 
-<h2>Benutzen</h2>
-<pre>flelink            # Terminal-Oberfläche (beim ersten Start wird alles eingerichtet)
-flelink studio     # Browser-Oberfläche auf http://127.0.0.1:8642
-flelink system     # was dieser Rechner kann und welche Engine passt
-flelink models     # bekannte Modelle und ob sie passen
-flelink run MODELL # Modell laden und bereitstellen, bis Strg+C
-fle                # Kurzname, dasselbe Programm</pre>
+<main>
 
-<h2>Was es ausmacht</h2>
-<table>
-<tr><td><b>Engine austauschbar</b></td><td>FLE (Fast Local Experts) ist die mitgelieferte Engine für große MoE-Modelle auf kleiner Hardware. Reines llama.cpp ist der Rückfall, eine eigene Engine lässt sich eintragen.</td></tr>
-<tr><td><b>Prüft vor dem Download</b></td><td>Zeigt, ob ein Modell auf diesen Rechner passt, bevor Gigabytes geladen werden. Downloads sind wiederaufnehmbar und gegen SHA-256 geprüft.</td></tr>
-<tr><td><b>Lokal</b></td><td>Läuft auf deinem Rechner und hört nur auf deinem Rechner. Nichts wird an uns gesendet.</td></tr>
-<tr><td><b>Ehrliche Befehle</b></td><td>Startprofile zeigen den vollständigen Befehl, bevor er läuft.</td></tr>
-</table>
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">Open source · MIT · macOS, Linux, Windows</p>
+      <h1>Local models,<br><span class="grad">wired up</span> in one command.</h1>
+      <p class="lede">FLE Link sits between your inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API. Nothing to configure.</p>
 
-<h2>Quellen</h2>
-<p>FLE Link steht unter der MIT-Lizenz. Die Engine und der technische Bericht sind bei <a href="https://github.com/sirfyyn/FastLocalExperts">FastLocalExperts</a>.</p>
+      <div class="install" data-install>
+        <div class="tabs" role="tablist" aria-label="Your system">
+          <button role="tab" id="tab-unix" aria-selected="true" data-os="unix">macOS · Linux</button>
+          <button role="tab" id="tab-win" aria-selected="false" data-os="win">Windows</button>
+        </div>
+        <div class="cmd">
+          <code id="cmd-text" data-unix="curl -fsSL https://flelink.run/install.sh | sh" data-win="irm https://flelink.run/install.ps1 | iex">curl -fsSL https://flelink.run/install.sh | sh</code>
+          <button class="copy" type="button" data-copy="#cmd-text" aria-label="Copy the install command">Copy</button>
+        </div>
+        <p class="fine">One file. No Python, no git, no sudo. Checked against its SHA-256 before it runs.</p>
+      </div>
 
-<footer>
-<a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a> · © 2026 Max Bitzer
+      <dl class="proof">
+        <div><dt>66 s</dt><dd>from nothing to the first answer on Linux with an NVIDIA card</dd></div>
+        <div><dt>92 s</dt><dd>the same on an 8 GB M2 MacBook, model download included</dd></div>
+        <div><dt>263 tok/s</dt><dd>Llama 3.2 1B on a 16 GB RTX PRO 2000, engine chosen automatically</dd></div>
+      </dl>
+    </div>
+
+    <figure class="term" aria-label="A first run of FLE Link, recorded on an M2 MacBook">
+      <div class="term-bar"><i></i><i></i><i></i><span>first run · M2 MacBook, 8 GB</span></div>
+      <pre class="term-body" id="term" aria-live="off"><span class="p">$</span> flelink ask llama-3.2-1b "Name the capital of France in one word."
+
+<span class="s">==></span> Engine: llama.cpp for Apple Silicon (Metal)
+<span class="s">==></span> Installing the engine <span class="d">(checked against the SHA-256 GitHub publishes)</span>
+    engine llama-b11540-bin-macos-arm64.tar.gz  <span class="ok">100 %</span>
+<span class="s">==></span> Downloading Llama 3.2 1B Instruct (Q4_K_M) <span class="d">(0.8 GiB)</span>
+    model Llama-3.2-1B-Instruct-Q4_K_M.gguf    <span class="ok">100 %</span>
+    starting the engine ...
+
+<span class="ok">Ready:</span> llama-3.2-1b on llama.cpp for Apple Silicon (Metal)
+  API: http://127.0.0.1:8080/v1   <span class="d">(OpenAI-compatible, no key needed)</span>
+
+&gt; Name the capital of France in one word.
+
+<b>Paris</b>
+
+<span class="d">[2 tokens, 76.1 tok/s decode, 240 tok/s prompt]</span></pre>
+    </figure>
+  </div>
+</section>
+
+<section class="band" id="where">
+  <div class="wrap">
+    <p class="eyebrow">Where it sits</p>
+    <h2>The layer between the engine and your tools</h2>
+    <p class="intro">Inference engines are fast and bare: you pick the build, the flags, the context, the cache. Chat apps, editors and agents just want an endpoint. FLE Link does the part in between, and the engine underneath can be swapped.</p>
+
+    <div class="stack" aria-label="Your tools talk to FLE Link, FLE Link runs the engine">
+      <div class="tier">
+        <span class="tier-label">Your tools</span>
+        <ul class="chips"><li>Chat page</li><li>Editor</li><li>Agent</li><li>Any OpenAI client</li></ul>
+      </div>
+      <div class="link-arrow" aria-hidden="true"><span>/v1</span></div>
+      <div class="tier core">
+        <span class="tier-label"><img src="logo.svg" alt="" width="20" height="20"> FLE Link</span>
+        <ul class="does">
+          <li>reads the machine</li><li>checks fit before downloading</li><li>installs and verifies the engine</li>
+          <li>picks the start settings</li><li>supervises and restarts</li><li>shows what the engine does</li>
+        </ul>
+      </div>
+      <div class="link-arrow" aria-hidden="true"><span>llama-server</span></div>
+      <div class="tier">
+        <span class="tier-label">Engine</span>
+        <div class="engines" id="engines">
+          <span class="engine on" data-e="0"><b>FLE</b> expert offloading for big MoE models</span>
+          <span class="engine" data-e="1"><b>llama.cpp</b> the upstream build, as fallback</span>
+          <span class="engine" data-e="2"><b>Your build</b> any llama-server compatible binary</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <p class="eyebrow">How it works</p>
+    <h2>Three steps, each one you can read</h2>
+    <ol class="steps">
+      <li>
+        <h3>It reads the machine</h3>
+        <p>CPU, memory, GPU and free disk, and which engine build fits.</p>
+<pre class="out"><span class="p">$</span> flelink system
+OS        macos arm64
+CPU       Apple M2 (8 cores)
+Memory    8.0 GiB
+GPU usable 5.3 GiB
+
+Engines that fit (best first):
+  llama.cpp for Apple Silicon (Metal)</pre>
+      </li>
+      <li>
+        <h3>It checks fit before downloading</h3>
+        <p>No 80 GB download that ends in an out-of-memory error.</p>
+<pre class="out"><span class="p">$</span> flelink models
+llama-3.2-1b      0.8 GiB  <span class="ok">fits</span>
+llama-3.2-1b-q8   1.2 GiB  <span class="ok">fits</span>
+fle-iq3-m        82.8 GiB  <span class="bad">too big</span></pre>
+      </li>
+      <li>
+        <h3>It serves, and shows the command</h3>
+        <p>Every start is a plain llama-server command you can copy and run without FLE Link.</p>
+<pre class="out"><span class="ok">Ready:</span> llama-3.2-1b
+  API: http://127.0.0.1:8080/v1
+  Command (shown, never needed):
+    llama-server -m Llama-3.2-1B-Instruct-Q4_K_M.gguf
+      -c 32768 --jinja --metrics -ngl 99</pre>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="band" id="ways">
+  <div class="wrap">
+    <p class="eyebrow">Ways in</p>
+    <h2>Terminal, browser, desktop or API</h2>
+    <div class="ways">
+      <article>
+        <h3>Terminal</h3>
+        <p><code>flelink</code> opens a full-screen interface: pick a model, watch it load, chat. <code>flelink ask</code> answers one question and cleans up.</p>
+        <figure class="shot" data-shot="tui"><span>TUI recording</span></figure>
+      </article>
+      <article>
+        <h3>Studio in the browser</h3>
+        <p><code>flelink studio</code> on 127.0.0.1:8642: chat with live speed numbers, models, the engine log, launch profiles.</p>
+        <figure class="shot" data-shot="studio"><span>Studio recording</span></figure>
+      </article>
+      <article>
+        <h3>Desktop app</h3>
+        <p>The same Studio in a window. Quitting stops the server and the model.</p>
+        <figure class="shot" data-shot="app"><span>App screenshot</span></figure>
+      </article>
+      <article>
+        <h3>API</h3>
+        <p>OpenAI-compatible <code>/v1</code>. Point any client at it.</p>
+<pre class="out">curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Hi"}]}'</pre>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="host">
+  <div class="wrap two">
+    <div>
+      <p class="eyebrow">Host mode</p>
+      <h2>Run it on the GPU box, use it from the laptop</h2>
+      <p><code>flelink studio --host 0.0.0.0</code> opens the Studio to your network. Other machines sign in with an access key, over https with a certificate of its own whose fingerprint is printed at start.</p>
+    </div>
+<pre class="out"><span class="p">$</span> flelink studio --host 0.0.0.0
+FLE Link is open to the network. Access key:
+  4-yB…Tc
+FLE Link 0.1.0 — https://127.0.0.1:8642/
+Other machines: https://192.168.0.171:8642/
+Certificate fingerprint (SHA-256): 9f3c…</pre>
+  </div>
+</section>
+
+<section class="band" id="tested">
+  <div class="wrap">
+    <p class="eyebrow">Tested by breaking it</p>
+    <h2>What happens when things go wrong</h2>
+    <p class="intro">Every command runs in the test suite twice: once as intended, once with something broken on purpose. On macOS and on Linux.</p>
+    <ul class="faults">
+      <li><b>Download killed halfway</b> The next start resumes where it stopped and checks the hash.</li>
+      <li><b>No network</b> A clear message in under a second, no hang.</li>
+      <li><b>Broken model file</b> Cut off, empty or random bytes: refused with a reason.</li>
+      <li><b>Engine crashes</b> The status says so, the API answers 503, a restart works.</li>
+      <li><b>Program killed</b> The engine it left behind is stopped before a second one loads.</li>
+      <li><b>Port taken</b> The next free port, and it tells you which.</li>
+      <li><b>Wrong key on the network</b> Refused, and every wrong guess waits a second.</li>
+      <li><b>Bad requests</b> Broken JSON, huge bodies, path tricks: all refused, the server keeps running.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="roadmap">
+  <div class="wrap">
+    <p class="eyebrow">Roadmap</p>
+    <h2>Open, and built to be changed</h2>
+    <p class="intro">MIT licensed. The engine sits behind an adapter, so a new engine is a new adapter, not a fork.</p>
+    <ol class="road">
+      <li class="now"><span>0.1</span><div><b>Now</b> one command from nothing to an answer, Studio, desktop app, host mode, engine adapters for FLE, llama.cpp and your own build</div></li>
+      <li><span>next</span><div><b>Any model</b> search and download any GGUF from Hugging Face inside the Studio</div></li>
+      <li><span>next</span><div><b>Plugins</b> recipes and engine adapters as files you drop in</div></li>
+      <li><span>later</span><div><b>Quantization</b> make a quant that fits your machine</div></li>
+      <li><span>later</span><div><b>Training</b> LoRA adapters on your own data</div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="band" id="faq">
+  <div class="wrap faq">
+    <p class="eyebrow">Questions</p>
+    <h2>Before you install</h2>
+    <details><summary>Does anything leave my computer?</summary><p>No. FLE Link only connects to GitHub (to fetch the engine and its checksums) and Hugging Face (when you download a model). Nothing is sent to us, there is no account and no telemetry.</p></details>
+    <details><summary>Which models work?</summary><p>The built-in catalog shows what fits your machine. Any GGUF file works with <code>flelink run /path/to/model.gguf</code>. The FLE engine is made for large mixture-of-experts models on small GPUs, see <a href="https://github.com/sirfyyn/FastLocalExperts">FastLocalExperts</a>.</p></details>
+    <details><summary>macOS says the app is from an unidentified developer</summary><p>The builds are not signed, to keep the project free of yearly fees. Right-click the app, choose Open, then confirm once. The command-line install is checked against its SHA-256 instead.</p></details>
+    <details><summary>Windows SmartScreen warns about it</summary><p>Same reason, the build is unsigned. Choose More info, then Run anyway.</p></details>
+    <details><summary>Can I use my own llama.cpp build?</summary><p>Yes. Point FLE Link at any llama-server compatible binary; it reads <code>--help</code> to see what the build can do.</p></details>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="brand"><img src="logo.svg" alt="" width="22" height="22"><span><b>FLE</b> Link</span></div>
+    <nav aria-label="Links">
+      <a href="https://github.com/sirfyyn/flelink">Source</a>
+      <a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a>
+      <a href="https://huggingface.co/sirfyyn">Models on Hugging Face</a>
+    </nav>
+    <nav aria-label="Legal">
+      <a href="impressum.html">Impressum</a>
+      <a href="datenschutz.html">Datenschutz</a>
+    </nav>
+    <p class="fine">MIT licence · no cookies, no tracking · © 2026 Max Bitzer</p>
+  </div>
 </footer>
-</main></body></html>
+
+<script src="site.js" defer></script>
+</body>
+</html>
