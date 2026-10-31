@@ -114,6 +114,20 @@ pub fn get(id: &str) -> Option<&'static dyn EngineAdapter> {
     ALL.iter().copied().find(|a| a.id() == id)
 }
 
+/// Do the FLE rules (policy variables, expert cache, `-fit on`) mean something to this engine?
+pub fn applies_fle_policy(id: &str) -> bool {
+    get(id).is_some_and(|a| a.capabilities().fle_policy)
+}
+
+/// Which engine a binary is, from its `--help` text: the FLE engine has options no other llama-server has.
+pub fn detect_flavor(help: &str) -> &'static str {
+    if help.contains("--moe-expert-cache-inserts") {
+        Fle.id()
+    } else {
+        Upstream.id()
+    }
+}
+
 /// "fle, upstream or custom": the ids for an error message.
 pub fn id_list() -> String {
     let ids: Vec<&str> = ALL.iter().map(|a| a.id()).collect();
@@ -134,6 +148,18 @@ mod tests {
             assert_eq!(get(a.id()).unwrap().id(), a.id());
         }
         assert!(get("vllm").is_none());
+    }
+
+    #[test]
+    fn the_flavor_comes_from_the_help_text() {
+        assert_eq!(
+            detect_flavor("-ngl N\n--moe-expert-cache-inserts N\n"),
+            "fle"
+        );
+        assert_eq!(detect_flavor("-ngl N\n--jinja\n"), "upstream");
+        assert!(applies_fle_policy("fle"));
+        assert!(!applies_fle_policy("upstream"));
+        assert!(!applies_fle_policy("anything else"));
     }
 
     #[test]

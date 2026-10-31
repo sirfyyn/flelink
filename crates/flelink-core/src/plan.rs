@@ -82,7 +82,7 @@ pub fn auto_plan(
         args.extend(["-ngl".into(), "99".into()]);
     }
     let mut env = Vec::new();
-    if engine_kind == "fle" {
+    if crate::adapter::applies_fle_policy(engine_kind) {
         env.extend(
             FLE_POLICY_ENV
                 .iter()

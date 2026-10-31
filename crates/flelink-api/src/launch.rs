@@ -683,7 +683,7 @@ pub fn auto_plan(i: &AutoInput) -> R<Plan> {
     let flavor = match engine.get("flavor") {
         Some(Value::String(s)) if !s.is_empty() => s.clone(),
         _ => {
-            if kind == "fle" {
+            if flelink_core::adapter::applies_fle_policy(&kind) {
                 "fle".into()
             } else {
                 "upstream".into()
@@ -757,7 +757,7 @@ pub fn auto_plan(i: &AutoInput) -> R<Plan> {
     let mut draft: Option<String> = None;
     let pinned_bytes;
 
-    if flavor == "fle" {
+    if flelink_core::adapter::applies_fle_policy(&flavor) {
         if chosen.is_empty() {
             return perr(
                 "The FLE engine needs an NVIDIA GPU. Pick the upstream engine on the Engine page.",

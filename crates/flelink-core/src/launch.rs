@@ -300,11 +300,7 @@ pub fn detect_engine(path: &str) -> Map<String, Value> {
     let (_, help) = run_capture(&p, &["--help"], 60, Some(&dir), ld);
     let (_, devs) = run_capture(&p, &["--list-devices"], 15, Some(&dir), ld);
     let ver = parse_version(&vtext);
-    let flavor = if help.contains("--moe-expert-cache-inserts") {
-        "fle"
-    } else {
-        "upstream"
-    };
+    let flavor = crate::adapter::detect_flavor(&help);
     let blob = format!("{vtext} {help} {devs}").to_lowercase();
     let backend = if blob.contains("cuda") {
         "cuda"
@@ -958,7 +954,7 @@ pub fn build(settings: &Map<String, Value>, model: &Model, o: &Options, h: &Host
     if profile == "off" {
         notes.push("FLE features are off. This is the reproducibility baseline.".into());
     }
-    let fle = es("flavor") == "fle";
+    let fle = crate::adapter::applies_fle_policy(&es("flavor"));
     if !fle && profile != "off" {
         return Err(err(
             "This is not an FLE engine.",
