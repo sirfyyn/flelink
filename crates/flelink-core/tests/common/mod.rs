@@ -100,6 +100,7 @@ pub fn tmp(n: &str) -> Tmp {
     Tmp(d)
 }
 
+#[cfg(unix)]
 pub fn engine(dir: &Path, name: &str, fle: bool, spec: bool) -> String {
     let p = dir.join(name);
     let mut help = String::from("-ngl N\n--jinja\n-cmoe, --cpu-moe\nCUDA devices\n");
