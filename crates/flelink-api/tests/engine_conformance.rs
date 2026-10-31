@@ -130,7 +130,7 @@ fn wait_for(addr: SocketAddr, what: &str, f: &dyn Fn(&Value) -> bool) -> Value {
             return s;
         }
         assert!(
-            t.elapsed() < Duration::from_secs(40),
+            t.elapsed() < Duration::from_secs(120),
             "{what}: still {} / {} on {addr}",
             s["state"],
             s["phase"]

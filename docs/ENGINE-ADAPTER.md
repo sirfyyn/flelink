@@ -8,6 +8,13 @@ a third engine is a new file, not a rewrite.
 FLE Link is the layer between an engine and the tools that use it. The engine moves faster than the layer, and it may
 be replaced. So nothing outside an adapter may know an engine's flags, binary names, environment variables or log lines.
 
+## What exists already
+
+Profiles carry `engine` (`fle`, `upstream`, `custom`), `binary` (the path of a `llama-server`), `args` and `env`. That field
+is the key: `custom` becomes the generic adapter for any engine that behaves like `llama-server`, and a new engine gets its
+own id next to the three. Old profiles stay valid. For `custom` two optional fields are added: `health` (default `/health`)
+and `capabilities` (default: what plain `llama-server` offers).
+
 ## What an adapter provides
 
 ```rust
