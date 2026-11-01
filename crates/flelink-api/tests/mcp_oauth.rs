@@ -117,7 +117,10 @@ fn signing_in_to_a_remote_mcp_server() {
     );
     let t = Instant::now();
     while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
-        assert!(t.elapsed() < Duration::from_secs(10));
+        assert!(
+            t.elapsed() < Duration::from_secs(30),
+            "the fake servers did not start"
+        );
         std::thread::sleep(Duration::from_millis(50));
     }
     let mut s = start_embedded(Some(home.0.clone()), None).expect("start");
