@@ -46,6 +46,7 @@ pub struct Studio {
     pub bench: crate::bench::Bench,
     pub tuner: crate::tuner::Tuner,
     pub cache: Arc<crate::cachewatch::CacheWatch>,
+    pub toolbox: crate::mcp::ToolBox,
     pub live: Live,
     /// the server listens beyond this machine (host mode); set by the starter
     pub lan: std::sync::atomic::AtomicBool,
@@ -111,6 +112,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         bench: crate::bench::Bench::new(engine.clone(), &home),
         tuner: crate::tuner::Tuner::new(&home),
         cache,
+        toolbox: crate::mcp::ToolBox::new(&home),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
         downloads,
@@ -877,59 +879,40 @@ impl Studio {
             "n_ctx": self.engine.status()["n_ctx"], "max_upload_mb": limit, "pdf": false})
     }
 
-    /// One tool call (`ToolBox.call`).
-    pub fn tools_call(&self, body: &Map<String, Value>) -> Result<Value, ApiError> {
-        let s = self
-            .config
+    pub fn tool_settings(&self) -> Value {
+        self.config
             .lock()
             .unwrap()
             .get("tools")
             .cloned()
-            .unwrap_or(json!({}));
+            .unwrap_or(json!({}))
+    }
+
+    /// One tool call (`ToolBox.call`): a built-in tool or one of an MCP server.
+    pub fn tools_call(&self, body: &Map<String, Value>) -> Result<Value, ApiError> {
         let name = body
             .get("name")
-            .filter(|v| crate::settings::py_truthy(v))
-            .map(crate::settings::py_str)
+            .filter(|v| py_truthy(v))
+            .map(py_str)
             .unwrap_or_default();
-        let Some(tool) = crate::tools::tools(&s).into_iter().find(|t| t.name == name) else {
-            return Err(ApiError(
-                404,
-                "That tool is not available (turned off, or its server is not connected).".into(),
-            ));
-        };
-        if tool.confirm && body.get("approved") != Some(&json!(true)) {
-            return Err(ApiError(409, "This tool needs your approval first.".into()));
-        }
-        let mut args = body
+        let args = body
             .get("arguments")
-            .filter(|v| crate::settings::py_truthy(v))
+            .filter(|v| py_truthy(v))
             .cloned()
             .unwrap_or(json!({}));
-        if let Value::String(t) = &args {
-            args = if t.trim().is_empty() {
-                json!({})
-            } else {
-                match serde_json::from_str::<Value>(t) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return Ok(
-                            json!({"content": "The arguments are not valid JSON.", "is_error": true, "ms": 0}),
-                        )
-                    }
+        let approved = body.get("approved") == Some(&json!(true));
+        self.toolbox
+            .call(&self.tool_settings(), &name, &args, approved)
+            .map_err(|e| match e {
+                crate::mcp::CallRefused::Unknown => ApiError(
+                    404,
+                    "That tool is not available (turned off, or its server is not connected)."
+                        .into(),
+                ),
+                crate::mcp::CallRefused::NeedsApproval => {
+                    ApiError(409, "This tool needs your approval first.".into())
                 }
-            };
-        }
-        if !args.is_object() {
-            return Ok(
-                json!({"content": "The arguments must be a JSON object.", "is_error": true, "ms": 0}),
-            );
-        }
-        let t0 = std::time::Instant::now();
-        let (content, is_error) = match crate::tools::run(&tool, &s, &args) {
-            Ok(c) => (c, false),
-            Err(e) => (e.0, true),
-        };
-        Ok(json!({"content": content, "is_error": is_error, "ms": t0.elapsed().as_millis() as i64}))
+            })
     }
 
     pub fn sysinfo(&self) -> Value {
@@ -1708,22 +1691,8 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
         ("GET", "/api/ping") => Ok(json!({"app": "fle-studio", "version": st.opts.version})),
         ("GET", "/api/system") => Ok(crate::system::info(&st.config.lock().unwrap().models_dir())),
         ("GET", "/api/chat/capabilities") => Ok(st.capabilities()),
-        ("GET", "/api/tools") => Ok(crate::tools::status(
-            &st.config
-                .lock()
-                .unwrap()
-                .get("tools")
-                .cloned()
-                .unwrap_or(json!({})),
-        )),
-        ("POST", "/api/tools/reload") => Ok(crate::tools::status(
-            &st.config
-                .lock()
-                .unwrap()
-                .get("tools")
-                .cloned()
-                .unwrap_or(json!({})),
-        )),
+        ("GET", "/api/tools") => Ok(st.toolbox.status(&st.tool_settings())),
+        ("POST", "/api/tools/reload") => Ok(st.toolbox.reload(&st.tool_settings())),
         ("POST", "/api/tools/call") => r.json(MAX_JSON).and_then(|body| st.tools_call(&body)),
         ("GET", "/api/state") => Ok(st.state()),
         ("GET", "/api/settings") => Ok(st.config.lock().unwrap().public()),
@@ -2305,8 +2274,10 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
         "The model forge"
     } else if is("/api/quality") {
         "The quality measurements"
-    } else if is("/api/mcp") || is("/oauth") || is("/api/apps") || is("/app-frame") {
-        "MCP servers"
+    } else if is("/api/mcp") || is("/oauth") {
+        "Signing in to MCP servers"
+    } else if is("/api/apps") || is("/app-frame") {
+        "MCP Apps"
     } else if is("/api/remote") || is("/h") || is("/api/hosts") {
         "Remote access"
     } else if is("/api/update") {

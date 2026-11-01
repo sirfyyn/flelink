@@ -8,7 +8,7 @@ text or skips the Python call, and asserts the intended behaviour on the Rust si
 |---|---|---|---|
 | D2 | A start next to an attached server is allowed and runs a second engine | 409 "A server is attached. Disconnect it on the Engine page first." | Two engines at once eat the RAM and GPU memory of one |
 | D3 | Removing an engine whose data folder is behind a symlink does not delete the folder (resolved and unresolved paths are compared) | Both sides resolved: the folder is deleted | Plain bug; the tests run without symlinks in the path so the two agree |
-| D4 | `/api/tools` `servers` are real MCP connections | Listed, status "error: not supported by this server yet" | MCP is not ported yet |
+| D4 | MCP servers over stdio, Streamable HTTP and the older HTTP+SSE, with OAuth sign-in and MCP Apps | stdio and Streamable HTTP; an SSE-only server and a sign-in answer with a clear error (a token can go into `headers`); no MCP Apps yet | Ported in stages; the common servers first |
 | D5 | Unported routes answer 404 | 501 "<feature> is not in this version of FLE yet." | A clear message, not something that looks like a bug |
 | D7 | `/api/chat/capabilities` `pdf` is true when `pypdf` is installed | always false | no PDF text extraction yet |
 | D8 | The page's `system.python` is the Python version | empty string | this server is not Python |

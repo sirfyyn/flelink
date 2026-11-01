@@ -294,6 +294,7 @@ pub fn run(o: RunOptions) -> i32 {
         .map_err(|e| e.to_string())?;
         println!("Stopping FLE Link …");
         st.engine.shutdown();
+        st.toolbox.mcp.close_all();
         Ok(())
     });
     match result {
@@ -371,6 +372,7 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
             })
             .await;
             st.engine.shutdown();
+            st.toolbox.mcp.close_all();
         });
     });
     match ready_rx.recv_timeout(Duration::from_secs(15)) {
