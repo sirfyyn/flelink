@@ -40,6 +40,7 @@ class H(BaseHTTPRequestHandler):
             self._send(200, {"model_path": model, "model_alias": "fake", "total_slots": 2, "build_info": "b1234-abcdef0", "default_generation_settings": {"n_ctx": 32768}})
         else:
             self._send(404, {})
+import socket; socket.getfqdn = lambda *a: "127.0.0.1"  # HTTPServer looks its name up while binding; on macOS CI that hangs
 srv = HTTPServer(("127.0.0.1", port), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 def term(*_):

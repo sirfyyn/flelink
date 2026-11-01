@@ -58,6 +58,7 @@ class H(BaseHTTPRequestHandler):
         q = body["messages"][-1]["content"].lower()
         a = "Canberra." if "australia" in q or "australien" in q else "100 degrees" if "boil" in q or "siede" in q else "I do not know"
         self._json(200, {"choices": [{"message": {"content": a}}]})
+import socket; socket.getfqdn = lambda *a: "127.0.0.1"  # HTTPServer looks its name up while binding; on macOS CI that hangs
 SRV = ThreadingHTTPServer(("127.0.0.1", 0), H)
 print(SRV.server_address[1], flush=True)
 SRV.serve_forever()

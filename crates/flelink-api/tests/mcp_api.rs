@@ -71,6 +71,7 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream" if sse else "application/json")
         self.send_header("Mcp-Session-Id", "s1")
         self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+import socket; socket.getfqdn = lambda *a: "127.0.0.1"  # HTTPServer looks its name up while binding; on macOS CI that hangs
 S = ThreadingHTTPServer(("127.0.0.1", 0), H)
 print(S.server_address[1], flush=True)
 S.serve_forever()
@@ -103,6 +104,7 @@ class H(BaseHTTPRequestHandler):
         elif meth == "tools/list": r = {"tools": [{"name": "hello", "inputSchema": {"type": "object"}}]}
         else: r = {"content": [{"type": "text", "text": "hello from the old transport"}]}
         Q.put({"jsonrpc": "2.0", "id": m["id"], "result": r})
+import socket; socket.getfqdn = lambda *a: "127.0.0.1"  # HTTPServer looks its name up while binding; on macOS CI that hangs
 S = ThreadingHTTPServer(("127.0.0.1", 0), H)
 print(S.server_address[1], flush=True)
 S.serve_forever()

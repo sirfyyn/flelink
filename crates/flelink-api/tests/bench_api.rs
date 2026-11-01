@@ -32,6 +32,7 @@ class H(BaseHTTPRequestHandler):
               "prompt_per_second": 900.0 if long else 300.0, "predicted_n": 40, "predicted_per_second": 25.0 + body["seed"] % 7,
               "draft_n": 10, "draft_n_accepted": 7}})
         self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
+import socket; socket.getfqdn = lambda *a: "127.0.0.1"  # HTTPServer looks its name up while binding; on macOS CI that hangs
 ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
 "#;
 

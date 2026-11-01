@@ -79,6 +79,7 @@ class H(BaseHTTPRequestHandler):
             self.out(200, {"jsonrpc": "2.0", "id": m["id"], "result": r})
         else:
             self.out(404, {})
+import socket; socket.getfqdn = lambda *a: "127.0.0.1"  # HTTPServer looks its name up while binding; on macOS CI that hangs
 SRV = ThreadingHTTPServer(("127.0.0.1", 0), H)
 BASE = "http://127.0.0.1:%d" % SRV.server_address[1]
 print(SRV.server_address[1], flush=True)

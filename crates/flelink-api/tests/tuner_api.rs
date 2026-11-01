@@ -38,6 +38,7 @@ class H(BaseHTTPRequestHandler):
         send({"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": {"prompt_n": 100, "prompt_per_second": 500.0 + wobble,
               "predicted_n": 20, "predicted_per_second": 5.0 * threads + wobble}})
         self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
+import socket; socket.getfqdn = lambda *a: "127.0.0.1"  # HTTPServer looks its name up while binding; on macOS CI that hangs
 srv = ThreadingHTTPServer(("127.0.0.1", port), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 signal.signal(signal.SIGTERM, lambda *_: os._exit(0))

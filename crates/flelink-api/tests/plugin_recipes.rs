@@ -25,6 +25,7 @@ class H(BaseHTTPRequestHandler):
         code = 200 if self.path in (ready, "/props") else 404
         b = json.dumps({"ok": code == 200}).encode()
         self.send_response(code); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+import socket; socket.getfqdn = lambda *a: "127.0.0.1"  # HTTPServer looks its name up while binding; on macOS CI that hangs
 srv = HTTPServer(("127.0.0.1", port), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
