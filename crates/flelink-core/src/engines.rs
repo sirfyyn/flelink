@@ -4,10 +4,8 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-/// The llama.cpp release FLE is tested with (same pin as FLE Studio).
-pub const LLAMA_TAG: &str = "b11540";
-const UPSTREAM: &str = "ggml-org/llama.cpp";
-const FLE_REPO: &str = "sirfyyn/FastLocalExperts";
+/// The llama.cpp release FLE is tested with (same pin as FLE Studio); where each engine comes from is its adapter's.
+pub use crate::adapter::LLAMA_TAG;
 
 #[derive(Debug, Clone)]
 pub struct Variant {
@@ -128,6 +126,119 @@ fn pick<'a>(assets: &'a [Asset], v: &Variant, os: &str, arch: &str) -> Option<&'
         .max_by_key(|a| a.name.clone())
 }
 
+/// The numbers of the version at the end of a folder name (`fle-cuda-v1.2.0` -> [1, 2, 0], `upstream-metal-b11540` ->
+/// [11540]), for ordering builds of one variant.
+pub fn version_key(name: &str) -> Vec<u64> {
+    let tail = name.rsplit_once('-').map(|(_, t)| t).unwrap_or(name);
+    tail.trim_start_matches(['v', 'b'])
+        .split(|c: char| !c.is_ascii_digit())
+        .filter_map(|p| p.parse().ok())
+        .collect()
+}
+
+/// The newest installed build of a variant (by its version, not by name order).
+pub fn newest_installed(dir: &Path, variant_id: &str) -> Option<(String, PathBuf)> {
+    installed(dir)
+        .into_iter()
+        .filter(|(n, _)| n.starts_with(&format!("{variant_id}-")))
+        .max_by_key(|(n, _)| version_key(n))
+}
+
+/// A newer FLE release than `installed_name`, if there is one. Asks GitHub at most once a day (the answer is kept in
+/// `<data>/engines/.latest-<variant>`); offline, on any error and with FLE_NO_UPDATE set it says nothing. Only the FLE
+/// engine follows its releases (its adapter says so): upstream llama.cpp is pinned (LLAMA_TAG).
+pub fn update_available(dir: &Path, v: &Variant, installed_name: &str) -> Option<String> {
+    let rel = crate::adapter::release_of(v.kind).filter(|r| r.self_updates)?;
+    if std::env::var_os("FLE_NO_UPDATE").is_some_and(|x| !x.is_empty()) {
+        return None;
+    }
+    let memo = dir.join("engines").join(format!(".latest-{}", v.id));
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let cached = std::fs::read_to_string(&memo).ok().and_then(|t| {
+        let (when, tag) = t.trim().split_once(' ')?;
+        let when: u64 = when.parse().ok()?;
+        (now.saturating_sub(when) < 86_400).then(|| tag.to_string())
+    });
+    let tag = match cached {
+        Some(t) => t,
+        None => {
+            let t = release(rel.repo, rel.default_tag).ok()?.tag_name;
+            let _ = std::fs::write(&memo, format!("{now} {t}"));
+            t
+        }
+    };
+    let have = version_key(installed_name);
+    (version_key(&format!("x-{tag}")) > have).then_some(tag)
+}
+
+/// Install a server from any GitHub release (an engine a plugin brings): the archive whose name contains every token goes
+/// to `engines/<id>-<tag>/`, checked against the SHA-256 GitHub publishes. Returns the path of `binary` inside it.
+pub fn install_from_release(
+    dir: &Path,
+    id: &str,
+    repo: &str,
+    tag: Option<&str>,
+    tokens: &[String],
+    binary: &str,
+    progress: &mut dyn FnMut(&str, u64, u64),
+) -> Result<PathBuf> {
+    let rel = release(repo, tag)?;
+    let asset = rel
+        .assets
+        .iter()
+        .filter(|a| a.name.ends_with(".tar.gz") || a.name.ends_with(".zip"))
+        .filter(|a| tokens.iter().all(|t| a.name.contains(t.as_str())))
+        .max_by_key(|a| a.name.clone())
+        .with_context(|| format!("no asset with {tokens:?} in {repo} {}", rel.tag_name))?;
+    let target = dir.join("engines").join(format!("{id}-{}", rel.tag_name));
+    if let Some(p) = find_file(&target, binary) {
+        return Ok(p);
+    }
+    let archive = dir.join("downloads").join(&asset.name);
+    let sha = asset
+        .digest
+        .as_deref()
+        .and_then(|d| d.strip_prefix("sha256:"));
+    let label = format!("engine {}", asset.name);
+    fetch(&asset.browser_download_url, &archive, sha, &mut |d, t| {
+        progress(&label, d, t)
+    })?;
+    std::fs::create_dir_all(&target)?;
+    extract(&archive, &target)?;
+    let _ = std::fs::remove_file(&archive);
+    let server = find_file(&target, binary)
+        .with_context(|| format!("{binary} not found in {}", asset.name))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&server, std::fs::Permissions::from_mode(0o755)).ok();
+    }
+    Ok(server)
+}
+
+/// The first file called `name` (or `name.exe` on Windows) below `root`.
+pub fn find_file(root: &Path, name: &str) -> Option<PathBuf> {
+    let exe = format!("{name}.exe");
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).ok()?.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p
+                .file_name()
+                .is_some_and(|n| n == name || (cfg!(windows) && n == exe.as_str()))
+            {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
 /// Where an installed engine's llama-server lives, if there is one.
 pub fn installed(dir: &Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
@@ -169,11 +280,9 @@ pub fn install(
     s: &SysInfo,
     progress: &mut dyn FnMut(&str, u64, u64),
 ) -> Result<PathBuf> {
-    let (repo, tag) = if v.kind == "fle" {
-        (FLE_REPO, None)
-    } else {
-        (UPSTREAM, Some(LLAMA_TAG))
-    };
+    let r = crate::adapter::release_of(v.kind)
+        .with_context(|| format!("FLE Link does not install the {} engine", v.kind))?;
+    let (repo, tag) = (r.repo, r.default_tag);
     let rel = release(repo, tag)?;
     let asset = pick(&rel.assets, v, &s.os, &s.arch).with_context(|| {
         format!(
@@ -198,6 +307,7 @@ pub fn install(
     })?;
     std::fs::create_dir_all(&target)?;
     extract(&archive, &target)?;
+    let _ = std::fs::remove_file(&archive); // unpacked; the archive would only take space (up to a few hundred MB)
     let server = find_server(&target).context("llama-server not found in the archive")?;
     #[cfg(unix)]
     {
@@ -345,5 +455,40 @@ mod tests {
             pick(&assets, &c, "windows", "x64").unwrap().name,
             "llama-b1-bin-win-cuda-12.4-x64.zip"
         );
+    }
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    #[test]
+    fn versions_order_by_number_not_by_name() {
+        assert!(version_key("fle-cuda-v1.10.0") > version_key("fle-cuda-v1.9.3"));
+        assert!(version_key("fle-cuda-v1.2.0") > version_key("fle-cuda-v1.1.0"));
+        assert_eq!(version_key("upstream-metal-b11540"), vec![11540]);
+        let home = std::env::temp_dir().join(format!("fle-versions-{}", std::process::id()));
+        for n in [
+            "fle-cuda-v1.9.0",
+            "fle-cuda-v1.10.0",
+            "upstream-cuda-b11540",
+        ] {
+            let d = home.join("engines").join(n);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(
+                d.join(if cfg!(windows) {
+                    "llama-server.exe"
+                } else {
+                    "llama-server"
+                }),
+                "",
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            newest_installed(&home, "fle-cuda").unwrap().0,
+            "fle-cuda-v1.10.0"
+        );
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

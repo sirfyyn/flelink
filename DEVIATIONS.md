@@ -8,11 +8,16 @@ text or skips the Python call, and asserts the intended behaviour on the Rust si
 |---|---|---|---|
 | D2 | A start next to an attached server is allowed and runs a second engine | 409 "A server is attached. Disconnect it on the Engine page first." | Two engines at once eat the RAM and GPU memory of one |
 | D3 | Removing an engine whose data folder is behind a symlink does not delete the folder (resolved and unresolved paths are compared) | Both sides resolved: the folder is deleted | Plain bug; the tests run without symlinks in the path so the two agree |
-| D4 | `/api/tools` `servers` are real MCP connections | Listed, status "error: not supported by this server yet" | MCP is not ported yet |
 | D5 | Unported routes answer 404 | 501 "<feature> is not in this version of FLE yet." | A clear message, not something that looks like a bug |
 | D7 | `/api/chat/capabilities` `pdf` is true when `pypdf` is installed | always false | no PDF text extraction yet |
 | D8 | The page's `system.python` is the Python version | empty string | this server is not Python |
 | D9 | A pure-Python crash for `{"results": 5}` from a search server | an empty result | robustness |
+| D10 | The page is the FLE Studio page | FLE Link's own page: its name, cards of measurements a server does not have hidden (a 501 hides the card), a second try without tools when a model writes an unreadable tool call. The tests check that the binary serves exactly `web/studio`; `/api/state` is still compared with Python | FLE Link is its own product; the page was a frozen copy until 0.1.0 |
+| D12 | GPU `auto` sets `CUDA_VISIBLE_DEVICES` to the GPU with the most memory, also when the variable was already set | A `CUDA_VISIBLE_DEVICES` the program was started with is kept, and `auto` chooses among those GPUs | On a shared machine the Studio put its engine on a GPU that belonged to another service |
+| D13 | GPU `auto` takes the GPU with the most total memory | the GPU with the most free memory | A large card that another service fills is the worst place for a new engine |
+| D14 | The tuner screens threads, batch and `--n-cpu-moe` with one `llama-bench` call before the trials (llama.cpp only) | No screening: every value gets a full trial | `llama-bench` is not part of what FLE Link installs; the trials decide anyway, the screening only saved time |
+| D15 | Forge: "Use the Python library as a first trial" mixes a calibration text from the Python standard library | No such button; `stdlib` answers 400 | FLE Link carries no Python; the bundled text (85/15 split, CC0/MIT) is the start. The Forge is otherwise compared job by job with the Python plugin (`tests/forge_conformance.rs`: same files, same SHA-256) |
+| D11 | `doctor` keeps `auto` on a machine without NVIDIA GPU or with an upstream engine and reports the FLE checks as failures | `auto` becomes `off` there, like `flelink run` | `doctor` failed on every Mac and with every plain llama.cpp |
 
 Gone from the list because Python fixed them itself (0.4.1): D1, a plan error with a hint was printed as a tuple; now the two
 sentences are joined, as here. D6 (the update panel) and the hosts list are plugins of the Python Studio now; the core, which is

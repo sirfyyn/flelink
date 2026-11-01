@@ -23,38 +23,25 @@ pub struct RunOptions {
     pub web_dir: Option<PathBuf>,
 }
 
-/// Where FLE Studio keeps its files on each operating system (`paths.data_dir`).
+/// Where the Studio keeps its files: the same folder as the terminal (`flelink_core::data_dir`).
 pub fn data_dir() -> PathBuf {
-    if let Ok(o) = std::env::var("FLE_STUDIO_HOME") {
-        if !o.is_empty() {
-            return match o.strip_prefix("~/") {
-                Some(r) => dirs::home_dir().unwrap_or_default().join(r),
-                None => PathBuf::from(o),
-            };
-        }
-    }
-    let home = dirs::home_dir().unwrap_or_default();
-    if cfg!(target_os = "macos") {
-        home.join("Library")
-            .join("Application Support")
-            .join("FLE Studio")
-    } else if cfg!(windows) {
-        PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
-            home.join("AppData")
-                .join("Local")
-                .to_string_lossy()
-                .to_string()
-        }))
-        .join("FLE Studio")
-    } else {
-        PathBuf::from(std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
-            home.join(".local")
-                .join("share")
-                .to_string_lossy()
-                .to_string()
-        }))
-        .join("fle-studio")
-    }
+    flelink_core::data_dir()
+}
+
+/// The address other machines on the network reach this one by: the source address of the default route.
+/// Connecting a UDP socket sends nothing; it only makes the system pick the outgoing interface.
+/// This machine's address on the local network, as text (for the host's address hints).
+pub fn lan_ip_string() -> Option<String> {
+    lan_address().map(|a| a.to_string())
+}
+
+fn lan_address() -> Option<std::net::IpAddr> {
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("192.0.2.1:9").ok()?;
+    s.local_addr()
+        .ok()
+        .map(|a| a.ip())
+        .filter(|ip| !ip.is_loopback() && !ip.is_unspecified())
 }
 
 /// A new access key: 12 random bytes in URL-safe base64 (16 characters), like `secrets.token_urlsafe(12)`.
@@ -126,7 +113,7 @@ pub fn run(o: RunOptions) -> i32 {
         home: home.clone(),
         web_dir: o.web_dir.clone(),
         version: STUDIO_VERSION.into(),
-        github_api: crate::engines::GITHUB_API.into(),
+        github_api: github_api(),
     });
     let cfg = |k: &str| st.config.lock().unwrap().get(k).cloned();
     let host = o.host.clone().unwrap_or_else(|| {
@@ -149,13 +136,13 @@ pub fn run(o: RunOptions) -> i32 {
             let mut patch = serde_json::Map::new();
             patch.insert("access_key".into(), Value::String(key.clone()));
             let _ = st.config.lock().unwrap().update(&patch);
-            println!("FLE Studio is open to the network. Access key for other machines (also in Settings → Network):");
+            println!("FLE Link is open to the network. Access key for other machines (also in Settings → Network):");
             println!("  {key}");
         }
     }
     if local && running(port) {
         let url = format!("http://127.0.0.1:{port}/");
-        println!("FLE Studio is already running: {url}");
+        println!("FLE Link is already running: {url}");
         if !o.no_browser {
             open_browser(&url);
         }
@@ -198,16 +185,26 @@ pub fn run(o: RunOptions) -> i32 {
                 Err(e) => return Err(format!("could not set up TLS: {e}")),
             }
         };
+        if let Some(i) = &identity {
+            *st.tls_fingerprint.lock().unwrap() = crate::remote::normalize_fp(&i.fingerprint);
+        }
+        *st.listen.lock().unwrap() =
+            serde_json::json!({"host": host, "port": actual, "tls": identity.is_some()});
         let scheme = if identity.is_some() { "https" } else { "http" };
         let url = format!("{scheme}://127.0.0.1:{actual}/");
-        println!("FLE Studio {STUDIO_VERSION} — {url}");
+        println!("FLE Link {} — {url}", env!("CARGO_PKG_VERSION"));
+        if !local {
+            if let Some(ip) = lan_address() {
+                println!("Other machines: {scheme}://{ip}:{actual}/");
+            }
+        }
         if let Some(i) = &identity {
             println!("Certificate fingerprint (SHA-256): {}", i.fingerprint);
         } else if !local {
             println!("Host mode without TLS: the access key travels in the clear. Use it on a network you trust.");
         }
         println!("Data folder: {}", home.display());
-        println!("Press Ctrl+C to stop (this also stops a model FLE Studio started).");
+        println!("Press Ctrl+C to stop (this also stops a model FLE Link started).");
         let key = cfg("attach_key")
             .and_then(|v| v.as_str().map(String::from))
             .unwrap_or_default();
@@ -305,8 +302,10 @@ pub fn run(o: RunOptions) -> i32 {
             None => serve_listener(st.clone(), listener, stop).await,
         }
         .map_err(|e| e.to_string())?;
-        println!("Stopping FLE Studio …");
+        println!("Stopping FLE Link …");
         st.engine.shutdown();
+        st.toolbox.mcp.close_all();
+        st.hosts.shutdown();
         Ok(())
     });
     match result {
@@ -346,6 +345,14 @@ impl Drop for Embedded {
 }
 
 /// Start the server on `127.0.0.1:<free port>` and return when it accepts connections.
+/// GitHub's API (`FLE_GITHUB_API` points it at another server, for tests).
+fn github_api() -> String {
+    std::env::var("FLE_GITHUB_API")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| crate::engines::GITHUB_API.into())
+}
+
 pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result<Embedded, String> {
     let home = home.unwrap_or_else(data_dir);
     let _ = std::fs::create_dir_all(&home);
@@ -353,7 +360,7 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
         home: home.clone(),
         web_dir,
         version: STUDIO_VERSION.into(),
-        github_api: crate::engines::GITHUB_API.into(),
+        github_api: github_api(),
     });
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
     let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<u16, String>>();
@@ -384,6 +391,8 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
             })
             .await;
             st.engine.shutdown();
+            st.toolbox.mcp.close_all();
+            st.hosts.shutdown();
         });
     });
     match ready_rx.recv_timeout(Duration::from_secs(15)) {

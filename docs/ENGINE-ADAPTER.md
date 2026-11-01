@@ -55,7 +55,14 @@ pub trait EngineAdapter {
 
 ## Where it is today
 
-`engines.rs` (variants, install, find), `serve.rs` (process, health), `launch.rs` (plan to command) and
-`flelink-api/src/engine.rs` (phases, hints, restart) hold the FLE and upstream rules together. Step 1 is to move them
-behind the trait without changing behaviour; the existing comparison tests must stay green. Step 2 adds the
-capabilities struct. Step 3 is a third adapter as a proof (for example a plain `llama-server` at a user path).
+`crates/flelink-core/src/adapter.rs` holds the three adapters (`fle`, `upstream`, `custom`) with their identity, names,
+capabilities, health path, release (repo, default tag, whether it updates itself) and how its log reads (which lines
+mark a loading phase, which errors get which hint; the Studio's engine supervisor asks the running engine's adapter). Core and Studio ask it which
+engines FLE Link installs, where from and whether the FLE rules apply, instead of comparing ids.
+
+Still outside: `engines.rs` in both crates (asset patterns per variant), `launch.rs` in both crates (plan to command:
+two ports of two Python specifications, each held by its own comparison tests) and the FLE expert cache and draft acceptance lines that
+`flelink-api/src/engine.rs` reads. They move behind the trait one at a time, with the comparison tests green.
+
+Engines from plugins (docs/PLUGINS.md) are the third kind of adapter, as data: a release or a path, arguments or a
+start template, a health path. They start from the terminal and from the Studio.

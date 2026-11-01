@@ -304,7 +304,7 @@ pub fn detect_engine(path: &str) -> Map<String, Value> {
     let blob = format!("{vtext} {help} {devs}").to_lowercase();
     let backend = if blob.contains("cuda") {
         "cuda"
-    } else if blob.contains("metal") {
+    } else if blob.contains("metal") || blob.contains("mtl0:") {
         "metal"
     } else if blob.contains("vulkan") {
         "vulkan"

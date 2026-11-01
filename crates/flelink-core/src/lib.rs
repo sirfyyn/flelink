@@ -12,8 +12,11 @@ pub mod download;
 pub mod engines;
 pub mod gguf;
 pub mod launch;
+pub mod orphans;
 pub mod plan;
+pub mod plugin;
 pub mod policy;
+pub mod recipe;
 pub mod report;
 pub mod serve;
 pub mod server;
@@ -22,25 +25,51 @@ pub mod system;
 
 use std::path::PathBuf;
 
-/// Where FLE keeps engines, models and logs. `--home` / FLE_HOME override it.
+/// The one folder the terminal, the Studio and the app share for engines, models, chats and logs.
+/// `--home`, FLE_HOME (or FLE_STUDIO_HOME) override it. Before FLE Link, the terminal used `FLE` and the Studio
+/// `FLE Studio`: while the new folder does not exist yet, an old one is used as it is, so nothing is moved or lost.
 pub fn data_dir() -> PathBuf {
-    if let Ok(p) = std::env::var("FLE_HOME") {
-        return PathBuf::from(p);
+    for var in ["FLE_HOME", "FLE_STUDIO_HOME"] {
+        if let Some(p) = std::env::var_os(var).filter(|p| !p.is_empty()) {
+            let p = PathBuf::from(p);
+            return match p.strip_prefix("~") {
+                Ok(rest) => dirs::home_dir().unwrap_or_default().join(rest),
+                Err(_) => p,
+            };
+        }
     }
-    #[cfg(target_os = "macos")]
-    {
-        dirs::home_dir()
-            .unwrap_or_default()
-            .join("Library/Application Support/FLE")
+    let (new, old): (PathBuf, [PathBuf; 2]) = {
+        #[cfg(target_os = "macos")]
+        {
+            let base = dirs::home_dir()
+                .unwrap_or_default()
+                .join("Library/Application Support");
+            (
+                base.join("FLE Link"),
+                [base.join("FLE Studio"), base.join("FLE")],
+            )
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let base = dirs::data_local_dir().unwrap_or_default();
+            (
+                base.join("FLE Link"),
+                [base.join("FLE Studio"), base.join("FLE")],
+            )
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            let base = dirs::data_local_dir().unwrap_or_default();
+            (
+                base.join("flelink"),
+                [base.join("fle-studio"), base.join("fle")],
+            )
+        }
+    };
+    if new.exists() {
+        return new;
     }
-    #[cfg(target_os = "windows")]
-    {
-        dirs::data_local_dir().unwrap_or_default().join("FLE")
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        dirs::data_local_dir().unwrap_or_default().join("fle")
-    }
+    old.into_iter().find(|p| p.is_dir()).unwrap_or(new)
 }
 
 /// Progress events every long step reports, so a TUI, a CLI and a GUI can show them their own way.

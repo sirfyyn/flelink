@@ -38,6 +38,67 @@ fn has_avx2() -> bool {
     false
 }
 
+/// Free space in the file system of `dir` (created if missing); 0 when it cannot be told.
+pub fn free_bytes(dir: &Path) -> u64 {
+    let _ = std::fs::create_dir_all(dir);
+    run("df", &["-k", &dir.to_string_lossy()])
+        .and_then(|o| {
+            o.lines().nth(1).and_then(|l| {
+                l.split_whitespace()
+                    .nth(3)
+                    .and_then(|v| v.parse::<u64>().ok())
+            })
+        })
+        .map(|k| k * 1024)
+        .unwrap_or(0)
+}
+
+/// Cores without SMT siblings (the engine's `-t` wants these); the logical count when the system does not say.
+pub fn physical_cores() -> usize {
+    let logical = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let found = match std::env::consts::OS {
+        "linux" => {
+            let text = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
+            let mut cores = std::collections::BTreeSet::new();
+            for block in text.split("\n\n") {
+                let get = |key: &str| {
+                    block.lines().find_map(|l| {
+                        l.strip_prefix(key)
+                            .and_then(|r| r.trim_start().strip_prefix(':'))
+                            .map(|v| v.trim().to_string())
+                    })
+                };
+                if let (Some(p), Some(c)) = (get("physical id"), get("core id")) {
+                    cores.insert((p, c));
+                }
+            }
+            cores.len()
+        }
+        "macos" => run("sysctl", &["-n", "hw.physicalcpu"])
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(0),
+        "windows" => run(
+            "powershell",
+            &[
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "(Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum",
+            ],
+        )
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0),
+        _ => 0,
+    };
+    if found == 0 || found > logical {
+        logical
+    } else {
+        found
+    }
+}
+
 pub fn detect(dir: &Path) -> SysInfo {
     let os = std::env::consts::OS.to_string();
     let arch = match std::env::consts::ARCH {
@@ -119,17 +180,7 @@ pub fn detect(dir: &Path) -> SysInfo {
     } else {
         gpus.iter().filter_map(|g| g.vram_bytes).max().unwrap_or(0)
     };
-    let _ = std::fs::create_dir_all(dir);
-    let disk_free_bytes = run("df", &["-k", &dir.to_string_lossy()])
-        .and_then(|o| {
-            o.lines().nth(1).and_then(|l| {
-                l.split_whitespace()
-                    .nth(3)
-                    .and_then(|v| v.parse::<u64>().ok())
-            })
-        })
-        .map(|k| k * 1024)
-        .unwrap_or(0);
+    let disk_free_bytes = free_bytes(dir);
     SysInfo {
         os,
         arch,

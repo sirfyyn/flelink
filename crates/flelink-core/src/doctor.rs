@@ -144,10 +144,14 @@ pub fn run(
         Option<Value>,
         Option<launch::Plan>,
     ) = (None, None, None);
-    let profile = match settings.get("profile") {
+    let mut profile = match settings.get("profile") {
         Some(Value::String(s)) if !s.is_empty() => s.clone(),
         _ => "auto".to_string(),
     };
+    // `auto` means the FLE settings where they apply, like `flelink run`: without an NVIDIA GPU it is plain llama.cpp
+    if profile == "auto" && host.gpus.is_empty() {
+        profile = "off".into();
+    }
     if model_path.is_empty() {
         checks.push(check(
             "model",
@@ -247,6 +251,9 @@ pub fn run(
         ));
     } else {
         let e = launch::detect_engine(&engine_path);
+        if profile == "auto" && e.get("flavor") != Some(&json!("fle")) {
+            profile = "off".into(); // an upstream engine runs without the FLE profile, which is not a fault
+        }
         if e.get("ok") == Some(&json!(true)) {
             checks.push(check(
                 "engine",
@@ -502,6 +509,9 @@ pub fn system_summary(model_path: &str, host: &Host) -> Value {
         };
         while !p.exists() && p.parent().is_some_and(|q| q != p) {
             p = p.parent().unwrap().to_path_buf();
+        }
+        if p.as_os_str().is_empty() || !p.exists() {
+            p = dirs::home_dir().unwrap_or_default(); // a relative name that is no file: measure the home disk
         }
         p
     };

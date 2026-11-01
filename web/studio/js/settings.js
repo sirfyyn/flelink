@@ -5,7 +5,7 @@ import { applyTheme, on, refreshPlugins, refreshState, settingsSections, store, 
 import { toolsSection, stopToolsPolling } from "./settings-tools.js";
 import { clear, fmt, h, icon, toast } from "./ui.js";
 
-// The names of the plugins that ship with FLE Studio, for the list when one is off (its own title is not known then).
+// The names of the plugins that ship with FLE Link, for the list when one is off (its own title is not known then).
 const BUNDLED = { forge: "Forge", updater: "Updates", remote: "Remote access", recorder: "Recorder", switch: "Model switcher" };
 
 export function mount(main) {
@@ -58,7 +58,7 @@ export function mount(main) {
 
   function models(s) {
     const dir = h("input", { class: "input mono", value: s.models_dir });
-    return section("folder", "Models folder", "Where downloads go and where FLE Studio looks for GGUF files.",
+    return section("folder", "Models folder", "Where downloads go and where FLE Link looks for GGUF files.",
       h("div", { class: "row" }, dir, h("button", { class: "btn", onclick: async () => { if (await save({ models_dir: dir.value.trim() })) refreshState(); } }, "Save")),
       h("span", { class: "small faint" }, `Changing it moves nothing; models already in the new folder show up in the library. ${fmt.bytes(store.state.system?.disk_free)} free there now.`));
   }
@@ -96,7 +96,7 @@ export function mount(main) {
       h("div", { class: "row" }, token,
         h("button", { class: "btn", onclick: async () => { if (token.value.trim() && await save({ hf_token: token.value.trim() })) render(); } }, "Save"),
         s.has_hf_token ? h("button", { class: "btn ghost danger", onclick: async () => { if (await save({ hf_token: "" })) render(); } }, "Remove") : null),
-      h("span", { class: "small faint" }, "Kept in settings.json on this computer and only sent to huggingface.co. FLE Studio never shows it again."));
+      h("span", { class: "small faint" }, "Kept in settings.json on this computer and only sent to huggingface.co. FLE Link never shows it again."));
   }
 
   function network(s) {
@@ -106,12 +106,12 @@ export function mount(main) {
       placeholder: s.has_access_key ? "A key is saved" : "Choose a key for other machines" });
     const hosts = h("input", { class: "input mono", value: srv.allowed_hosts, placeholder: "workstation, studio.home.arpa" });
     const port = h("input", { class: "input num", type: "number", min: 1, max: 65535, value: srv.port });
-    return section("link", "Access", "Who can open FLE Studio. Changes here apply the next time FLE Studio starts.",
+    return section("link", "Access", "Who can open FLE Link. Changes here apply the next time FLE Link starts.",
       seg([["127.0.0.1", "This computer only"], ["0.0.0.0", "Other machines too"]], lan ? "0.0.0.0" : "127.0.0.1",
         async (v) => { await save({ server: { host: v } }, true); render(); }),
       lan ? h("div", { class: "callout warn" }, icon("alert", "sm"), h("div", null,
         "Anyone on your network who knows the access key can chat and start or stop the engine. Use it on networks you trust.",
-        s.has_access_key ? null : h("div", null, h("b", null, "Set an access key below; without one, FLE Studio makes one up and prints it at start.")))) : null,
+        s.has_access_key ? null : h("div", null, h("b", null, "Set an access key below; without one, FLE Link makes one up and prints it at start.")))) : null,
       h("div", { class: "grid two" },
         field("Port", port, "Default 8642."),
         field("Access key", h("div", { class: "row" }, key,
@@ -125,7 +125,7 @@ export function mount(main) {
           if (await save(patch)) render();
         } }, lan ? "Save port and names" : "Save port")),
       h("label", { class: "row" }, toggle(srv.open_browser, (v) => save({ server: { open_browser: v } }, true)),
-        h("span", null, "Open the browser when FLE Studio starts")));
+        h("span", null, "Open the browser when FLE Link starts")));
   }
 
   function plugins() {
@@ -142,11 +142,11 @@ export function mount(main) {
         } catch (e) { toast(e.message, "bad", 7000); render(true); }
       }),
       h("span", { class: "grow" }, h("b", null, p.title || p.page?.title || BUNDLED[p.id] || p.id), " ",
-        h("span", { class: "small muted mono" }, p.bundled ? "comes with FLE Studio" : [p.package, p.version].filter(Boolean).join(" ")),
+        h("span", { class: "small muted mono" }, p.bundled ? "comes with FLE Link" : [p.package, p.version].filter(Boolean).join(" ")),
         p.summary ? h("div", { class: "small muted" }, p.summary) : null),
       p.error ? h("span", { class: "pill bad", title: p.error }, "did not load") : p.loaded ? h("span", { class: "pill good" }, "on") : null))
       : [h("span", { class: "small faint" }, "No plugins installed. A plugin is a Python package; see PLUGINS.md in the documentation.")];
-    return section("grid", "Plugins", "Forge, updates, remote access, the recorder and the model switcher come with FLE Studio as plugins and are on; turn off what you do not use. Plugins you install yourself run inside FLE Studio with its rights and start off: turn on only those you trust. The page reloads after you turn one of those on or off. Plugins belong to this machine; a paired client does not see them.",
+    return section("grid", "Plugins", "Forge, updates, remote access, the recorder and the model switcher come with FLE Link as plugins and are on; turn off what you do not use. Plugins you install yourself run inside FLE Link with its rights and start off: turn on only those you trust. The page reloads after you turn one of those on or off. Plugins belong to this machine; a paired client does not see them.",
       ...rows);
   }
 
@@ -155,7 +155,7 @@ export function mount(main) {
     const sys = st.system || {};
     return section("info", "About", "",
       h("dl", { class: "kv" },
-        h("dt", null, "FLE Studio"), h("dd", null, `${st.version} · ${st.platform}`),
+        h("dt", null, "FLE Link"), h("dd", null, `${st.version} · ${st.platform}`),
         h("dt", null, "Python"), h("dd", null, sys.python || "–"),
         h("dt", null, "Data folder"), h("dd", { class: "mono" }, st.data_dir),
         h("dt", null, "Reference machine"), h("dd", null, st.reference?.machine || "–")),
@@ -163,7 +163,7 @@ export function mount(main) {
         h("a", { href: "https://github.com/sirfyyn/FastLocalExperts", target: "_blank", rel: "noopener" }, "FLE engine on GitHub ", icon("external", "sm")),
         h("a", { href: st.reference?.report || "https://sirfyyn.github.io/FastLocalExperts/", target: "_blank", rel: "noopener" }, "How FLE works ", icon("external", "sm")),
         h("a", { href: "https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF", target: "_blank", rel: "noopener" }, "FLE models ", icon("external", "sm"))),
-      h("span", { class: "small faint" }, "FLE Studio talks to the internet only when you download a model or an engine, search Hugging Face, look for updates (once a day, switchable above), or turn on web search or a web MCP server for the chat. No telemetry."));
+      h("span", { class: "small faint" }, "FLE Link talks to the internet only when you download a model or an engine, search Hugging Face, look for updates (once a day, switchable above), or turn on web search or a web MCP server for the chat. No telemetry."));
   }
 
   // ------------------------------------------------------------------------------------------- controls

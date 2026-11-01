@@ -1,0 +1,16 @@
+name: A model or machine
+description: A model that should be in the catalog, or a machine where the settings are wrong.
+labels: [models]
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Hugging Face repo and file.
+    validations:
+      required: true
+  - type: textarea
+    id: machine
+    attributes:
+      label: Machine and numbers
+      description: GPU, RAM, and `flelink bench` output if you have it.

@@ -17,6 +17,66 @@ pub struct Capabilities {
     pub lora: bool,
 }
 
+/// Where FLE Link downloads an engine from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Release {
+    /// GitHub `owner/name`
+    pub repo: &'static str,
+    /// The tag to install when the user names none; `None` is the latest release.
+    pub default_tag: Option<&'static str>,
+    /// Look for a newer release once a day and install it (only for an engine that follows the latest release).
+    pub self_updates: bool,
+}
+
+pub const FLE_REPO: &str = "sirfyyn/FastLocalExperts";
+pub const UPSTREAM_REPO: &str = "ggml-org/llama.cpp";
+/// The llama.cpp build the upstream engine is pinned to (tested with it).
+pub const LLAMA_TAG: &str = "b11540";
+
+/// Log lines of llama-server (and its forks) that mark a loading phase (checked in order, first match wins).
+pub const LLAMA_PHASES: [(&str, &str); 9] = [
+    ("listening on", "Ready"),
+    ("model loaded", "Starting the server"),
+    ("warming up", "Warming up"),
+    (
+        "moe expert cache enabled",
+        "Setting up the GPU expert cache",
+    ),
+    ("llama_kv_cache", "Allocating the KV cache"),
+    ("llama_context:", "Creating the context"),
+    ("load_tensors:", "Loading weights"),
+    ("llama_params_fit", "Fitting the model into GPU memory"),
+    ("llama_model_loader: loaded meta data", "Reading the model"),
+];
+
+/// Error lines of llama-server and what to tell the user about them (regular expressions).
+pub const LLAMA_HINTS: [(&str, &str); 6] = [
+    (
+        r"(?i)out of memory|cudaMalloc failed|failed to allocate .*buffer|ErrorOutOfDeviceMemory",
+        "The GPU ran out of memory. Lower the context or the GPU expert cache on the Engine page.",
+    ),
+    (
+        r"(?i)error while loading shared libraries|cannot open shared object|\.dll was not found|Library not loaded|image not found",
+        "The engine misses a library. Reinstall the engine on the Engine page.",
+    ),
+    (
+        r"(?i)CUDA driver version is insufficient|no CUDA-capable device|cudaGetDeviceCount",
+        "CUDA could not start. Update the NVIDIA driver, or use the Vulkan or CPU engine.",
+    ),
+    (
+        r"(?i)failed to load model|error loading model|unable to load model",
+        "The engine could not load the model. Check that the download finished (Models page).",
+    ),
+    (
+        r"(?i)couldn't bind|address already in use|bind failed|only one usage of each socket address",
+        "The engine port is taken. Set the port to 0 (automatic) on the Engine page.",
+    ),
+    (
+        r"(?i)error: (invalid|unknown) argument|unknown option|invalid value",
+        "The engine does not know one of the arguments. Is this profile meant for another engine?",
+    ),
+];
+
 pub trait EngineAdapter: Sync {
     /// Stable id: stored in profiles and settings, shown in the plan.
     fn id(&self) -> &'static str;
@@ -24,13 +84,25 @@ pub trait EngineAdapter: Sync {
     fn label(&self) -> &'static str;
     /// Short name inside a sentence ("Install the FLE engine first").
     fn short(&self) -> &'static str;
-    /// Can FLE Link download this engine for the user? A custom engine is always the user's own binary.
-    fn installable(&self) -> bool;
+    /// Where FLE Link downloads it; `None` for an engine that is always the user's own binary.
+    fn release(&self) -> Option<Release>;
+    /// Can FLE Link download this engine for the user?
+    fn installable(&self) -> bool {
+        self.release().is_some()
+    }
     /// The address that answers once the model is loaded.
     fn health_path(&self) -> &'static str {
         "/health"
     }
     fn capabilities(&self) -> Capabilities;
+    /// Log lines that mark a loading phase: (text in the lower-cased line, phase shown). First match wins.
+    fn log_phases(&self) -> &'static [(&'static str, &'static str)] {
+        &LLAMA_PHASES
+    }
+    /// Error lines (regular expressions) and the hint for the user. First match wins.
+    fn log_hints(&self) -> &'static [(&'static str, &'static str)] {
+        &LLAMA_HINTS
+    }
 }
 
 pub struct Fle;
@@ -47,8 +119,12 @@ impl EngineAdapter for Fle {
     fn short(&self) -> &'static str {
         "FLE"
     }
-    fn installable(&self) -> bool {
-        true
+    fn release(&self) -> Option<Release> {
+        Some(Release {
+            repo: FLE_REPO,
+            default_tag: None,
+            self_updates: true,
+        })
     }
     fn capabilities(&self) -> Capabilities {
         Capabilities {
@@ -70,8 +146,12 @@ impl EngineAdapter for Upstream {
     fn short(&self) -> &'static str {
         "upstream"
     }
-    fn installable(&self) -> bool {
-        true
+    fn release(&self) -> Option<Release> {
+        Some(Release {
+            repo: UPSTREAM_REPO,
+            default_tag: Some(LLAMA_TAG),
+            self_updates: false,
+        })
     }
     fn capabilities(&self) -> Capabilities {
         Capabilities {
@@ -93,8 +173,8 @@ impl EngineAdapter for Custom {
     fn short(&self) -> &'static str {
         "custom"
     }
-    fn installable(&self) -> bool {
-        false
+    fn release(&self) -> Option<Release> {
+        None
     }
     /// A custom engine is assumed to behave like plain llama-server until its profile says more.
     fn capabilities(&self) -> Capabilities {
@@ -112,6 +192,24 @@ pub fn all() -> &'static [&'static dyn EngineAdapter] {
 /// The adapter with this id.
 pub fn get(id: &str) -> Option<&'static dyn EngineAdapter> {
     ALL.iter().copied().find(|a| a.id() == id)
+}
+
+/// The ids of the engines FLE Link installs itself ("fle", "upstream"), in the order they are offered.
+pub fn installable_ids() -> Vec<&'static str> {
+    ALL.iter()
+        .filter(|a| a.installable())
+        .map(|a| a.id())
+        .collect()
+}
+
+/// Is this an engine FLE Link installs itself?
+pub fn is_installable(id: &str) -> bool {
+    get(id).is_some_and(|a| a.installable())
+}
+
+/// Where to download the engine with this id, if FLE Link installs it.
+pub fn release_of(id: &str) -> Option<Release> {
+    get(id).and_then(|a| a.release())
 }
 
 /// Do the FLE rules (policy variables, expert cache, `-fit on`) mean something to this engine?
@@ -168,5 +266,9 @@ mod tests {
         assert!(!get("upstream").unwrap().capabilities().fle_policy);
         assert!(!get("custom").unwrap().capabilities().mtp);
         assert!(!get("custom").unwrap().installable());
+        assert_eq!(installable_ids(), ["fle", "upstream"]);
+        assert!(release_of("fle").unwrap().self_updates);
+        assert_eq!(release_of("upstream").unwrap().default_tag, Some(LLAMA_TAG));
+        assert!(release_of("custom").is_none() && !is_installable("vllm"));
     }
 }

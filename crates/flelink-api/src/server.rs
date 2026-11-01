@@ -7,7 +7,7 @@ use crate::engines::{EngineError, Engines};
 use crate::launch::Profiles;
 use crate::library::{LibError, Library};
 use crate::live::Live;
-use crate::settings::Config;
+use crate::settings::{py_str, py_truthy, Config};
 use axum::body::{to_bytes, Body};
 use axum::extract::{ConnectInfo, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
@@ -43,6 +43,21 @@ pub struct Studio {
     pub engines: Engines,
     pub profiles: Mutex<Profiles>,
     pub engine: Engine,
+    pub bench: crate::bench::Bench,
+    pub tuner: crate::tuner::Tuner,
+    pub quality: crate::quality::Quality,
+    pub forge: crate::forge::Forge,
+    pub updates: crate::updates::Updates,
+    pub clients: crate::remote::Clients,
+    pub hosts: crate::remote::Hosts,
+    /// the TLS certificate's fingerprint (64 hex digits) when this server speaks https; what clients pin
+    pub tls_fingerprint: Mutex<String>,
+    /// where this server listens: {host, port, tls}
+    pub listen: Mutex<Value>,
+    pub cache: Arc<crate::cachewatch::CacheWatch>,
+    pub toolbox: crate::mcp::ToolBox,
+    /// the port this server listens on (for the sign-in's loopback redirect); set when it starts serving
+    pub port: std::sync::atomic::AtomicU16,
     pub live: Live,
     /// the server listens beyond this machine (host mode); set by the starter
     pub lan: std::sync::atomic::AtomicBool,
@@ -65,6 +80,7 @@ pub fn new_studio(opts: Options) -> Ctx {
 
 /// `lan`: the server listens beyond this machine (host mode); other machines need the access key.
 pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
+    let github_api = opts.github_api.clone();
     let config = Config::load(&opts.home.join("settings.json"));
     let home = opts.home.clone();
     let config = Arc::new(Mutex::new(config));
@@ -81,6 +97,11 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
     );
     let engines = Engines::new(&home, downloads.clone(), config.clone(), &opts.github_api);
     let engine = Engine::new(&home);
+    let cache = Arc::new(crate::cachewatch::CacheWatch::default());
+    let feed = cache.clone();
+    engine.add_listener(Box::new(move |line| {
+        feed.feed(line);
+    }));
     engine.set_restart_on_crash(
         config
             .lock()
@@ -100,10 +121,39 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         engines,
         lan: std::sync::atomic::AtomicBool::new(lan),
         live: Live::new(engine.clone(), 1.0),
+        bench: crate::bench::Bench::new(engine.clone(), &home),
+        tuner: crate::tuner::Tuner::new(&home),
+        quality: crate::quality::Quality::new(&home),
+        forge: crate::forge::Forge::new(&home),
+        updates: crate::updates::Updates::new(&home, &github_api),
+        clients: crate::remote::Clients::new(&home),
+        hosts: crate::remote::Hosts::new(&home),
+        tls_fingerprint: Mutex::new(String::new()),
+        listen: Mutex::new(json!({})),
+        cache,
+        toolbox: crate::mcp::ToolBox::new(&home),
+        port: std::sync::atomic::AtomicU16::new(0),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
         downloads,
     });
+    if std::env::var_os("FLE_NO_UPDATE").is_none_or(|v| v.is_empty()) {
+        let weak = Arc::downgrade(&studio);
+        let _ = std::thread::Builder::new()
+            .name("update-check".into())
+            .spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(8));
+                loop {
+                    let Some(st) = weak.upgrade() else { return };
+                    let config = Value::Object(st.config.lock().unwrap().data.clone());
+                    if st.updates.due(&config) {
+                        let _ = st.updates.check(&config, &st.engines.installed(), false);
+                    }
+                    drop(st);
+                    std::thread::sleep(std::time::Duration::from_secs(1800));
+                }
+            });
+    }
     let weak = Arc::downgrade(&studio);
     studio
         .engine
@@ -313,6 +363,25 @@ fn guard(
     if path == "/login" || path == "/api/remote/pair" {
         return None;
     }
+    if let Some(tok) = bearer(headers).filter(|t| t.starts_with(crate::remote::TOKEN_PREFIX)) {
+        let Some(client) = st.clients.find(&tok, &peer.ip().to_string()) else {
+            return Some(send_json(
+                401,
+                &json!({"error": {"message": "This client is not paired with this host (any more).", "code": "unpaired"}}),
+                head,
+            ));
+        };
+        let confirmed = headers.get("x-fle-confirm").and_then(|v| v.to_str().ok()) == Some("1");
+        return crate::remote::check_rights(&client, method.as_str(), path, confirmed).map(
+            |(status, message, code)| {
+                let mut err = json!({"message": message, "code": code});
+                if status == 428 {
+                    err["confirm"] = json!(true);
+                }
+                send_json(status, &json!({"error": err}), head)
+            },
+        );
+    }
     if !authed(st, headers, peer) {
         if path.starts_with("/api/") || path.starts_with("/v1/") {
             return Some(error_json_auth(head));
@@ -373,6 +442,15 @@ fn guard(
     None
 }
 
+/// The token of an `Authorization: Bearer …` header.
+fn bearer(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t.trim().to_string())
+}
+
 fn error_json_auth(head: bool) -> Response<Body> {
     send_json(
         401,
@@ -392,6 +470,10 @@ fn query_of(q: Option<&str>) -> Map<String, Value> {
 }
 
 pub struct Req {
+    /// the address the request came from
+    pub peer: String,
+    /// the paired client a `Bearer fcl_…` token belongs to (null for everything else)
+    pub client: Value,
     pub method: Method,
     pub path: String,
     pub query: Map<String, Value>,
@@ -475,7 +557,10 @@ impl Studio {
             });
         }
         if let Some(c) = &custom {
-            if (want == "fle" || want == "upstream") && c["flavor"] == want && choice == "custom" {
+            if flelink_core::adapter::is_installable(want)
+                && c["flavor"] == want
+                && choice == "custom"
+            {
                 return Ok(c.clone());
             }
         }
@@ -765,7 +850,7 @@ impl Studio {
             return json!({"applies": false, "reason": p.fallback});
         }
         let flavor: Option<String> = match plan {
-            Some(p) if p.profile == "auto" && (p.engine == "fle" || p.engine == "upstream") => {
+            Some(p) if p.profile == "auto" && flelink_core::adapter::is_installable(&p.engine) => {
                 Some(p.engine.clone())
             }
             _ => self
@@ -863,63 +948,240 @@ impl Studio {
             "n_ctx": self.engine.status()["n_ctx"], "max_upload_mb": limit, "pdf": false})
     }
 
-    /// One tool call (`ToolBox.call`).
-    pub fn tools_call(&self, body: &Map<String, Value>) -> Result<Value, ApiError> {
-        let s = self
-            .config
+    pub fn tool_settings(&self) -> Value {
+        self.config
             .lock()
             .unwrap()
             .get("tools")
             .cloned()
-            .unwrap_or(json!({}));
+            .unwrap_or(json!({}))
+    }
+
+    /// One tool call (`ToolBox.call`): a built-in tool or one of an MCP server.
+    pub fn tools_call(&self, body: &Map<String, Value>) -> Result<Value, ApiError> {
         let name = body
             .get("name")
-            .filter(|v| crate::settings::py_truthy(v))
-            .map(crate::settings::py_str)
+            .filter(|v| py_truthy(v))
+            .map(py_str)
             .unwrap_or_default();
-        let Some(tool) = crate::tools::tools(&s).into_iter().find(|t| t.name == name) else {
-            return Err(ApiError(
-                404,
-                "That tool is not available (turned off, or its server is not connected).".into(),
-            ));
-        };
-        if tool.confirm && body.get("approved") != Some(&json!(true)) {
-            return Err(ApiError(409, "This tool needs your approval first.".into()));
-        }
-        let mut args = body
+        let args = body
             .get("arguments")
-            .filter(|v| crate::settings::py_truthy(v))
+            .filter(|v| py_truthy(v))
             .cloned()
             .unwrap_or(json!({}));
-        if let Value::String(t) = &args {
-            args = if t.trim().is_empty() {
-                json!({})
-            } else {
-                match serde_json::from_str::<Value>(t) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return Ok(
-                            json!({"content": "The arguments are not valid JSON.", "is_error": true, "ms": 0}),
-                        )
-                    }
+        let approved = body.get("approved") == Some(&json!(true));
+        self.toolbox
+            .call(&self.tool_settings(), &name, &args, approved)
+            .map_err(|e| match e {
+                crate::mcp::CallRefused::Unknown => ApiError(
+                    404,
+                    "That tool is not available (turned off, or its server is not connected)."
+                        .into(),
+                ),
+                crate::mcp::CallRefused::NeedsApproval => {
+                    ApiError(409, "This tool needs your approval first.".into())
                 }
-            };
-        }
-        if !args.is_object() {
-            return Ok(
-                json!({"content": "The arguments must be a JSON object.", "is_error": true, "ms": 0}),
-            );
-        }
-        let t0 = std::time::Instant::now();
-        let (content, is_error) = match crate::tools::run(&tool, &s, &args) {
-            Ok(c) => (c, false),
-            Err(e) => (e.0, true),
-        };
-        Ok(json!({"content": content, "is_error": is_error, "ms": t0.elapsed().as_millis() as i64}))
+            })
     }
 
     pub fn sysinfo(&self) -> Value {
         crate::system::info(&self.models_dir())
+    }
+
+    /// The llama-server files whose folders are searched for the Forge tools.
+    fn forge_engine_paths(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = self
+            .engines
+            .installed()
+            .iter()
+            .map(|e| ("engine".to_string(), py_str(&e["path"])))
+            .collect();
+        let custom = self
+            .config
+            .lock()
+            .unwrap()
+            .get("engine.custom_path")
+            .map(py_str)
+            .unwrap_or_default();
+        if !custom.is_empty() {
+            out.push(("custom engine".into(), custom));
+        }
+        out
+    }
+
+    fn forge_tools(
+        &self,
+        refresh: bool,
+    ) -> std::collections::HashMap<String, crate::forge::tools::Tool> {
+        let dir = self
+            .config
+            .lock()
+            .unwrap()
+            .get("forge.tools_dir")
+            .map(py_str)
+            .unwrap_or_default();
+        self.forge.tools(refresh, &dir, &self.forge_engine_paths())
+    }
+
+    fn forge_overview(&self) -> Value {
+        let found = self.forge_tools(true);
+        let dir = self
+            .config
+            .lock()
+            .unwrap()
+            .get("forge.tools_dir")
+            .map(py_str)
+            .unwrap_or_default();
+        self.forge.overview(&found, &dir, &self.models_dir())
+    }
+
+    /// Add a finished Forge model to the library and save a start profile for it.
+    fn forge_publish(&self, id: &str) -> Result<Value, ApiError> {
+        let info = self.sysinfo();
+        let gpus = info["gpus"].as_array().cloned().unwrap_or_default();
+        let unified = gpus.iter().any(|g| g["unified"] == true);
+        let (final_, name, args, notes) = self
+            .forge
+            .publish_plan(id, !gpus.is_empty(), unified)
+            .map_err(|e| ApiError(e.0, e.1))?;
+        let fle = self.engines.installed().iter().any(|e| e["kind"] == "fle");
+        let model = self
+            .library
+            .lock()
+            .unwrap()
+            .add(&self.models_dir(), &final_)
+            .map_err(|e| ApiError(400, e))?;
+        let Value::Object(data) = json!({"name": format!("Forge: {name}"), "engine": if fle { "fle" } else { "upstream" },
+            "binary": "", "args": args, "env": {}, "notes": notes})
+        else {
+            unreachable!()
+        };
+        let prof = self
+            .profiles
+            .lock()
+            .unwrap()
+            .save(&data)
+            .map_err(|e| ApiError(400, e.0))?;
+        Ok(json!({"model": model, "profile": prof.public()}))
+    }
+
+    fn forge_route(
+        &self,
+        method: &str,
+        p: &str,
+        body: Option<Value>,
+        query: &Map<String, Value>,
+    ) -> Option<Result<Value, ApiError>> {
+        let fe = |e: crate::forge::ForgeError| ApiError(e.0, e.1);
+        let body = body.unwrap_or(json!({}));
+        let jobs = &self.forge.jobs;
+        let job = |suffix: &str| -> Option<String> {
+            let id = p.strip_prefix("/api/forge/jobs/")?.strip_suffix(suffix)?;
+            (id.len() == 12
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+            .then(|| id.to_string())
+        };
+        let not_found = || ApiError(404, "Not found".into());
+        Some(match (method, p) {
+            ("GET", "/api/forge") => Ok(self.forge_overview()),
+            ("POST", "/api/forge/tools") => {
+                let dir = py_str(&body["tools_dir"]);
+                let mut patch = Map::new();
+                patch.insert("forge".into(), json!({"tools_dir": if body["tools_dir"].is_null() { String::new() } else { dir }}));
+                match self.config.lock().unwrap().update(&patch) {
+                    Ok(_) => {}
+                    Err(e) => return Some(Err(ApiError(400, e))),
+                }
+                Ok(self.forge_overview())
+            }
+            ("POST", "/api/forge/inspect") => {
+                self.forge.inspect(&py_str(&body["path"])).map_err(fe)
+            }
+            ("POST", "/api/forge/calculate") => self.forge.calculate(&body).map_err(fe),
+            ("POST", "/api/forge/corpus") => self.forge.make_corpus(&body).map_err(fe),
+            ("POST", "/api/forge/recipe/import") => {
+                let r = if body["recipe"].is_null() || body["recipe"] == false {
+                    body.clone()
+                } else {
+                    body["recipe"].clone()
+                };
+                self.forge.import_recipe(&r.to_string()).map_err(fe)
+            }
+            ("POST", "/api/forge/recipe/share") => {
+                let r = if body["recipe"].is_object() {
+                    body["recipe"].clone()
+                } else {
+                    json!({})
+                };
+                crate::forge::recipe::portable(&r)
+                    .map(|r| json!({"recipe": r}))
+                    .map_err(|e| ApiError(400, e.0))
+            }
+            ("POST", "/api/forge/check") => {
+                let r = if body["recipe"].is_object() {
+                    body["recipe"].clone()
+                } else {
+                    json!({})
+                };
+                jobs.check(&r, &self.forge_tools(false))
+                    .map_err(|e| ApiError(400, e))
+            }
+            ("POST", "/api/forge/jobs") => {
+                let r = if body["recipe"].is_object() {
+                    body["recipe"].clone()
+                } else {
+                    json!({})
+                };
+                jobs.create(&r, self.forge_tools(true), &self.models_dir().join("forge"))
+                    .map_err(|(c, m)| ApiError(c, m))
+            }
+            ("GET", _) if job("").is_some() => {
+                let id = job("").unwrap();
+                jobs.get_job(&id)
+                    .map(|j| jobs.public(&j))
+                    .ok_or_else(not_found)
+            }
+            ("GET", _) if job("/log").is_some() => {
+                let since = query
+                    .get("since")
+                    .map(py_str)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                jobs.log_since(&job("/log").unwrap(), since)
+                    .ok_or_else(not_found)
+            }
+            ("GET", _) if job("/recipe").is_some() => {
+                self.forge.recipe_of(&job("/recipe").unwrap()).map_err(fe)
+            }
+            ("POST", _) if job("/cancel").is_some() => {
+                jobs.cancel(&job("/cancel").unwrap()).ok_or_else(not_found)
+            }
+            ("POST", _) if job("/resume").is_some() => {
+                let id = job("/resume").unwrap();
+                if jobs.get_job(&id).is_none() {
+                    Err(not_found())
+                } else {
+                    jobs.resume(&id, self.forge_tools(true))
+                        .map_err(|e| ApiError(409, e))
+                }
+            }
+            ("POST", _) if job("/delete").is_some() => {
+                let id = job("/delete").unwrap();
+                if jobs.get_job(&id).is_none() {
+                    Err(not_found())
+                } else {
+                    jobs.delete(&id, !py_truthy(&body["delete_model"]))
+                        .map(|_| json!({"ok": true}))
+                        .map_err(|e| ApiError(409, e))
+                }
+            }
+            ("POST", _) if job("/publish").is_some() => {
+                self.forge_publish(&job("/publish").unwrap())
+            }
+            _ => return None,
+        })
     }
 
     /// Which of the two MTP files are in the models folder (`extras_view`).
@@ -966,6 +1228,675 @@ impl Studio {
             "model",
             json!({"catalog_id": ident}),
             &format!("catalog:{ident}"),
+        ))
+    }
+
+    /// Where a recipe's file goes in the Studio's models folder (the same layout as the terminal's).
+    fn recipe_file(&self, r: &flelink_core::recipe::Recipe, file: &str) -> std::path::PathBuf {
+        self.models_dir().join(r.local_path(file))
+    }
+
+    /// Every file of a recipe (the model's parts and a draft model) is on disk.
+    fn recipe_on_disk(&self, r: &flelink_core::recipe::Recipe) -> bool {
+        let models = self.models_dir();
+        r.fetches().iter().all(|x| models.join(&x.local).exists())
+    }
+
+    /// `/api/recipes`: every recipe (built in, the recipes folder, plugins) with fit and whether it is on disk.
+    pub fn recipes(&self) -> Value {
+        let (all, problems) = flelink_core::recipe::load_all(&self.opts.home);
+        let sys = self.sysinfo();
+        let list: Vec<Value> = all
+            .iter()
+            .map(|r| {
+                let have = self.recipe_on_disk(r);
+                json!({"id": r.id, "title": r.title, "note": r.note, "repo": r.model.repo, "files": r.model.files,
+                    "draft": r.draft.as_ref().map(|d| json!({"file": d.file, "size": d.size})),
+                    "size": r.model.size, "source": r.source, "engine": r.engine.prefer, "strict": r.engine.strict,
+                    "context": r.run.context, "chat": serde_json::to_value(&r.chat).unwrap_or(Value::Null),
+                    "downloaded": have,
+                    "fit": if r.model.size > 0 { crate::catalog::fit(r.model.size as i64, &sys) } else { Value::Null }})
+            })
+            .collect();
+        json!({"recipes": list, "problems": problems})
+    }
+
+    /// `POST /api/recipes/<id>/download`: one job for every file of the recipe that is not on disk yet.
+    pub fn recipe_download(&self, id: &str) -> Result<Value, ApiError> {
+        let r = flelink_core::recipe::find(&self.opts.home, id)
+            .map_err(|e| ApiError(404, e.to_string()))?;
+        // sizes and checksums from the repo where the recipe does not give them (the recipe's own values win)
+        let mut trees: std::collections::HashMap<(String, String), Vec<Value>> = Default::default();
+        let mut files = vec![];
+        let models = self.models_dir();
+        for x in r.fetches() {
+            let tree = trees
+                .entry((x.repo.clone(), x.revision.clone()))
+                .or_insert_with(|| {
+                    crate::hf::tree(&x.repo, &x.revision, &self.hf_token()).unwrap_or_default()
+                });
+            let t = tree
+                .iter()
+                .find(|t| t["path"].as_str() == Some(x.file.as_str()));
+            if !tree.is_empty() && t.is_none() {
+                return Err(ApiError(404, format!("{} has no file {}", x.repo, x.file)));
+            }
+            let size = t.and_then(|t| t["size"].as_i64()).unwrap_or(x.size as i64);
+            let sha = x
+                .sha256
+                .clone()
+                .or_else(|| t.and_then(|t| t["lfs"]["oid"].as_str().map(String::from)));
+            files.push(
+                json!({"url": crate::hf::resolve_url(&x.repo, &x.file, &x.revision),
+                "dest": models.join(&x.local).to_string_lossy(), "size": size,
+                "sha256": sha.map(Value::from).unwrap_or(Value::Null)}),
+            );
+        }
+        Ok(self.downloads.add(
+            &r.title,
+            &files,
+            "model",
+            json!({"recipe": r.id}),
+            &format!("recipe:{}", r.id),
+        ))
+    }
+
+    /// The start plan for a plugin engine: its server (installed from its release the first time, which this request
+    /// waits for), then either its own start template or the automatic llama-server arguments for what that binary knows,
+    /// plus the plugin's arguments, environment and readiness path.
+    fn plugin_plan(
+        &self,
+        r: &flelink_core::recipe::Recipe,
+        e: &flelink_core::plugin::PluginEngine,
+        main: &str,
+    ) -> Result<crate::launch::Plan, ApiError> {
+        let sys = flelink_core::system::detect(&self.opts.home);
+        let server =
+            flelink_core::plugin::server(&self.opts.home, e, &sys.os, &sys.arch, &mut |_, _, _| {})
+                .map_err(|x| ApiError(409, format!("{x:#}")))?;
+        let model = self
+            .library
+            .lock()
+            .unwrap()
+            .get(&self.models_dir(), main)
+            .unwrap_or_else(|| json!({"path": main}));
+        let settings = Value::Object(self.config.lock().unwrap().data.clone());
+        let want_port = settings["launch"]
+            .get("port")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+            .clamp(0, 65535) as u16;
+        let port = crate::launch::free_port(want_port);
+        let mut plan = if e.command.is_empty() {
+            let d = self.engines.detect(&server.to_string_lossy());
+            if d["ok"] != json!(true) {
+                return Err(ApiError(
+                    409,
+                    format!(
+                        "The {} engine does not run here: {}",
+                        e.label,
+                        crate::settings::py_str(&d["problem"])
+                    ),
+                ));
+            }
+            let eng = json!({"kind": "custom", "flavor": d["flavor"], "backend": d["backend"],
+                "path": server.to_string_lossy(), "version": d["version"],
+                "log_verbosity": d["log_verbosity"], "spec_type": d["spec_type"]});
+            let info = self.sysinfo();
+            let mut p = crate::launch::auto_plan(&crate::launch::AutoInput {
+                model: &model,
+                engine: &eng,
+                settings: &settings,
+                sysinfo: &info,
+                port: i64::from(port),
+                data_dir: &self.opts.home,
+            })
+            .map_err(|x| ApiError(400, x.0))?;
+            p.args.extend(e.args.iter().cloned());
+            p
+        } else {
+            let filled = flelink_core::plugin::fill_command(
+                e,
+                &server,
+                std::path::Path::new(main),
+                "127.0.0.1",
+                port,
+                r.run.context.unwrap_or(8192),
+                &r.id,
+            );
+            let first = PathBuf::from(&filled[0]);
+            let program = if first.is_absolute() {
+                first
+            } else {
+                flelink_core::launch::which(&filled[0])
+                    .ok_or_else(|| ApiError(409, format!("{} is not on the PATH", filled[0])))?
+            };
+            crate::launch::Plan {
+                engine: "custom".into(),
+                binary: program.to_string_lossy().to_string(),
+                args: filled[1..].to_vec(),
+                env: vec![],
+                port: i64::from(port),
+                model,
+                profile: "auto".into(),
+                notes: vec![],
+                draft: None,
+                fallback: String::new(),
+                health: String::new(),
+            }
+        };
+        for (k, v) in &e.env {
+            match plan.env.iter_mut().find(|(a, _)| a == k) {
+                Some(x) => x.1 = v.clone(),
+                None => plan.env.push((k.clone(), v.clone())),
+            }
+        }
+        plan.health = e.health.clone();
+        plan.notes.push(format!("Engine {} from a plugin", e.label));
+        Ok(plan)
+    }
+
+    /// The model a tuning run or comparison measures: the one named, else the last one started.
+    fn tuning_model(&self, body: &Value) -> Result<String, ApiError> {
+        let ident = if py_truthy(&body["model"]) {
+            py_str(&body["model"])
+        } else {
+            self.config
+                .lock()
+                .unwrap()
+                .get("last_model")
+                .filter(|v| py_truthy(v))
+                .map(py_str)
+                .unwrap_or_default()
+        };
+        let m = self.library.lock().unwrap().get(&self.models_dir(), &ident);
+        m.map(|m| py_str(&m["id"]))
+            .ok_or_else(|| ApiError(400, "Choose a model first".into()))
+    }
+
+    fn clamp_int(v: &Value, default: i64, low: i64, high: i64) -> i64 {
+        let n = v
+            .as_i64()
+            .or_else(|| v.as_f64().map(|f| f as i64))
+            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()));
+        n.map_or(default, |n| n.clamp(low, high))
+    }
+
+    /// A library model by id or path, or 400 "Choose a model first".
+    fn library_model(&self, ident: &Value) -> Result<Value, ApiError> {
+        let ident = if py_truthy(ident) {
+            py_str(ident)
+        } else {
+            String::new()
+        };
+        self.library
+            .lock()
+            .unwrap()
+            .get(&self.models_dir(), &ident)
+            .ok_or_else(|| ApiError(400, "Choose a model first".into()))
+    }
+
+    /// The name this machine shows to the others (`remote.name` in the settings, else the machine's name).
+    pub fn host_name(&self) -> String {
+        let n = self
+            .config
+            .lock()
+            .unwrap()
+            .get("remote.name")
+            .map(py_str)
+            .unwrap_or_default();
+        let n = n.trim();
+        if n.is_empty() || n == "None" {
+            machine_name().split('.').next().unwrap_or("").to_string()
+        } else {
+            n.to_string()
+        }
+    }
+
+    /// `GET /api/remote`: what the host side shows: where it listens, its fingerprint, the code, the clients.
+    pub fn remote_view(&self) -> Value {
+        let listen = self.listen.lock().unwrap().clone();
+        let fp = self.tls_fingerprint.lock().unwrap().clone();
+        let port = listen["port"]
+            .as_u64()
+            .unwrap_or(crate::remote::DEFAULT_PORT as u64);
+        let own = machine_name();
+        let addresses: Vec<String> = [own]
+            .into_iter()
+            .chain(crate::run::lan_ip_string())
+            .filter(|n| !n.is_empty())
+            .map(|n| format!("{n}:{port}"))
+            .collect();
+        json!({"name": self.host_name(),
+            "listening": {"host": listen["host"].as_str().unwrap_or(""), "port": listen["port"].as_u64().unwrap_or(0), "tls": listen["tls"] == true},
+            "fingerprint": fp, "fingerprint_pretty": crate::remote::pretty_fp(&fp), "addresses": addresses,
+            "code": self.clients.code_state(), "clients": self.clients.list()})
+    }
+
+    /// `POST /api/quality/kld`: KL divergence of a candidate against a reference, with the engine's llama-perplexity.
+    pub fn quality_kld(&self, body: &Value) -> Result<Value, ApiError> {
+        let reference = self.library_model(&body["reference"])?;
+        let candidate = self.library_model(&body["candidate"])?;
+        let engine = self.engine_for("auto", &self.sysinfo())?;
+        self.quality
+            .start_kld(
+                &json!({"name": reference["name"], "path": reference["path"]}),
+                &json!({"name": candidate["name"], "path": candidate["path"]}),
+                engine["path"].as_str().unwrap_or(""),
+                &if py_truthy(&body["text"]) {
+                    py_str(&body["text"])
+                } else {
+                    String::new()
+                },
+                Self::clamp_int(&body["ctx"], crate::quality::KLD_CTX, 64, 8192),
+                Self::clamp_int(&body["chunks"], 0, 0, 1000),
+                Self::clamp_int(&body["threads"], 0, 0, 512),
+            )
+            .map_err(|(c, m)| ApiError(c, m))
+    }
+
+    /// `POST /api/quality/probe`: the knowledge questions to the running engine.
+    pub fn quality_probe(&self, body: &Value) -> Result<Value, ApiError> {
+        let (state, base, key) = self.engine.target();
+        if !matches!(state.as_str(), "ready" | "attached") || base.is_empty() {
+            return Err(ApiError(
+                400,
+                "Load a model first: the knowledge probe asks the running engine".into(),
+            ));
+        }
+        let name = self.engine.status()["model"]["name"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        let g = |k: &str| {
+            if py_truthy(&body[k]) {
+                py_str(&body[k])
+            } else {
+                String::new()
+            }
+        };
+        let source = if g("source").is_empty() {
+            crate::quality::BUILTIN.to_string()
+        } else {
+            g("source")
+        };
+        self.quality
+            .start_probe(
+                &base,
+                &key,
+                &name,
+                &source,
+                &g("lang"),
+                Self::clamp_int(&body["limit"], 0, 0, 1000) as usize,
+                &g("label"),
+            )
+            .map_err(|(c, m)| ApiError(c, m))
+    }
+
+    /// `GET /api/tuning`
+    pub fn tuning_state(self: &Arc<Self>, model: &str) -> Value {
+        use crate::tuner::*;
+        let best = if model.is_empty() {
+            Value::Null
+        } else {
+            Tuner::tuned_profile(self, model)
+        };
+        json!({"current": self.tuner.status(), "results": self.tuner.results(), "best": best,
+            "params": PARAM_LABELS.iter().map(|(k, l)| json!({"key": k, "label": l})).collect::<Vec<_>>(),
+            "defaults": {"params": DEFAULT_PARAMS, "runs": 3, "budget_min": 20}})
+    }
+
+    /// `POST /api/tuning/start`
+    pub fn tuning_start(self: &Arc<Self>, body: &Value) -> Result<Value, ApiError> {
+        use crate::tuner::*;
+        let model = self.tuning_model(body)?;
+        let params: Vec<String> = match body["params"].as_array().filter(|a| !a.is_empty()) {
+            Some(a) => a.iter().map(py_str).collect(),
+            None => DEFAULT_PARAMS.iter().map(|s| s.to_string()).collect(),
+        };
+        let state = self.engine.status()["state"].clone();
+        if state != "stopped" && state != "crashed" {
+            return Err(ApiError(409, "Stop the engine first: the tuner starts it itself, once for every setting it tries.".into()));
+        }
+        let profile = if py_truthy(&body["profile"]) {
+            py_str(&body["profile"])
+        } else {
+            "auto".into()
+        };
+        let screen = body.get("screen").is_none_or(py_truthy);
+        Tuner::start_tune(
+            self,
+            &model,
+            &profile,
+            Self::clamp_int(&body["budget_min"], 20, 1, 1440) * 60,
+            Self::clamp_int(&body["runs"], 3, MIN_RUNS, MAX_RUNS),
+            params,
+            screen,
+        )
+    }
+
+    /// `POST /api/tuning/aba`
+    pub fn tuning_aba(self: &Arc<Self>, body: &Value) -> Result<Value, ApiError> {
+        use crate::tuner::*;
+        let model = self.tuning_model(body)?;
+        let get = |k: &str| {
+            if py_truthy(&body[k]) {
+                py_str(&body[k])
+            } else {
+                String::new()
+            }
+        };
+        let (a, b) = (get("a"), get("b"));
+        if a.is_empty() || b.is_empty() {
+            return Err(ApiError(
+                400,
+                "Pick the two settings to compare (launch profiles, or Automatic)".into(),
+            ));
+        }
+        Tuner::start_aba(
+            self,
+            &model,
+            &a,
+            &b,
+            Self::clamp_int(&body["runs"], 3, MIN_RUNS, MAX_RUNS),
+            &get("label"),
+        )
+    }
+
+    /// `POST /api/bench/start`: what is running (model, profile, engine, command, machine) goes with the result, so runs
+    /// of different settings can be told apart. With `knowledge` the knowledge probe runs after the speed requests.
+    pub fn bench_start(&self, body: &Value) -> Result<Value, ApiError> {
+        let st = self.engine.status();
+        let info = self.sysinfo();
+        let gib = |v: &Value| v.as_f64().unwrap_or(0.0) / 1024f64.powi(3);
+        let gpu = info["gpus"]
+            .as_array()
+            .map(|g| {
+                g.iter()
+                    .map(|g| {
+                        format!(
+                            "{} {:.0} GB",
+                            crate::settings::py_str(&g["name"]),
+                            gib(&g["memory_total"])
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        let svc = st["service"].as_object().cloned().unwrap_or_default();
+        let plan = &st["plan"];
+        let truthy = crate::settings::py_truthy;
+        let profile = if truthy(&plan["profile"]) {
+            plan["profile"].clone()
+        } else if !svc.is_empty() {
+            json!(format!("service {}", crate::settings::py_str(&svc["unit"])))
+        } else if truthy(&st["attached"]) {
+            json!("attached")
+        } else {
+            json!("")
+        };
+        let command = if truthy(&plan["command"]) {
+            plan["command"].clone()
+        } else {
+            svc.get("command").cloned().unwrap_or(Value::Null)
+        };
+        let machine = format!(
+            "{}, {:.0} GB RAM{}",
+            crate::settings::py_str(&info["cpu"]["name"]),
+            gib(&info["memory"]["total"]),
+            if gpu.is_empty() {
+                String::new()
+            } else {
+                format!(", {gpu}")
+            }
+        );
+        let context = json!({"model": st["model"].get("name").cloned().unwrap_or(Value::Null), "profile": profile,
+            "engine": if truthy(&plan["engine"]) { plan["engine"].clone() } else { json!("") },
+            "build": st.get("build").cloned().unwrap_or(Value::Null), "n_ctx": st.get("n_ctx").cloned().unwrap_or(Value::Null),
+            "machine": machine, "command": command});
+        let mut context = context;
+        let probe = if truthy(&body["knowledge"]) {
+            let source = if truthy(&body["knowledge_set"]) {
+                py_str(&body["knowledge_set"])
+            } else {
+                crate::quality::BUILTIN.to_string()
+            };
+            // fail now, not after the speed requests
+            crate::quality::load_questions(&source, &self.opts.home, "", 0)
+                .map_err(|e| ApiError(400, e))?;
+            context["knowledge_set"] = json!(source);
+            Some((source, self.opts.home.clone()))
+        } else {
+            None
+        };
+        let runs = body["runs"].as_i64().filter(|r| *r != 0).unwrap_or(1);
+        let label = if truthy(&body["label"]) {
+            crate::settings::py_str(&body["label"])
+        } else {
+            String::new()
+        };
+        self.bench
+            .start(runs, &label, context, probe)
+            .map_err(|e| ApiError(409, e))
+    }
+
+    /// `POST /api/recipes/<id>/start`: start the engine with the recipe's model and start values, and use its chat
+    /// defaults. A recipe that prefers a plugin engine starts that engine (as `flelink run <id>` does).
+    pub fn recipe_start(&self, id: &str) -> Result<Value, ApiError> {
+        let r = flelink_core::recipe::find(&self.opts.home, id)
+            .map_err(|e| ApiError(404, e.to_string()))?;
+        if !self.recipe_on_disk(&r) {
+            return Err(ApiError(409, format!("Download {} first", r.title)));
+        }
+        let main = self
+            .recipe_file(&r, &r.model.files[0])
+            .to_string_lossy()
+            .to_string();
+        // an engine a plugin brings, when the recipe prefers one and no built-in engine comes before it (as `flelink run`)
+        let builtin = flelink_core::adapter::installable_ids();
+        let builtin_first = r
+            .engine
+            .prefer
+            .iter()
+            .position(|w| builtin.contains(&w.as_str()));
+        let plugin_first = r
+            .engine
+            .prefer
+            .iter()
+            .position(|w| flelink_core::plugin::engine(&self.opts.home, w).is_some());
+        let plugin = plugin_first
+            .filter(|pi| builtin_first.is_none_or(|bi| *pi < bi))
+            .and_then(|pi| flelink_core::plugin::engine(&self.opts.home, &r.engine.prefer[pi]));
+        if plugin.is_none()
+            && builtin_first.is_none()
+            && !r.engine.prefer.is_empty()
+            && r.engine.strict
+        {
+            return Err(ApiError(
+                409,
+                format!(
+                    "{} needs the {} engine from a plugin that is not installed (flelink plugins lists them)",
+                    r.title,
+                    r.engine.prefer.join(" or ")
+                ),
+            ));
+        }
+        let template = plugin.as_ref().is_some_and(|(_, e)| !e.command.is_empty());
+        let mut plan = match &plugin {
+            Some((_, e)) => self.plugin_plan(&r, e, &main)?,
+            None => self.make_plan(&main, Some(&json!("auto")))?,
+        };
+        if plugin.is_none() && r.engine.strict && !r.engine.prefer.contains(&plan.engine) {
+            return Err(ApiError(
+                409,
+                format!(
+                    "{} needs the {} engine; install it on the Engine page",
+                    r.title,
+                    r.engine.prefer.join(" or ")
+                ),
+            ));
+        }
+        // a template already carries the context in {ctx}
+        if let Some(c) = r.run.context.filter(|_| !template) {
+            match plan
+                .args
+                .iter()
+                .position(|a| a == "-c" || a == "--ctx-size")
+            {
+                Some(i) if i + 1 < plan.args.len() => plan.args[i + 1] = c.to_string(),
+                _ => plan.args.extend(["-c".to_string(), c.to_string()]),
+            }
+        }
+        plan.args.extend(r.run_args(&self.models_dir()));
+        for (k, v) in &r.run.env {
+            match plan.env.iter_mut().find(|(a, _)| a == k) {
+                Some(e) => e.1 = v.clone(),
+                None => plan.env.push((k.clone(), v.clone())),
+            }
+        }
+        plan.notes.push(format!("Recipe {}", r.id));
+        self.engine.start(plan).map_err(engine_err)?;
+        // the recipe's chat defaults become the chat settings; what it does not say stays as it was
+        let mut chat = serde_json::Map::new();
+        if let Some(t) = r.chat.thinking {
+            chat.insert("thinking".into(), json!(t));
+        }
+        if !r.chat.system.is_empty() {
+            chat.insert("system_prompt".into(), json!(r.chat.system));
+        }
+        if r.chat.temperature.is_some() || r.chat.top_p.is_some() {
+            chat.insert("sampling".into(), json!("custom"));
+            if let Some(t) = r.chat.temperature {
+                chat.insert("temperature".into(), json!(t));
+            }
+            if let Some(p) = r.chat.top_p {
+                chat.insert("top_p".into(), json!(p));
+            }
+        }
+        let mut patch = json!({"last_model": main, "launch": {"profile": "auto"}});
+        if !chat.is_empty() {
+            patch["chat"] = Value::Object(chat);
+        }
+        if let Some(t) = r.chat.tools {
+            patch["tools"] = json!({"enabled": t});
+        }
+        self.config
+            .lock()
+            .unwrap()
+            .update(patch.as_object().unwrap())
+            .map_err(|e| ApiError(400, e))?;
+        Ok(self.engine.status())
+    }
+
+    fn hf_token(&self) -> String {
+        self.config
+            .lock()
+            .unwrap()
+            .get("hf_token")
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_default()
+    }
+
+    /// `/api/hf/search?q=`: GGUF repos on Hugging Face, most downloaded first.
+    pub fn hf_search(&self, q: &str) -> Result<Value, ApiError> {
+        let q = q.trim();
+        if q.chars().count() < 2 {
+            return Ok(json!({"results": []}));
+        }
+        crate::hf::search(q, 20, &self.hf_token())
+            .map(|r| json!({"results": r}))
+            .map_err(|e| ApiError(502, format!("Could not reach Hugging Face: {e}")))
+    }
+
+    /// `/api/hf/repo?repo=`: the GGUF units of a repo, each with whether it fits this machine.
+    pub fn hf_repo(&self, text: &str) -> Result<Value, ApiError> {
+        let (repo, revision, hint) = crate::hf::parse_repo(text).map_err(|e| ApiError(400, e))?;
+        let token = self.hf_token();
+        let files = crate::hf::tree(&repo, &revision, &token)
+            .and_then(|f| crate::hf::repo_info(&repo, &token).map(|i| (f, i)));
+        let (files, info) =
+            files.map_err(|e| ApiError(404, format!("Could not open {repo}: {e}")))?;
+        let sys = self.sysinfo();
+        let mut groups = crate::hf::gguf_groups(&files, &hint);
+        for g in groups.iter_mut() {
+            g["fit"] = if g["kind"] == "model" {
+                crate::catalog::fit(g["size"].as_i64().unwrap_or(0), &sys)
+            } else {
+                Value::Null
+            };
+        }
+        Ok(json!({"repo": repo, "revision": revision, "info": info, "groups": groups}))
+    }
+
+    /// `POST /api/hf/download {repo, revision, files}`: one download job for the chosen files of a repo.
+    pub fn hf_download(&self, body: &Map<String, Value>) -> Result<Value, ApiError> {
+        let text = body.get("repo").and_then(Value::as_str).unwrap_or("");
+        let (repo, rev0, _) = crate::hf::parse_repo(text).map_err(|e| ApiError(400, e))?;
+        let revision = body
+            .get("revision")
+            .and_then(Value::as_str)
+            .filter(|r| !r.is_empty())
+            .map(String::from)
+            .unwrap_or(rev0);
+        let wanted: Vec<String> = body
+            .get("files")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+        let tree = crate::hf::tree(&repo, &revision, &self.hf_token())
+            .map_err(|e| ApiError(404, format!("Could not open {repo}: {e}")))?;
+        let missing = wanted
+            .iter()
+            .find(|p| !tree.iter().any(|f| f["path"].as_str() == Some(p.as_str())));
+        // a path from the repo stays inside the models folder
+        let unsafe_path = wanted.iter().find(|p| {
+            std::path::Path::new(p.as_str())
+                .components()
+                .any(|c| !matches!(c, std::path::Component::Normal(_)))
+        });
+        if let Some(p) = unsafe_path {
+            return Err(ApiError(400, format!("Refusing the path {p}")));
+        }
+        if wanted.is_empty() || missing.is_some() {
+            let tail = missing
+                .map(|m| format!(": {m} does not"))
+                .unwrap_or_default();
+            return Err(ApiError(
+                400,
+                format!("Pick files that exist in the repo{tail}"),
+            ));
+        }
+        let root = self.models_dir();
+        let files: Vec<Value> = wanted
+            .iter()
+            .map(|p| {
+                let f = tree
+                    .iter()
+                    .find(|f| f["path"].as_str() == Some(p.as_str()))
+                    .unwrap();
+                json!({"url": crate::hf::resolve_url(&repo, p, &revision),
+                    "dest": root.join(&repo).join(p).to_string_lossy(),
+                    "size": f["size"].as_i64().unwrap_or(0),
+                    "sha256": f["lfs"].get("oid").cloned().unwrap_or(Value::Null)})
+            })
+            .collect();
+        let first = wanted[0].rsplit('/').next().unwrap_or(&wanted[0]);
+        let title = format!(
+            "{} · {}",
+            repo.rsplit('/').next().unwrap_or(&repo),
+            crate::hf::quant_label(first)
+        );
+        let mut sorted = wanted.clone();
+        sorted.sort();
+        Ok(self.downloads.add(
+            &title,
+            &files,
+            "model",
+            json!({}),
+            &format!("hf:{repo}:{}", sorted.join(",")),
         ))
     }
 
@@ -1018,6 +1949,66 @@ fn download_action(p: &str) -> Option<(&str, &str)> {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         && matches!(what, "pause" | "resume" | "cancel" | "remove"))
     .then_some((id, what))
+}
+
+/// `/api/hosts/<12 hex>/<check|connect|repair|update|remove>` -> (id, action)
+fn host_action(p: &str) -> Option<(&str, &str)> {
+    let (id, action) = p.strip_prefix("/api/hosts/")?.split_once('/')?;
+    let ok = id.len() == 12
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    (ok && matches!(action, "check" | "connect" | "repair" | "update" | "remove"))
+        .then_some((id, action))
+}
+
+fn remote_err(e: crate::remote::RemoteError) -> ApiError {
+    // the page reads `code` from the message: the code travels after a marker the error helper understands
+    if e.2.is_empty() {
+        ApiError(e.0, e.1)
+    } else {
+        ApiError(e.0, format!("{}\u{1f}{}", e.1, e.2))
+    }
+}
+
+/// `<prefix><id><suffix>` -> the id when it is `[0-9a-f]+`
+fn hex_id<'a>(p: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
+    let id = p.strip_prefix(prefix)?.strip_suffix(suffix)?;
+    (!id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then_some(id)
+}
+
+/// `/api/bench/<id>/delete` -> the result id (`[0-9a-f]+`)
+fn bench_delete_id(p: &str) -> Option<&str> {
+    let id = p.strip_prefix("/api/bench/")?.strip_suffix("/delete")?;
+    (!id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then_some(id)
+}
+
+/// `/api/recipes/<id>/download` -> the recipe id (`[\w.-]+`)
+fn recipe_download_id(p: &str) -> Option<&str> {
+    let id = p.strip_prefix("/api/recipes/")?.strip_suffix("/download")?;
+    (!id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')))
+    .then_some(id)
+}
+
+/// `/api/recipes/<id>/start` -> the recipe id (`[\w.-]+`)
+fn recipe_start_id(p: &str) -> Option<&str> {
+    let id = p.strip_prefix("/api/recipes/")?.strip_suffix("/start")?;
+    (!id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')))
+    .then_some(id)
 }
 
 /// `/api/catalog/<id>/download` -> the catalog id (`[\w.-]+`)
@@ -1109,22 +2100,8 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
         ("GET", "/api/ping") => Ok(json!({"app": "fle-studio", "version": st.opts.version})),
         ("GET", "/api/system") => Ok(crate::system::info(&st.config.lock().unwrap().models_dir())),
         ("GET", "/api/chat/capabilities") => Ok(st.capabilities()),
-        ("GET", "/api/tools") => Ok(crate::tools::status(
-            &st.config
-                .lock()
-                .unwrap()
-                .get("tools")
-                .cloned()
-                .unwrap_or(json!({})),
-        )),
-        ("POST", "/api/tools/reload") => Ok(crate::tools::status(
-            &st.config
-                .lock()
-                .unwrap()
-                .get("tools")
-                .cloned()
-                .unwrap_or(json!({})),
-        )),
+        ("GET", "/api/tools") => Ok(st.toolbox.status(&st.tool_settings())),
+        ("POST", "/api/tools/reload") => Ok(st.toolbox.reload(&st.tool_settings())),
         ("POST", "/api/tools/call") => r.json(MAX_JSON).and_then(|body| st.tools_call(&body)),
         ("GET", "/api/state") => Ok(st.state()),
         ("GET", "/api/settings") => Ok(st.config.lock().unwrap().public()),
@@ -1272,11 +2249,142 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             st.plan_view(&model, body.get("profile"))
         }),
         (_, _) if p.starts_with("/api/p/") => Err(plugin_off(p)),
-        ("GET", "/api/plugins") => Ok(json!({"api_version": 1, "plugins": [], "error": ""})),
-        ("POST", _) if plugin_toggle(p).is_some() => Err(ApiError(
-            404,
-            format!("No plugin named {} is installed", plugin_toggle(p).unwrap()),
-        )),
+        ("GET", "/api/plugins") => Ok(json!({"api_version": 1, "plugins": builtin_plugins(), "error": ""})),
+        ("POST", _) if plugin_toggle(p).is_some() => {
+            let id = plugin_toggle(p).unwrap();
+            if BUILTIN_PLUGINS.iter().any(|(i, _, _)| *i == id) {
+                Err(ApiError(400, format!("{id} is part of FLE Link and always on")))
+            } else {
+                Err(ApiError(404, format!("No plugin named {id} is installed")))
+            }
+        }
+        ("GET", "/api/remote") => Ok(st.remote_view()),
+        ("POST", "/api/remote/code") => Ok(st.clients.new_code()),
+        ("POST", "/api/remote/pair") => r.json(MAX_JSON).and_then(|body| {
+            let g = |k: &str| body.get(k).map(py_str).unwrap_or_default();
+            let fp = st.tls_fingerprint.lock().unwrap().clone();
+            match st.clients.pair(&g("proof"), &g("name"), &r.peer, &fp) {
+                Ok(mut v) => {
+                    v["host"] = json!(st.host_name());
+                    v["fingerprint"] = json!(fp);
+                    Ok(v)
+                }
+                Err(e) => Err(remote_err(e)),
+            }
+        }),
+        ("GET", "/api/remote/whoami") => Ok(json!({"host": st.host_name(),
+            "name": r.client["name"].as_str().unwrap_or(""),
+            "admin": if r.client.is_null() { true } else { r.client["admin"] == true },
+            "paired": !r.client.is_null()})),
+        ("POST", _) if hex_id(p, "/api/remote/clients/", "/revoke").is_some() => {
+            if st.clients.revoke(hex_id(p, "/api/remote/clients/", "/revoke").unwrap()) {
+                Ok(json!({"ok": true, "clients": st.clients.list()}))
+            } else {
+                Err(ApiError(404, "No such client".into()))
+            }
+        }
+        ("POST", _) if hex_id(p, "/api/remote/clients/", "/admin").is_some() => r.json(MAX_JSON).and_then(|body| {
+            let admin = body.get("admin").is_some_and(py_truthy);
+            if st.clients.set_admin(hex_id(p, "/api/remote/clients/", "/admin").unwrap(), admin) {
+                Ok(json!({"ok": true, "clients": st.clients.list()}))
+            } else {
+                Err(ApiError(404, "No such client".into()))
+            }
+        }),
+        ("GET", "/api/hosts") => Ok(json!({"hosts": st.hosts.all().iter().map(|h| st.hosts.public(h)).collect::<Vec<_>>(),
+            "ssh": crate::remote::ssh_available(), "client_name": st.host_name()})),
+        ("POST", "/api/hosts") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.hosts.add(&Value::Object(body), &st.host_name()).map_err(remote_err)),
+        ("POST", _) if host_action(p).is_some() => r.json(MAX_JSON).and_then(|body| {
+            let (id, action) = host_action(p).unwrap();
+            let body = Value::Object(body);
+            let h = st.hosts.get(id).map_err(remote_err)?;
+            match action {
+                "check" => {
+                    let mut v = st.hosts.probe(&h);
+                    v["host"] = st.hosts.public(&h);
+                    Ok(v)
+                }
+                "connect" => {
+                    st.hosts.reconnect(&h);
+                    let mut v = st.hosts.probe(&h);
+                    v["host"] = st.hosts.public(&h);
+                    Ok(v)
+                }
+                "repair" => {
+                    let mut rec = h.clone();
+                    rec["expect"] = json!(body["fingerprint"].as_str().unwrap_or(""));
+                    let paired = st
+                        .hosts
+                        .pair(&rec, body["code"].as_str().unwrap_or(""), &st.host_name())
+                        .map_err(remote_err)?;
+                    st.hosts.save(&paired);
+                    Ok(json!({"host": st.hosts.public(&paired), "probe": st.hosts.probe(&paired)}))
+                }
+                "update" => {
+                    let mut h = h;
+                    if let Some(n) = body.get("name") {
+                        let old = h["name"].as_str().unwrap_or("").to_string();
+                        h["name"] = json!(crate::remote::clean_name(&py_str(n), &old));
+                    }
+                    if let Some(m) = body.get("mirror") {
+                        h["mirror"] = json!(py_truthy(m));
+                    }
+                    if let Some(c) = body["color"].as_str().filter(|c| {
+                        c.len() == 7 && c.starts_with('#') && c[1..].bytes().all(|b| b.is_ascii_hexdigit())
+                    }) {
+                        h["color"] = json!(c);
+                    }
+                    st.hosts.save(&h);
+                    Ok(json!({"host": st.hosts.public(&h)}))
+                }
+                _ => {
+                    st.hosts.remove(id);
+                    Ok(json!({"ok": true, "hosts": st.hosts.all().iter().map(|h| st.hosts.public(h)).collect::<Vec<_>>()}))
+                }
+            }
+        }),
+        ("GET", "/api/update") => Ok(st.updates.view(&Value::Object(st.config.lock().unwrap().data.clone()))),
+        ("POST", "/api/update/check") => {
+            let config = Value::Object(st.config.lock().unwrap().data.clone());
+            st.updates
+                .check(&config, &st.engines.installed(), true)
+                .map(|_| st.updates.view(&config))
+                .map_err(|e| ApiError(409, e))
+        }
+        ("POST", "/api/update/dismiss") => r.json(MAX_JSON).and_then(|body| {
+            let version = body.get("version").filter(|v| py_truthy(v)).map(py_str).unwrap_or_default();
+            let patch = st.updates.dismiss_patch(&version, body.get("engines") == Some(&json!(true)));
+            if !patch.is_empty() {
+                st.config
+                    .lock()
+                    .unwrap()
+                    .update(json!({"updates": patch}).as_object().unwrap())
+                    .map_err(|e| ApiError(400, e))?;
+            }
+            Ok(st.updates.view(&Value::Object(st.config.lock().unwrap().data.clone())))
+        }),
+        ("POST", "/api/update/apply") => r.json(MAX_JSON).and_then(|body| {
+            let tag = body.get("tag").map(py_str).unwrap_or_default();
+            let config = Value::Object(st.config.lock().unwrap().data.clone());
+            let base = st.updates.prepare(&config, &tag).map_err(|e| ApiError(409, e))?;
+            let st2 = st.clone();
+            std::thread::spawn(move || {
+                if st2.updates.install(&base, &tag).is_ok() {
+                    // the page sees "restarting" first, then the engine and the MCP servers stop and the new version starts
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    st2.engine.shutdown();
+                    st2.toolbox.mcp.close_all();
+                    crate::updates::restart();
+                }
+            });
+            Ok(st.updates.view(&config))
+        }),
+        ("POST", "/api/update/ack") => {
+            st.updates.ack();
+            Ok(st.updates.view(&Value::Object(st.config.lock().unwrap().data.clone())))
+        }
         ("POST", "/api/engine/preview") => r.json(MAX_JSON).and_then(|body| {
             let model = body
                 .get("model")
@@ -1382,6 +2490,167 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .action(id, what)
                 .ok_or(ApiError(404, "Not found".into()))
         }
+        ("GET", "/api/bench") => Ok(
+            json!({"current": st.bench.status(), "results": st.bench.results(),
+            "tests": crate::bench::Bench::test_names()}),
+        ),
+        ("POST", "/api/bench/start") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.bench_start(&Value::Object(body))),
+        ("POST", "/api/bench/cancel") => {
+            st.bench.cancel();
+            Ok(json!({"ok": true}))
+        }
+        ("POST", _) if bench_delete_id(p).is_some() => {
+            st.bench.delete(bench_delete_id(p).unwrap());
+            Ok(json!({"ok": true}))
+        }
+        ("GET", "/api/quality") => {
+            let builtin = crate::quality::load_questions(crate::quality::BUILTIN, &st.opts.home, "", 0)
+                .map(|(m, _)| m)
+                .unwrap_or(Value::Null);
+            Ok(json!({"current": st.quality.status(), "results": st.quality.results(),
+                "kld_by_model": st.quality.latest_kld_by_model(), "builtin": builtin,
+                "mkqa_license": crate::quality::MKQA_LICENSE, "kld_ctx": crate::quality::KLD_CTX}))
+        }
+        ("POST", "/api/quality/kld") => r.json(MAX_JSON).and_then(|body| st.quality_kld(&Value::Object(body))),
+        ("POST", "/api/quality/probe") => r.json(MAX_JSON).and_then(|body| st.quality_probe(&Value::Object(body))),
+        ("POST", "/api/quality/mkqa") => r.json(MAX_JSON).and_then(|body| {
+            let body = Value::Object(body);
+            let lang = if py_truthy(&body["lang"]) { py_str(&body["lang"]) } else { "en".into() };
+            crate::quality::import_mkqa(
+                &st.opts.home,
+                &lang,
+                Studio::clamp_int(&body["count"], 48, 1, 500) as usize,
+                Studio::clamp_int(&body["offset"], 0, 0, 100_000) as usize,
+            )
+            .map_err(|e| ApiError(400, e))
+        }),
+        ("POST", "/api/quality/cancel") => {
+            st.quality.cancel();
+            Ok(json!({"ok": true}))
+        }
+        ("POST", _) if hex_id(p, "/api/quality/", "/delete").is_some() => {
+            st.quality.delete(hex_id(p, "/api/quality/", "/delete").unwrap());
+            Ok(json!({"ok": true}))
+        }
+        ("GET", "/api/tuning") => {
+            Ok(st.tuning_state(r.query.get("model").and_then(|v| v.as_str()).unwrap_or("")))
+        }
+        ("GET", "/api/tuning/best") => Ok(json!({"profile": crate::tuner::Tuner::tuned_profile(
+            st,
+            r.query.get("model").and_then(|v| v.as_str()).unwrap_or(""),
+        )})),
+        ("POST", "/api/tuning/start") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.tuning_start(&Value::Object(body))),
+        ("POST", "/api/tuning/aba") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.tuning_aba(&Value::Object(body))),
+        ("POST", "/api/tuning/cancel") => {
+            st.tuner.cancel();
+            Ok(json!({"ok": true}))
+        }
+        ("POST", _) if hex_id(p, "/api/tuning/", "/delete").is_some() => {
+            st.tuner
+                .delete(hex_id(p, "/api/tuning/", "/delete").unwrap());
+            Ok(json!({"ok": true}))
+        }
+        ("GET", "/api/cache") => {
+            let layer = r
+                .query
+                .get("layer")
+                .and_then(|v| v.as_str())
+                .filter(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_digit()))
+                .and_then(|l| l.parse().ok());
+            Ok(st.cache.snapshot(layer))
+        }
+        ("POST", "/api/apps/prepare") => r.json(MAX_JSON).and_then(|body| {
+            let name = body.get("name").map(py_str).unwrap_or_default();
+            st.toolbox
+                .prepare_app(&st.tool_settings(), &name)
+                .map_err(|(c, m)| ApiError(c, m))
+        }),
+        ("POST", "/api/apps/call") => r.json(MAX_JSON).and_then(|body| {
+            let frame = body.get("frame").map(py_str).unwrap_or_default();
+            let rec = st.toolbox.frames.get(&frame).ok_or_else(|| {
+                ApiError(404, "This app is no longer available. Run the tool again.".into())
+            })?;
+            let name = body.get("name").map(py_str).unwrap_or_default();
+            let args = body.get("arguments").cloned().unwrap_or(json!({}));
+            let approved = body.get("approved") == Some(&json!(true));
+            match st.toolbox.app_call(
+                &st.tool_settings(),
+                rec["server"].as_str().unwrap_or(""),
+                &name,
+                &args,
+                approved,
+            ) {
+                Ok(result) => Ok(json!({"result": result})),
+                Err(crate::mcp::CallRefused::NeedsApproval) => {
+                    Err(ApiError(409, "This tool needs your approval first.".into()))
+                }
+                Err(crate::mcp::CallRefused::Unknown) => Err(ApiError(
+                    404,
+                    "That tool is not available to this app (the server it came from may have gone).".into(),
+                )),
+            }
+        }),
+        ("POST", "/api/mcp/signin") => r.json(MAX_JSON).and_then(|body| {
+            let name = body.get("server").map(py_str).unwrap_or_default();
+            let port = st.port.load(std::sync::atomic::Ordering::SeqCst);
+            let redirect = format!("http://127.0.0.1:{port}/oauth/callback");
+            match st.toolbox.begin_sign_in(&name, &redirect) {
+                None => Err(ApiError(404, "Not found".into())),
+                Some(Err(e)) => Err(ApiError(400, e)),
+                Some(Ok(v)) => Ok(v),
+            }
+        }),
+        ("POST", "/api/mcp/signout") => r.json(MAX_JSON).and_then(|body| {
+            let name = body.get("server").map(py_str).unwrap_or_default();
+            match st.toolbox.sign_out(&name) {
+                None => Err(ApiError(404, "Not found".into())),
+                Some(had) => Ok(json!({"signed_out": true, "had_token": had})),
+            }
+        }),
+        (m, _) if p == "/api/forge" || p.starts_with("/api/forge/") => {
+            let body = if m == "POST" {
+                match r.json(MAX_JSON) {
+                    Ok(b) => Some(Value::Object(b)),
+                    Err(e) => return Some(Err(e)),
+                }
+            } else {
+                None
+            };
+            let q: Map<String, Value> = r.query.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            return st.forge_route(m, p, body, &q);
+        }
+        ("GET", "/api/flags") => Ok(crate::flaghelp::table()),
+        ("POST", "/api/flags/explain") => r.json(MAX_JSON).map(|body| {
+            let args: Vec<String> = body
+                .get("args")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().map(py_str).collect())
+                .unwrap_or_default();
+            let env: Vec<(String, String)> = body
+                .get("env")
+                .and_then(Value::as_object)
+                .map(|o| o.iter().map(|(k, v)| (k.clone(), py_str(v))).collect())
+                .unwrap_or_default();
+            json!({"items": crate::flaghelp::explain(&args, &env)})
+        }),
+        ("GET", "/api/recipes") => Ok(st.recipes()),
+        ("POST", _) if recipe_download_id(p).is_some() => {
+            st.recipe_download(recipe_download_id(p).unwrap())
+        }
+        ("POST", _) if recipe_start_id(p).is_some() => st.recipe_start(recipe_start_id(p).unwrap()),
+        ("GET", "/api/hf/search") => {
+            st.hf_search(r.query.get("q").and_then(|v| v.as_str()).unwrap_or(""))
+        }
+        ("GET", "/api/hf/repo") => {
+            st.hf_repo(r.query.get("repo").and_then(|v| v.as_str()).unwrap_or(""))
+        }
+        ("POST", "/api/hf/download") => r.json(MAX_JSON).and_then(|body| st.hf_download(&body)),
         ("GET", "/api/downloads") => Ok(json!({"downloads": st.downloads.list()})),
         ("GET", "/api/chats") => Ok(json!({"chats": st.chats.list()})),
         ("POST", "/api/chats") => r.json(MAX_CHAT).and_then(|body| {
@@ -1418,6 +2687,46 @@ const STATIC_TYPES: [(&str, &str); 12] = [
 ];
 
 /// The built web page: a folder when one is given (tests, development), else the copy inside the binary.
+/// The plugins that are part of FLE Link (their pages live in web/plugins/<id>/): (id, title, summary).
+const BUILTIN_PLUGINS: [(&str, &str, &str); 3] = [
+    (
+        "forge",
+        "Forge",
+        "Build your own FLE quant: hybrid builds, expert pruning, KL checks.",
+    ),
+    (
+        "remote",
+        "Remote access",
+        "One FLE Link computes for another: pairing with a code, rights per client, hosts by address or SSH.",
+    ),
+    (
+        "updater",
+        "Updates",
+        "Tells you when a new FLE Link or FLE engine is out, and updates in one click.",
+    ),
+];
+
+static PLUGIN_WEB: include_dir::Dir<'static> =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../web/plugins");
+
+/// `/api/plugins`: the built-in plugins, in the form the page knows from FLE Studio's plugin list.
+fn builtin_plugins() -> Vec<Value> {
+    BUILTIN_PLUGINS
+        .iter()
+        .map(|(id, title, summary)| {
+            // the Forge is a page of its own and has nothing to start with the page; the others are boot scripts
+            let (page, boot) = if *id == "forge" {
+                (json!({"title": "Forge", "icon": "forge", "script": "forge.js", "path": "/forge", "nav": true}), Value::Null)
+            } else {
+                (Value::Null, json!("boot.js"))
+            };
+            json!({"id": id, "package": "flelink", "version": env!("CARGO_PKG_VERSION"), "bundled": true, "enabled": true,
+                "loaded": true, "error": "", "page": page, "boot": boot, "boot_early": false, "title": title,
+                "summary": summary})
+        })
+        .collect()
+}
+
 static WEB: include_dir::Dir<'static> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../web/studio");
 
@@ -1447,7 +2756,22 @@ fn static_file(st: &Studio, path: &str, head: bool) -> Response<Body> {
         return not_found();
     }
     if let Some(rest) = name.strip_prefix("plugins/") {
-        // a plugin's own files: none is installed in this program
+        // the files of a plugin that is part of FLE Link
+        if let Some(f) = PLUGIN_WEB.get_file(rest) {
+            let ctype = match rest.rsplit('.').next() {
+                Some("js") => "text/javascript; charset=utf-8",
+                Some("css") => "text/css; charset=utf-8",
+                Some("svg") => "image/svg+xml",
+                _ => "application/octet-stream",
+            };
+            return send(
+                200,
+                f.contents().to_vec(),
+                ctype,
+                &[("Cache-Control", "no-cache")],
+                head,
+            );
+        }
         let id = rest.split('/').next().unwrap_or("");
         let valid = !id.is_empty()
             && id.len() <= 32
@@ -1479,7 +2803,9 @@ fn static_file(st: &Studio, path: &str, head: bool) -> Response<Body> {
         return not_found();
     };
     if name == "index.html" {
-        let t = String::from_utf8_lossy(&data).replace("__FLE_TOKEN__", &st.token);
+        let t = String::from_utf8_lossy(&data)
+            .replace("__FLE_TOKEN__", &st.token)
+            .replace("__FLELINK_VERSION__", env!("CARGO_PKG_VERSION"));
         data = t.into_bytes();
     }
     let suffix = name
@@ -1523,8 +2849,23 @@ async fn handler(
     if path == "/login" {
         return login(&st, &parts.method, body, head).await;
     }
+    if let Some(frame) = path.strip_prefix("/app-frame/") {
+        if matches!(parts.method, Method::GET | Method::HEAD) {
+            return app_frame(&st, frame, head);
+        }
+    }
+    if path == "/oauth/callback" && matches!(parts.method, Method::GET | Method::HEAD) {
+        let q = query_of(parts.uri.query());
+        let st2 = st.clone();
+        return tokio::task::spawn_blocking(move || oauth_callback(&st2, &q, head))
+            .await
+            .unwrap_or_else(|_| error_json(500, "The sign-in failed", head));
+    }
     if path.starts_with("/v1/") {
         return proxy(&st, parts, body, head).await;
+    }
+    if path.starts_with("/h/") {
+        return forward(&st, parts, body, head).await;
     }
     let declared: usize = parts
         .headers
@@ -1540,7 +2881,13 @@ async fn handler(
             Err(_) => (vec![], true),
         }
     };
+    let client = bearer(&parts.headers)
+        .filter(|t| t.starts_with(crate::remote::TOKEN_PREFIX))
+        .and_then(|t| st.clients.find(&t, &peer.ip().to_string()))
+        .unwrap_or(Value::Null);
     let r = Req {
+        peer: peer.ip().to_string(),
+        client,
         method: parts.method.clone(),
         path: path.clone(),
         query: query_of(parts.uri.query()),
@@ -1553,7 +2900,13 @@ async fn handler(
         .unwrap_or(None);
     match routed {
         Some(Ok(v)) => send_json(200, &v, head),
-        Some(Err(ApiError(s, m))) => error_json(s, &m, head),
+        Some(Err(ApiError(s, m))) => match m.split_once('\u{1f}') {
+            // an error with a code the page acts on (remote_err)
+            Some((msg, code)) => {
+                send_json(s, &json!({"error": {"message": msg, "code": code}}), head)
+            }
+            None => error_json(s, &m, head),
+        },
         None if matches!(parts.method, Method::GET | Method::HEAD)
             && !path.starts_with("/api/") =>
         {
@@ -1568,6 +2921,280 @@ async fn handler(
             None => error_json(404, "Not found", head),
         },
     }
+}
+
+/// `/app-frame/<id>`: an MCP App's document, under the policy its resource asked for.
+fn app_frame(st: &Ctx, frame: &str, head: bool) -> Response<Body> {
+    let ok = (20..=64).contains(&frame.len())
+        && frame
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+    let Some(rec) = st.toolbox.frames.get(frame).filter(|_| ok) else {
+        return error_json(
+            404,
+            "This app is no longer available. Run the tool again.",
+            head,
+        );
+    };
+    send(
+        200,
+        rec["html"].as_str().unwrap_or("").as_bytes().to_vec(),
+        "text/html; charset=utf-8",
+        &[
+            (
+                "Content-Security-Policy",
+                rec["csp"].as_str().unwrap_or("default-src 'none'"),
+            ),
+            (
+                "Permissions-Policy",
+                "camera=(), microphone=(), geolocation=(), payment=(), usb=(), clipboard-write=()",
+            ),
+            ("Cross-Origin-Resource-Policy", "same-origin"),
+        ],
+        head,
+    )
+}
+
+/// `/h/<host id>/api/…` and `/h/<host id>/v1/…` to a paired host, with the client token. Small answers are read whole (and
+/// mirrored); streams, downloads and other large answers are passed on as they arrive.
+async fn forward(
+    st: &Ctx,
+    parts: axum::http::request::Parts,
+    body: Body,
+    head: bool,
+) -> Response<Body> {
+    let path = parts.uri.path().to_string();
+    let Some(rest) = path.strip_prefix("/h/") else {
+        return error_json(404, "Not found", head);
+    };
+    let (id, rest) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
+    let rest = rest.to_string();
+    let ok_id = id.len() == 12
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    if !ok_id {
+        return error_json(404, "Not found", head);
+    }
+    let h = match st.hosts.get(id) {
+        Ok(h) => h,
+        Err(e) => return error_json(e.0, &e.1, head),
+    };
+    let app_page = rest.starts_with("/app-frame/") && parts.method == Method::GET;
+    if !(rest.starts_with("/api/") || rest.starts_with("/v1/") || app_page)
+        || crate::remote::never_forwarded(&rest)
+    {
+        return error_json(403, "This path is not passed on to a host.", head);
+    }
+    if h["token"].as_str().is_none_or(|t| t.is_empty()) {
+        return send_json(
+            424,
+            &json!({"error": {"message": "This host is not paired.", "code": "unpaired"}}),
+            head,
+        );
+    }
+    let bytes = match to_bytes(body, MAX_CHAT).await {
+        Ok(b) => b.to_vec(),
+        Err(_) => return error_json(413, "Request too large", head),
+    };
+    let target = match parts.uri.query() {
+        Some(q) => format!("{rest}?{q}"),
+        None => rest.clone(),
+    };
+    let method = parts.method.as_str().to_string();
+    let pass: Vec<(String, String)> = ["content-type", "accept", "x-fle-confirm"]
+        .iter()
+        .filter_map(|n| {
+            parts
+                .headers
+                .get(*n)
+                .and_then(|v| v.to_str().ok())
+                .map(|v| (n.to_string(), v.to_string()))
+        })
+        .collect();
+    let stream_like = rest.starts_with("/v1/");
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(16);
+    let (meta_tx, meta_rx) = tokio::sync::oneshot::channel::<
+        Result<(u16, Vec<(String, String)>, Option<Vec<u8>>), Value>,
+    >();
+    let st2 = st.clone();
+    let rest2 = rest.clone();
+    std::thread::spawn(move || {
+        let timeout = Duration::from_secs(if stream_like { 900 } else { 60 });
+        let pinned = h["fingerprint"].as_str().unwrap_or("").to_string();
+        let mirror_dir = st2.hosts.mirror_dir(h["id"].as_str().unwrap_or(""));
+        let fail = |e: String, seen: String| -> Value {
+            let (code, message, extra) = crate::remote::describe_failure(&e, &seen, &pinned);
+            if code == "unreachable" && h["mirror"] == true && method == "GET" {
+                if let Some(v) = crate::remote::mirror_read(&mirror_dir, &rest2) {
+                    return json!({"mirror": v});
+                }
+            }
+            let mut err = json!({"message": message, "code": code});
+            for (k, v) in extra.as_object().into_iter().flatten() {
+                err[k] = v.clone();
+            }
+            json!({"error": err})
+        };
+        let (base, agent, seen) = match st2.hosts.connection(&h, timeout) {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = meta_tx.send(Err(fail(e, String::new())));
+                return;
+            }
+        };
+        let mut req = agent.request(&method, &format!("{base}{target}")).set(
+            "Authorization",
+            &format!("Bearer {}", h["token"].as_str().unwrap_or("")),
+        );
+        for (k, v) in &pass {
+            req = req.set(k, v);
+        }
+        let result = if bytes.is_empty() && (method == "GET" || method == "HEAD") {
+            req.call()
+        } else {
+            req.send_bytes(&bytes)
+        };
+        let resp = match result {
+            Ok(r) => r,
+            Err(ureq::Error::Status(_, r)) => r,
+            Err(e) => {
+                let s = seen.lock().unwrap().clone();
+                let _ = meta_tx.send(Err(fail(e.to_string(), s)));
+                return;
+            }
+        };
+        let status = resp.status();
+        let mut headers: Vec<(String, String)> = vec![];
+        for n in [
+            "Content-Type",
+            "Content-Disposition",
+            "Content-Range",
+            "Accept-Ranges",
+            "Content-Security-Policy",
+            "Permissions-Policy",
+        ] {
+            if let Some(v) = resp.header(n) {
+                headers.push((n.to_string(), v.to_string()));
+            }
+        }
+        let sse = resp
+            .header("Content-Type")
+            .is_some_and(|c| c.contains("text/event-stream"));
+        let size: Option<usize> = resp.header("Content-Length").and_then(|v| v.parse().ok());
+        let mut reader = resp.into_reader();
+        if !sse && size.is_some_and(|n| n <= 8 * 1024 * 1024) {
+            let mut data = vec![];
+            let _ = std::io::Read::read_to_end(&mut reader, &mut data);
+            if status == 200 && h["mirror"] == true {
+                crate::remote::mirror_save(&mirror_dir, &rest2, &data);
+            }
+            let _ = meta_tx.send(Ok((status, headers, Some(data))));
+            return;
+        }
+        let _ = meta_tx.send(Ok((status, headers, None)));
+        let mut buf = vec![0u8; 65536];
+        loop {
+            match std::io::Read::read(&mut reader, &mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if tx
+                        .blocking_send(Ok(bytes::Bytes::copy_from_slice(&buf[..n])))
+                        .is_err()
+                    {
+                        break; // the page stopped reading; closing the host side ends the generation there too
+                    }
+                }
+            }
+        }
+    });
+    match meta_rx.await {
+        Err(_) => error_json(502, "The host did not answer", head),
+        Ok(Err(v)) if v.get("mirror").is_some() => send_json(200, &v["mirror"], head),
+        Ok(Err(v)) => send_json(502, &v, head),
+        Ok(Ok((401, _, _))) => send_json(
+            424,
+            &json!({"error": {"message": "The host does not accept this client any more. It may have been revoked: pair again.", "code": "unpaired"}}),
+            head,
+        ),
+        Ok(Ok((status, headers, Some(data)))) => {
+            let ctype = headers
+                .iter()
+                .find(|(k, _)| k == "Content-Type")
+                .map_or("application/octet-stream".to_string(), |(_, v)| v.clone());
+            let extra: Vec<(&str, &str)> = headers
+                .iter()
+                .filter(|(k, _)| k != "Content-Type")
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            send(status, data, &ctype, &extra, head)
+        }
+        Ok(Ok((status, headers, None))) => {
+            let mut r = Response::new(Body::from_stream(
+                tokio_stream::wrappers::ReceiverStream::new(rx),
+            ));
+            *r.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
+            let hm = r.headers_mut();
+            for (k, v) in &headers {
+                if let (Ok(n), Ok(v)) = (
+                    axum::http::HeaderName::from_bytes(k.as_bytes()),
+                    HeaderValue::from_str(v),
+                ) {
+                    hm.insert(n, v);
+                }
+            }
+            hm.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+            hm.insert("x-accel-buffering", HeaderValue::from_static("no"));
+            hm.insert(header::CONNECTION, HeaderValue::from_static("close"));
+            r
+        }
+    }
+}
+
+const CALLBACK_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><title>FLE Link</title>
+<style>body{font:16px system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}
+@media (prefers-color-scheme:dark){body{background:#16181c;color:#e6e6e6}}h1{font-size:1.2rem}</style>
+<h1>__TITLE__</h1><p>__TEXT__</p>"#;
+
+fn html_escape(t: &str) -> String {
+    t.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
+/// The browser comes back from a sign-in: exchange the code, connect the server again, say how it went.
+fn oauth_callback(st: &Ctx, q: &Map<String, Value>, head: bool) -> Response<Body> {
+    let g = |k: &str| q.get(k).and_then(Value::as_str).unwrap_or("");
+    let (title, text, status) =
+        match st
+            .toolbox
+            .finish_sign_in(g("state"), g("code"), g("error"), g("error_description"))
+        {
+            Ok(name) => (
+                "Signed in".to_string(),
+                format!("{name} is connected. You can close this tab and go back to FLE Link."),
+                200,
+            ),
+            Err(e) => ("Sign-in did not work".to_string(), e, 400),
+        };
+    let page = CALLBACK_PAGE
+        .replace("__TITLE__", &html_escape(&title))
+        .replace("__TEXT__", &html_escape(&text));
+    send(
+        status,
+        page.into_bytes(),
+        "text/html; charset=utf-8",
+        &[
+            (
+                "Content-Security-Policy",
+                "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+            ),
+            ("X-Frame-Options", "DENY"),
+        ],
+        head,
+    )
 }
 
 const LOGIN_PAGE: &str = r#"<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -1628,29 +3255,8 @@ async fn login(st: &Ctx, method: &Method, body: Body, head: bool) -> Response<Bo
 /// Features of the Python Studio that this server does not have yet: a clear 501 instead of a 404 that looks like a bug.
 fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
     let is = |p: &str| path == p || path.starts_with(&format!("{p}/"));
-    Some(if is("/api/hf") {
-        "Searching and downloading from Hugging Face"
-    } else if is("/api/bench") {
-        "The speed test"
-    } else if is("/api/forge") {
-        "The model forge"
-    } else if is("/api/tuning") {
-        "The tuner"
-    } else if is("/api/quality") {
-        "The quality measurements"
-    } else if is("/api/cache") {
-        "The expert cache view"
-    } else if is("/api/flags") {
-        "The engine flag help"
-    } else if is("/api/mcp") || is("/oauth") || is("/api/apps") || is("/app-frame") {
-        "MCP servers"
-    } else if is("/api/remote") || is("/h") || is("/api/hosts") {
-        "Remote access"
-    } else if is("/api/update") {
-        "Updating from inside the program"
-    } else {
-        return None;
-    })
+    let _ = is;
+    None
 }
 
 pub fn router(st: Ctx) -> Router {
@@ -1663,6 +3269,9 @@ pub async fn serve_listener(
     l: tokio::net::TcpListener,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
+    if let Ok(a) = l.local_addr() {
+        st.port.store(a.port(), std::sync::atomic::Ordering::SeqCst);
+    }
     axum::serve(
         l,
         router(st).into_make_service_with_connect_info::<SocketAddr>(),

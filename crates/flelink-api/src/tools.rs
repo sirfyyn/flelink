@@ -1,4 +1,4 @@
-//! Tools the model may call in a chat: a few built-in ones (the MCP servers come with the MCP stage). Port of the built-in
+//! Tools the model may call in a chat: the built-in ones (the MCP servers are in `mcp.rs`). Port of the built-in
 //! part of `fle_studio/tools.py`.
 //!
 //! Each tool has a name, a description and a JSON schema for its arguments, which go to llama-server in the OpenAI-style
@@ -25,13 +25,22 @@ fn terr<T>(m: impl Into<String>) -> R<T> {
     Err(ToolError(m.into()))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Tool {
     pub name: String,
     pub description: String,
     pub parameters: Value,
     pub group: &'static str,
     pub confirm: bool,
+    /// builtin | mcp
+    pub source: &'static str,
+    /// the MCP server and the tool's name there
+    pub server: String,
+    pub remote_name: String,
+    /// the ui:// resource that shows the result (MCP Apps)
+    pub ui: String,
+    /// from the remembered list of a server that is still connecting
+    pub stale: bool,
 }
 
 impl Tool {
@@ -39,7 +48,12 @@ impl Tool {
         json!({"type": "function", "function": {"name": self.name, "description": self.description, "parameters": self.parameters}})
     }
     pub fn public(&self) -> Value {
-        json!({"name": self.name, "description": self.description, "group": self.group, "source": "builtin", "server": "", "confirm": self.confirm, "ui": "", "schema": self.openai()})
+        let source = if self.source.is_empty() {
+            "builtin"
+        } else {
+            self.source
+        };
+        json!({"name": self.name, "description": self.description, "group": self.group, "source": source, "server": self.server, "confirm": self.confirm, "ui": self.ui, "schema": self.openai()})
     }
 }
 
@@ -1596,22 +1610,22 @@ pub fn tools(s: &Value) -> Vec<Tool> {
     }
     if on("calculator") {
         out.push(Tool { name: "calculator".into(), description: "Calculate an arithmetic expression exactly. Use it for any maths instead of working it out yourself.".into(),
-            parameters: schema(json!({"expression": {"type": "string", "description": "For example (12.5 + 7) * 3 / 4 or sqrt(2)**2"}}), &["expression"]), group: "calculator", confirm: false });
+            parameters: schema(json!({"expression": {"type": "string", "description": "For example (12.5 + 7) * 3 / 4 or sqrt(2)**2"}}), &["expression"]), group: "calculator", confirm: false, ..Default::default() });
     }
     if on("datetime") {
         out.push(Tool { name: "get_current_time".into(), description: "Get the current date and time.".into(),
-            parameters: schema(json!({"timezone": {"type": "string", "description": "Optional IANA time zone such as Europe/Berlin or UTC. Omit it for this computer's local time."}}), &[]), group: "clock", confirm: false });
+            parameters: schema(json!({"timezone": {"type": "string", "description": "Optional IANA time zone such as Europe/Berlin or UTC. Omit it for this computer's local time."}}), &[]), group: "clock", confirm: false, ..Default::default() });
     }
     if on("files") && files_dir_ok(s) {
         out.push(Tool { name: "list_files".into(), description: "List the files and folders in a folder that the user shared with you.".into(),
-            parameters: schema(json!({"path": {"type": "string", "description": "Folder relative to the shared folder; omit it for the shared folder itself."}}), &[]), group: "files", confirm: false });
+            parameters: schema(json!({"path": {"type": "string", "description": "Folder relative to the shared folder; omit it for the shared folder itself."}}), &[]), group: "files", confirm: false, ..Default::default() });
         out.push(Tool { name: "read_file".into(), description: "Read a text file from the folder that the user shared with you.".into(),
             parameters: schema(json!({"path": {"type": "string", "description": "File path relative to the shared folder."}, "offset": {"type": "integer", "description": "First character to return (default 0)."},
-                "max_chars": {"type": "integer", "description": "How many characters to return (default 20000)."}}), &["path"]), group: "files", confirm: false });
+                "max_chars": {"type": "integer", "description": "How many characters to return (default 20000)."}}), &["path"]), group: "files", confirm: false, ..Default::default() });
     }
     if on("web_search") {
         out.push(Tool { name: "web_search".into(), description: "Search the web and return titles, links and short snippets.".into(),
-            parameters: schema(json!({"query": {"type": "string"}, "max_results": {"type": "integer", "description": "1 to 10, default 5"}}), &["query"]), group: "web_search", confirm: on("web_search_confirm") });
+            parameters: schema(json!({"query": {"type": "string"}, "max_results": {"type": "integer", "description": "1 to 10, default 5"}}), &["query"]), group: "web_search", confirm: on("web_search_confirm"), ..Default::default() });
     }
     out
 }
@@ -1831,7 +1845,7 @@ fn json_error_text(text: &str, e: &serde_json::Error) -> String {
     format!("{msg}: line {line} column {col} (char {pos})")
 }
 
-/// What the page shows about the tools (`ToolBox.status`). MCP servers are listed but not connected yet.
+/// What the page shows about the tools when no MCP servers are connected (the tool box adds them: `mcp::ToolBox`).
 pub fn status(s: &Value) -> Value {
     let on = |k: &str| s.get(k).is_some_and(py_truthy);
     let (servers, mut problems) = parse_servers(

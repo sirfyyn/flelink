@@ -52,9 +52,18 @@ enum Cmd {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// The models FLE knows, and whether each fits this machine
+    /// The models FLE Link knows, and whether each fits this machine
     Models,
-    /// Load a model and keep serving it (OpenAI-compatible API) until Ctrl+C
+    /// Plugins in <data>/plugins: the engines and recipes each one brings
+    Plugins,
+    /// Recipes: a model with its engine and start settings (built in, in <data>/recipes, or from a plugin)
+    Recipes,
+    /// Print a recipe as TOML, to share it or to save a changed copy in <data>/recipes
+    Recipe {
+        /// recipe id, a .toml file or an https:// URL
+        recipe: String,
+    },
+    /// Load a model (a recipe id, a .toml recipe or an https:// URL to one) and serve it (OpenAI-compatible API) until Ctrl+C
     Run { model: String },
     /// Read a model's header: architecture, parts, expert bytes, KV cache (no weights are loaded)
     Inspect {
@@ -69,7 +78,7 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
-    /// Start FLE Studio: the web page and the local API (`http://127.0.0.1:8642`)
+    /// Start the Studio: the web page and the local API (`http://127.0.0.1:8642`)
     Studio {
         /// data folder (settings, chats, engines, models); default: per-user app data
         #[arg(long, value_name = "DIR")]
@@ -93,6 +102,8 @@ enum Cmd {
         #[arg(long, value_name = "DIR", hide = true)]
         web_dir: Option<std::path::PathBuf>,
     },
+    /// A pairing code for another FLE Link (valid 10 minutes, one use); the host side of Remote access
+    PairCode,
     /// Show the llama-server command and the numbers behind it
     Plan(Box<plancmd::PlanArgs>),
     /// Check model, engine, memory, disk and the command that would start
@@ -103,7 +114,7 @@ enum Cmd {
         #[arg(long)]
         strict: bool,
     },
-    /// What this computer has and which engines `fle` could install
+    /// What this computer has and which engines FLE Link could install
     System,
     /// Start llama-server with the plan
     Serve {
@@ -191,14 +202,24 @@ fn print_event(e: &Event) {
 
 pub fn main() {
     if let Err(e) = run() {
-        // same words as the Python helper: "fle: message", then "hint: ..."; exit code 2
+        // like the Python helper: "<program>: message", then "hint: ..."; exit code 2. The name is the one it was called
+        // by, so `fle` still says "fle:" and `flelink` says "flelink:".
+        let prog = std::env::args_os()
+            .next()
+            .and_then(|a| {
+                std::path::Path::new(&a)
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+            })
+            .filter(|s| s == "fle")
+            .unwrap_or_else(|| "flelink".into());
         if let Some(fe) = e.downcast_ref::<flelink_core::FleError>() {
-            eprintln!("fle: {fe}");
+            eprintln!("{prog}: {fe}");
             if !fe.hint.is_empty() {
                 eprintln!("hint: {}", fe.hint);
             }
         } else {
-            eprintln!("fle: {e:#}");
+            eprintln!("{prog}: {e:#}");
         }
         std::process::exit(2);
     }
@@ -376,11 +397,54 @@ fn run_config(config: Option<String>, json: bool, action: ConfigAction) -> Resul
                 )
                 .into());
             }
+            // a typo would otherwise be saved and silently do nothing
+            const KNOWN: [&str; 13] = [
+                "profile",
+                "spec",
+                "engine",
+                "model",
+                "host",
+                "port",
+                "context",
+                "threads",
+                "gpu_cache_mib",
+                "fit_target_mib",
+                "mtp",
+                "pinned_load",
+                "env",
+            ];
+            const NUMBERS: [&str; 5] = [
+                "port",
+                "context",
+                "threads",
+                "gpu_cache_mib",
+                "fit_target_mib",
+            ];
+            let top = key.split('.').next().unwrap_or("");
+            if !KNOWN.contains(&top) || (top == "env" && !key.starts_with("env.")) {
+                return Err(FleError::new(
+                    format!("Unknown setting '{key}'"),
+                    format!("Known: {}, env.NAME.", KNOWN[..12].join(", ")),
+                )
+                .into());
+            }
             let v = if key.starts_with("env.") {
-                serde_json::Value::String(value)
+                serde_json::Value::String(value.clone())
             } else {
                 config::parse_value(&value)
             };
+            if NUMBERS.contains(&key.as_str()) && !v.is_number() {
+                return Err(
+                    FleError::new(format!("{key} needs a number, got '{value}'"), "").into(),
+                );
+            }
+            if key == "port" && !v.as_f64().is_some_and(|p| (1.0..=65535.0).contains(&p)) {
+                return Err(FleError::new(
+                    format!("port must be between 1 and 65535, got {value}"),
+                    "",
+                )
+                .into());
+            }
             config::set_dotted(&mut data, &key, v);
             println!("{}", config::save(&data, config.as_deref())?.display());
         }
@@ -428,6 +492,15 @@ fn run() -> Result<()> {
             attach: attach.unwrap_or_default(),
             web_dir,
         })),
+        Some(Cmd::PairCode) => {
+            let c = flelink_api::remote::Clients::new(&home).new_code();
+            println!(
+                "Pairing code: {}  (valid for 10 minutes, one use)",
+                c["pretty"].as_str().unwrap_or("")
+            );
+            println!("On the other machine: Settings → Remote access → Add host, with this machine's address and the code.");
+            Ok(())
+        }
         Some(Cmd::Plan(a)) => plancmd::run(*a, &home),
         Some(Cmd::System) => {
             let s = system::detect(&home);
@@ -479,6 +552,90 @@ fn run() -> Result<()> {
             exit(plancmd::run_report(common, out, zip, &home)?)
         }
         Some(Cmd::Bench(a)) => exit(run_bench(*a)?),
+        Some(Cmd::Recipes) => {
+            let s = system::detect(&home);
+            let (all, problems) = flelink_core::recipe::load_all(&home);
+            for r in &all {
+                let fit = if r.model.size > 0 {
+                    catalog::fit_size(r.model.size, r.needs_fle(), &s).label()
+                } else {
+                    "?"
+                };
+                let have = r
+                    .fetches()
+                    .iter()
+                    .all(|x| home.join("models").join(&x.local).exists());
+                let from = if r.source == "builtin" {
+                    String::new()
+                } else {
+                    format!("  ({})", r.source)
+                };
+                println!(
+                    "{:<22} {:>9}  {:<8} {}{}{}",
+                    r.id,
+                    if r.model.size > 0 {
+                        system::gib(r.model.size)
+                    } else {
+                        "-".into()
+                    },
+                    fit,
+                    r.title,
+                    if have { "  [downloaded]" } else { "" },
+                    from
+                );
+            }
+            for p in problems {
+                eprintln!("skipped: {p}");
+            }
+            println!(
+                "\nRun one: flelink run ID · your own: put a .toml into {}",
+                home.join("recipes").display()
+            );
+            Ok(())
+        }
+        Some(Cmd::Plugins) => {
+            let (plugins, problems) = flelink_core::plugin::load_all(&home);
+            let (recipes, _) = flelink_core::recipe::load_all(&home);
+            if plugins.is_empty() && problems.is_empty() {
+                println!(
+                    "No plugins. A plugin is a folder in {} (docs/PLUGINS.md).",
+                    home.join("plugins").display()
+                );
+            }
+            for m in &plugins {
+                let mine = recipes
+                    .iter()
+                    .filter(|r| r.source.starts_with(&format!("plugin {}:", m.id)))
+                    .count();
+                println!("{} {}  {}", m.id, m.version, m.title);
+                for e in &m.engine {
+                    let from = match (&e.path, &e.release) {
+                        (Some(p), _) => p.clone(),
+                        (_, Some(r)) => format!(
+                            "github.com/{} {}",
+                            r.repo,
+                            if r.tag.is_empty() { "latest" } else { &r.tag }
+                        ),
+                        _ => e
+                            .program
+                            .as_ref()
+                            .map(|p| format!("{p} on the PATH"))
+                            .unwrap_or_default(),
+                    };
+                    println!("  engine {:<16} {}  ({from})", e.id, e.label);
+                }
+                println!("  {mine} recipe(s)");
+            }
+            for p in problems {
+                eprintln!("skipped: {p}");
+            }
+            Ok(())
+        }
+        Some(Cmd::Recipe { recipe }) => {
+            let r = flelink_core::recipe::find(&home, &recipe)?;
+            print!("{}", r.to_toml());
+            Ok(())
+        }
         Some(Cmd::Models) => {
             let s = system::detect(&home);
             for m in catalog::builtin() {

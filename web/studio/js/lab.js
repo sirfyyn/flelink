@@ -34,6 +34,7 @@ export function mount(main) {
   let runs = 3;
   let label = "";
   let knowledge = false;
+  let knowledgeAvailable = true; // false on a server without the quality measurements
 
   async function load() {
     try {
@@ -72,9 +73,9 @@ export function mount(main) {
       h("div", { class: "row wrap", style: { marginTop: "14px" } },
         h("label", { class: "field", style: { flex: "1 1 260px" } }, h("span", null, "Label"), labelInput),
         h("label", { class: "field", style: { width: "140px" } }, h("span", null, "Repeat"), runsSel),
-        h("label", { class: "field", style: { alignSelf: "end", flexDirection: "row", gap: "6px", alignItems: "center" } },
+        knowledgeAvailable ? h("label", { class: "field", style: { alignSelf: "end", flexDirection: "row", gap: "6px", alignItems: "center" } },
           h("input", { type: "checkbox", checked: knowledge, disabled: running, onchange: (e) => { knowledge = e.target.checked; } }),
-          h("span", null, "Also ask the knowledge questions")),
+          h("span", null, "Also ask the knowledge questions")) : null,
         h("div", { class: "field", style: { alignSelf: "end" } }, running
           ? h("button", { class: "btn danger", onclick: cancel }, icon("stop", "sm"), "Cancel")
           : h("button", { class: "btn primary", onclick: start, disabled: !up }, icon("play", "sm"), "Run the test"))),
@@ -269,7 +270,8 @@ export function mount(main) {
   }
 
   unsub.push(on("engine", () => { if (bench.current?.state !== "running") renderRun(); }));
-  const extras = mountExtras(abaBox, qualityBox, { onQuality: (q) => { kldByModel = q.kld_by_model || {}; renderTable(); } });
+  const extras = mountExtras(abaBox, qualityBox, { onQuality: (q) => { kldByModel = q.kld_by_model || {}; renderTable(); },
+    onUnavailable: () => { knowledgeAvailable = false; knowledge = false; renderRun(); } });
   load();
   return { unmount() { clearTimeout(timer); extras.unmount(); unsub.forEach((u) => u()); } };
 }

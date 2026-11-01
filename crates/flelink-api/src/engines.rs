@@ -15,8 +15,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-pub const UPSTREAM_REPO: &str = "ggml-org/llama.cpp";
-pub const FLE_REPO: &str = "sirfyyn/FastLocalExperts";
+pub use flelink_core::adapter::{FLE_REPO, UPSTREAM_REPO};
 pub const GITHUB_API: &str = "https://api.github.com/repos";
 
 /// An error with the HTTP status the page gets for it.
@@ -345,6 +344,49 @@ fn py_name(s: &str) -> String {
     out
 }
 
+/// Engines the terminal installed (`flelink run`, `ask`) sit in `engines/<variant>-<tag>/` like the Studio's own, but
+/// without an entry in engines.json. Add those entries, so both see the same engines. True when something was added.
+fn adopt_unlisted(dir: &Path, items: &mut Vec<Value>) -> bool {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    let mut added = false;
+    for e in rd.flatten() {
+        let folder = e.path();
+        let name = e.file_name().to_string_lossy().to_string();
+        if !folder.is_dir() || name.starts_with('_') {
+            continue;
+        }
+        let listed = items
+            .iter()
+            .any(|i| Path::new(i["path"].as_str().unwrap_or("")).starts_with(&folder));
+        if listed {
+            continue;
+        }
+        let Some(server) = flelink_core::engines::find_server(&folder) else {
+            continue;
+        };
+        let (variant, tag) = name.rsplit_once('-').unwrap_or((name.as_str(), ""));
+        let kind = if variant.starts_with("fle") {
+            "fle"
+        } else {
+            "upstream"
+        };
+        let backend = variant.split_once('-').map(|(_, b)| b).unwrap_or("");
+        let when = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        items.push(json!({"id": name, "variant": variant, "kind": kind, "flavor": kind, "backend": backend, "tag": tag,
+            "path": server.to_string_lossy(), "version": "", "installed": when, "ok": true, "problem": ""}));
+        added = true;
+    }
+    added
+}
+
 impl Engines {
     pub fn new(
         data_dir: &Path,
@@ -355,13 +397,18 @@ impl Engines {
         let dir = data_dir.join("engines");
         let _ = std::fs::create_dir_all(&dir);
         let file = dir.join("engines.json");
-        let items = match std::fs::read_to_string(&file)
+        let mut items = match std::fs::read_to_string(&file)
             .ok()
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
         {
             Some(Value::Array(a)) => a,
             _ => vec![],
         };
+        if adopt_unlisted(&dir, &mut items) {
+            let tmp = file.with_extension("tmp");
+            let _ = std::fs::write(&tmp, serde_json::to_string_pretty(&items).unwrap())
+                .and_then(|_| std::fs::rename(&tmp, &file));
+        }
         let e = Engines {
             inner: Arc::new(Inner {
                 dir,
@@ -418,27 +465,19 @@ impl Engines {
     /// Which release assets an install would download (a readable reason if none fits).
     pub fn plan_install(&self, variant: &str, sys: &Value) -> Result<Value, EngineError> {
         let (os, arch) = os_arch();
-        let fle_tag = {
-            let t = self.setting("fle_tag");
-            if t.is_empty() {
-                "latest".to_string()
-            } else {
-                t
-            }
-        };
-        let up_tag = {
-            let t = self.setting("upstream_tag");
-            if t.is_empty() {
-                "b11540".to_string()
-            } else {
-                t
-            }
-        };
-        let (rel, source) = if variant.starts_with("fle") {
-            (self.release(FLE_REPO, &fle_tag)?, FLE_REPO)
+        // where the variant's engine comes from is its adapter's; the settings can name another tag (`<kind>_tag`)
+        let kind = if variant.starts_with("fle") {
+            "fle"
         } else {
-            (self.release(UPSTREAM_REPO, &up_tag)?, UPSTREAM_REPO)
+            "upstream"
         };
+        let r = flelink_core::adapter::release_of(kind)
+            .ok_or_else(|| Runtime(format!("FLE Link does not install the {kind} engine")))?;
+        let tag = match self.setting(&format!("{kind}_tag")) {
+            t if t.is_empty() => r.default_tag.unwrap_or("latest").to_string(),
+            t => t,
+        };
+        let (rel, source) = (self.release(r.repo, &tag)?, r.repo);
         let assets = rel["assets"].as_array().cloned().unwrap_or_default();
         let pattern = asset_patterns(variant, os, &arch)
             .map_err(Runtime)?
@@ -483,6 +522,10 @@ impl Engines {
                 .cloned();
             if runtime.is_none() && source == FLE_REPO {
                 // FLE builds use upstream's CUDA runtime package
+                let up_tag = match self.setting("upstream_tag") {
+                    t if t.is_empty() => flelink_core::adapter::LLAMA_TAG.to_string(),
+                    t => t,
+                };
                 let up = self.release(UPSTREAM_REPO, &up_tag)?;
                 runtime = up["assets"].as_array().and_then(|a| {
                     a.iter()
@@ -756,7 +799,7 @@ impl Engines {
                     .unwrap_or(std::cmp::Ordering::Equal),
             )
         });
-        if want == "fle" || want == "upstream" {
+        if flelink_core::adapter::is_installable(&want) {
             have.retain(|e| e["kind"] == want.as_str());
         }
         let Some(e) = have.first() else {

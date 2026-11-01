@@ -1,5 +1,5 @@
-//! `/api/state` (everything the page loads at once) and the page served from the copy inside the binary, against the
-//! Python Studio.
+//! `/api/state` (everything the page loads at once) against the Python Studio, and the page served from the copy inside
+//! the binary against web/studio (D10).
 #![cfg(unix)]
 mod common;
 mod harness;
@@ -69,8 +69,22 @@ fn state_and_the_embedded_page_match_the_python_studio() {
         http(rs, "GET", "/", &[], None),
         http(py.addr, "GET", "/", &[], None),
     );
-    let (tr, tp) = (token_of(&ia), token_of(&ib));
-    compare("index from the binary", &ia, &ib, &tr, &tp);
+    let (tr, _tp) = (token_of(&ia), token_of(&ib));
+    // D10: the page is FLE Link's own since 0.1.0 (name, navigation, fixes), so it is no longer compared with the Python
+    // page; the binary must serve exactly the repository's web/studio, with the token and the version filled in
+    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/studio");
+    let fill = |b: &[u8]| {
+        String::from_utf8_lossy(b)
+            .replace(&tr, "__FLE_TOKEN__")
+            .replace(env!("CARGO_PKG_VERSION"), "__FLELINK_VERSION__")
+            .into_bytes()
+    };
+    assert_eq!(ia.status, 200);
+    assert_eq!(
+        fill(&ia.body),
+        std::fs::read(own.join("index.html")).unwrap(),
+        "index from the binary"
+    );
     let (a, b) = (
         http(rs, "GET", "/api/state", &[], None),
         http(py.addr, "GET", "/api/state", &[], None),
@@ -103,28 +117,22 @@ fn state_and_the_embedded_page_match_the_python_studio() {
             }
         }
     }
-    let web = src.join("fle_studio/web");
     let mut list = vec![];
-    files(&web, &web, &mut list);
+    files(&own, &own, &mut list);
     list.sort();
     for f in &list {
-        let (a, b) = (
-            http(rs, "GET", f, &[], None),
-            http(py.addr, "GET", f, &[], None),
-        );
-        compare(&format!("page file {f}"), &a, &b, &tr, &tp);
-    }
-    // and the repository's own copy is what the Studio checkout has
-    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/studio");
-    for f in &list {
-        let (a, b) = (
-            std::fs::read(web.join(f.trim_start_matches('/'))).unwrap(),
-            std::fs::read(own.join(f.trim_start_matches('/'))).unwrap_or_default(),
-        );
-        assert_eq!(a, b, "web/studio{f} differs from the Studio checkout");
+        let a = http(rs, "GET", f, &[], None);
+        let want = std::fs::read(own.join(f.trim_start_matches('/'))).unwrap();
+        let got = if f.ends_with(".html") {
+            fill(&a.body)
+        } else {
+            a.body.clone()
+        };
+        assert_eq!(a.status, 200, "page file {f}");
+        assert!(got == want, "page file {f} differs from web/studio");
     }
     eprintln!(
-        "compared with the Python Studio: /api/state ({} sections) and {} page files identical",
+        "compared with the Python Studio: /api/state ({} sections); {} page files served as in web/studio",
         x.as_object().unwrap().len(),
         list.len()
     );

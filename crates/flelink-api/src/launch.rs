@@ -483,6 +483,8 @@ pub struct Plan {
     pub draft: Option<String>,
     /// set when this plan replaces one that failed to load or could not be built: why (it is not tried a second time)
     pub fallback: String,
+    /// the address that answers 200 once the engine is ready ("/health"; a plugin engine can name its own)
+    pub health: String,
 }
 
 impl Plan {
@@ -570,15 +572,36 @@ fn gpu_selection(setting: &str, nvidia: &[Value]) -> R<GpuPick> {
     } else {
         setting.trim().to_lowercase()
     };
+    // D12: CUDA_VISIBLE_DEVICES set by whoever started FLE Link (a shared machine keeps other GPUs free this way) is not
+    // overruled by `auto`: the engine inherits it, and the choice is made among those GPUs only
+    if s == "auto" {
+        if let Some(cvd) = std::env::var_os("CUDA_VISIBLE_DEVICES").filter(|v| !v.is_empty()) {
+            let want: Vec<String> = cvd
+                .to_string_lossy()
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .collect();
+            let allowed: Vec<Value> = nvidia
+                .iter()
+                .filter(|g| want.contains(&g["index"].to_string()))
+                .cloned()
+                .collect();
+            return Ok((allowed, vec![], String::new()));
+        }
+    }
     if s == "all" || (nvidia.len() == 1 && s == "auto") {
         return Ok((nvidia.to_vec(), vec![], String::new()));
     }
     let pick: Vec<Value> = if s == "auto" {
-        // max() keeps the first of equal values
+        // D13: the GPU with the most *free* memory (Python: the largest), so a card another service fills is not taken;
+        // without a free figure the total counts. max() keeps the first of equal values
+        let room = |g: &Value| {
+            let total = g["memory_total"].as_i64().unwrap_or(0);
+            total - g["memory_used"].as_i64().unwrap_or(0)
+        };
         let mut best = &nvidia[0];
         for g in nvidia {
-            if g["memory_total"].as_i64().unwrap_or(0) > best["memory_total"].as_i64().unwrap_or(0)
-            {
+            if room(g) > room(best) {
                 best = g;
             }
         }
@@ -1004,6 +1027,7 @@ pub fn auto_plan(i: &AutoInput) -> R<Plan> {
             notes,
             draft,
             fallback: String::new(),
+            health: "/health".into(),
         },
         engine
             .get("log_verbosity")
@@ -1496,6 +1520,7 @@ pub fn profile_plan(i: &ProfileInput) -> R<Plan> {
         notes,
         draft,
         fallback: String::new(),
+        health: "/health".into(),
     };
     // For a custom profile `engine` is the check of its own binary (None if that could not run): no -lv unless known.
     let lv = i

@@ -9,7 +9,7 @@ import { loadStyle, pctText, verdictPill, withCi } from "./tuner.js";
 const completeModels = () => (store.state?.models || []).filter((m) => m.kind === "model" && m.complete && !m.error);
 const profileName = (id) => (id === "auto" ? "Automatic settings" : (store.state?.profiles || []).find((p) => p.id === id)?.name || id);
 
-export function mountExtras(abaBox, qualityBox, { onQuality } = {}) {
+export function mountExtras(abaBox, qualityBox, { onQuality, onUnavailable } = {}) {
   loadStyle();
   let tuning = { current: null, results: [] };
   let quality = { current: null, results: [], builtin: {}, mkqa_license: "" };
@@ -19,15 +19,14 @@ export function mountExtras(abaBox, qualityBox, { onQuality } = {}) {
 
   async function load() {
     clearTimeout(timer);
-    try {
-      [tuning, quality] = await Promise.all([get("/api/tuning"), get("/api/quality")]);
-    } catch (e) {
-      if (!gone) toast(e.message, "bad");
-      return;
-    }
-    renderAba();
-    renderQuality();
-    onQuality?.(quality);
+    // a server without one of the two (FLE Link answers 501 for the quality measurements): that card stays hidden
+    const [t, q] = await Promise.allSettled([get("/api/tuning"), get("/api/quality")]);
+    for (const r of [t, q]) if (r.status === "rejected" && r.reason?.status !== 501 && !gone) toast(r.reason.message, "bad");
+    abaBox.hidden = t.status === "rejected" && t.reason?.status === 501;
+    qualityBox.hidden = q.status === "rejected" && q.reason?.status === 501;
+    if (qualityBox.hidden) onUnavailable?.();
+    if (t.status === "fulfilled") { tuning = t.value; renderAba(); }
+    if (q.status === "fulfilled") { quality = q.value; renderQuality(); onQuality?.(quality); }
     const busy = tuning.current?.state === "running" || quality.current?.state === "running";
     if (busy && !gone) timer = setTimeout(load, 1200);
   }
@@ -118,7 +117,7 @@ export function mountExtras(abaBox, qualityBox, { onQuality } = {}) {
   }
   async function importMkqa() {
     const ok = await confirmDialog({ title: "Download MKQA questions?",
-      body: `They come from the MKQA dataset (Apple), licensed ${quality.mkqa_license} They are saved in your data folder only and are not part of FLE Studio.`, ok: "Download" });
+      body: `They come from the MKQA dataset (Apple), licensed ${quality.mkqa_license} They are saved in your data folder only and are not part of FLE Link.`, ok: "Download" });
     if (!ok) return;
     try {
       const r = await post("/api/quality/mkqa", { lang: form.lang, count: 48 });

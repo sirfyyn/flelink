@@ -186,7 +186,7 @@ async function start(call, panel, status) {
         return reply(m.id, {});
       }
       default:
-        return fail(m.id, `FLE Studio does not offer ${m.method}`, -32601);
+        return fail(m.id, `FLE Link does not offer ${m.method}`, -32601);
     }
   }
 

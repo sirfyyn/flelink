@@ -15,9 +15,9 @@ const PLACEHOLDERS = [
   ["{expert_profile}", "Where the FLE engine keeps the expert-use profile of this model"],
   ["{context}", "Context length from the start settings"],
   ["{threads}", "Threads from the start settings (0 there = one per physical core)"],
-  ["{port}", "A free port FLE Studio picks"],
+  ["{port}", "A free port FLE Link picks"],
   ["{host}", "127.0.0.1"],
-  ["{data}", "FLE Studio's data folder"],
+  ["{data}", "FLE Link's data folder"],
 ];
 const CONTEXTS = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
 const NEW_COMMAND = "{engine} -m {model} -c {context} -t {threads} --jinja";
@@ -59,7 +59,7 @@ export function mount(main) {
   };
   main.replaceChildren(topbar("Engine"), h("div", { class: "page" }, h("div", { class: "page-inner" },
     h("div", { class: "page-head" }, h("div", null, h("h2", null, "Engine"),
-      h("p", null, "FLE Studio runs llama-server for you. Every start is a plain command that you can read, copy and change; "
+      h("p", null, "FLE Link runs llama-server for you. Every start is a plain command that you can read, copy and change; "
         + "a profile keeps a command of your own, placeholders and all.")), modeSwitch),
     boxes.status,
     boxes.best,
@@ -212,7 +212,7 @@ export function mount(main) {
         e.ready_at && !e.attached ? kv("Up", `${fmt.dur(Date.now() / 1000 - e.ready_at)} · loaded in ${fmt.dur(e.ready_at - e.started)}`) : null);
     } else if (e.state === "stopped" && svc) {
       detail = e.error ? h("div", { class: "callout warn" }, icon("alert", "sm"), h("span", null, e.error))
-        : h("div", { class: "muted small" }, `${svc.unit} is not running. Start runs the service's own command; FLE Studio does not change it.`);
+        : h("div", { class: "muted small" }, `${svc.unit} is not running. Start runs the service's own command; FLE Link does not change it.`);
     } else if (e.state === "stopped") {
       detail = h("div", { class: "muted small" }, "Not running. Choose a model and how to start it below, then press Start.");
     }
@@ -262,7 +262,7 @@ export function mount(main) {
         h("button", { class: "btn danger", onclick: () => serviceAct("stop"), disabled: stopping }, icon("power", "sm"),
           stopping ? "Stopping…" : "Stop the service"));
     }
-    out.push(h("button", { class: "btn ghost", onclick: stop, title: `FLE Studio stops watching ${svc.unit}; the service is not touched` },
+    out.push(h("button", { class: "btn ghost", onclick: stop, title: `FLE Link stops watching ${svc.unit}; the service is not touched` },
       icon("x", "sm"), "Disconnect"));
     return out;
   }
@@ -360,7 +360,7 @@ export function mount(main) {
       h("div", { class: "card-head" }, icon("sliders"), h("div", null, h("h3", null, "Start settings"),
         h("p", null, "Saved right away. The command on the right updates as you change them."))),
       boundTo ? h("div", { class: "callout", style: { marginBottom: "14px" } }, icon("info", "sm"), h("div", { class: "small" },
-        `FLE Studio is connected to ${boundTo}, which runs its own command. These settings are for engines FLE Studio `
+        `FLE Link is connected to ${boundTo}, which runs its own command. These settings are for engines FLE Link `
         + "starts itself; they apply once you disconnect.")) : null,
       h("div", { class: "stack" },
         field("Model", modelSel),
@@ -408,7 +408,7 @@ export function mount(main) {
         h("label", { class: "row" }, toggle(L.restart_on_crash, (v) => save({ launch: { restart_on_crash: v } })),
           h("span", null, "Start again if it crashes ", h("span", { class: "muted small" }, "(for a server that should stay up)"))),
         h("label", { class: "row" }, toggle(L.autostart, (v) => save({ launch: { autostart: v } })),
-          h("span", null, "Load this model when FLE Studio starts"))));
+          h("span", null, "Load this model when FLE Link starts"))));
   }
 
   function renderSimpleLaunch(L, models) {
@@ -485,7 +485,7 @@ export function mount(main) {
 
   function renderPreview() {
     const head = h("div", { class: "card-head" }, icon("terminal"), h("div", { class: "grow" }, h("h3", null, "Command"),
-      h("p", null, "What Start runs. Paste it into a terminal to run the engine without FLE Studio.")),
+      h("p", null, "What Start runs. Paste it into a terminal to run the engine without FLE Link.")),
     preview ? copyButton(() => preview.command, "Copy the command") : null);
     if (!preview) {
       previewChips = [];
@@ -590,7 +590,7 @@ export function mount(main) {
         h("span", { class: "grow" }),
         p.id ? h("button", { class: "btn ghost danger", onclick: () => removeProfile(p) }, icon("trash", "sm"), "Delete") : null),
       h("p", { class: "small faint", style: { margin: 0 } },
-        "FLE Studio adds --host 127.0.0.1, a free --port, --metrics and an alias when the command leaves them out; it needs them to talk to the engine."));
+        "FLE Link adds --host 127.0.0.1, a free --port, --metrics and an alias when the command leaves them out; it needs them to talk to the engine."));
   }
 
   function legend(target) {
@@ -668,7 +668,7 @@ export function mount(main) {
             e.ok === false ? h("div", { class: "small", style: { color: "var(--bad)" } }, e.problem) : null),
           h("button", { class: "btn ghost icon sm", title: "Remove this engine", "aria-label": "Remove", onclick: () => removeEngine(e) }, icon("trash", "sm")))))
           : choice === "custom" && st.settings.engine?.custom_path
-            ? h("div", { class: "callout" }, icon("info", "sm"), h("div", null, "No prebuilt engine installed. FLE Studio uses your own build (below)."))
+            ? h("div", { class: "callout" }, icon("info", "sm"), h("div", null, "No prebuilt engine installed. FLE Link uses your own build (below)."))
             : h("div", { class: "callout" }, icon("info", "sm"), h("div", null, "No engine installed yet. Install one below or point to your own llama-server.")),
         jobs.map((j) => h("div", { class: "stack tight" },
           h("div", { class: "row small" }, h("b", null, j.title), h("span", { class: "grow" }), h("span", { class: "muted num" }, `${Math.round((j.progress || 0) * 100)} %`)),
@@ -683,7 +683,7 @@ export function mount(main) {
         h("label", { class: "field" }, h("span", null, "Your own llama-server"), h("div", { class: "row" }, custom,
           h("button", { class: "btn", onclick: check }, "Check"))),
         result,
-        h("span", { class: "small faint" }, "Any build works, upstream llama.cpp or FLE; FLE Studio reads --help to tell them apart. Choose “My own build” above to use it.")));
+        h("span", { class: "small faint" }, "Any build works, upstream llama.cpp or FLE; FLE Link reads --help to tell them apart. Choose “My own build” above to use it.")));
   }
 
   async function install(v) {
@@ -713,7 +713,7 @@ export function mount(main) {
     const st = settings();
     const e = store.engine || {};
     const systemd = !!store.state?.systemd;
-    const unit = systemd ? h("input", { class: "input mono", value: st.attach_service || "", placeholder: "rhea.service",
+    const unit = systemd ? h("input", { class: "input mono", value: st.attach_service || "", placeholder: "llama.service",
       spellcheck: false }) : null;
     const url = h("input", { class: "input mono", value: st.attach_url || "",
       placeholder: systemd ? "From the service, or http://127.0.0.1:8080" : "http://127.0.0.1:8080" });
@@ -736,9 +736,9 @@ export function mount(main) {
     clear(boxes.attach,
       h("div", { class: "card-head" }, icon("link"), h("div", null, h("h3", null, "Use a server that already runs"),
         h("p", null, systemd
-          ? "Chat with any llama.cpp or FLE server and watch its numbers. Name its systemd service as well, and FLE Studio "
+          ? "Chat with any llama.cpp or FLE server and watch its numbers. Name its systemd service as well, and FLE Link "
             + "follows the service's log and loading progress and can start, stop and restart it."
-          : "Chat with any llama.cpp or FLE server and watch its numbers. FLE Studio does not start or stop it."))),
+          : "Chat with any llama.cpp or FLE server and watch its numbers. FLE Link does not start or stop it."))),
       h("div", { class: "stack" },
         unit ? field("Service", unit, "Optional. A llama-server that runs as a systemd service; the address then comes from its command.") : null,
         field("Address", url),
