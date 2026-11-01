@@ -146,6 +146,9 @@ fn start_with(
     emit: &mut dyn FnMut(Event),
 ) -> Result<Server> {
     let parts = r.model.files.len();
+    crate::locate::adopt(r, home, &home.join("models"), &mut |s| {
+        emit(Event::Step(s.to_string()))
+    });
     for (i, x) in r.fetches().iter().enumerate() {
         let path = home.join("models").join(&x.local);
         let f = &x.file;

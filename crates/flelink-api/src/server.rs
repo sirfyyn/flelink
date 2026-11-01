@@ -1269,7 +1269,42 @@ impl Studio {
         let mut trees: std::collections::HashMap<(String, String), Vec<Value>> = Default::default();
         let mut files = vec![];
         let models = self.models_dir();
-        for x in r.fetches() {
+        // a copy already on this machine is linked, not downloaded again; Hugging Face's checksums confirm it
+        let mut wanted = r.fetches();
+        for x in wanted
+            .iter_mut()
+            .filter(|x| !models.join(&x.local).exists())
+        {
+            let tree = trees
+                .entry((x.repo.clone(), x.revision.clone()))
+                .or_insert_with(|| {
+                    crate::hf::tree(&x.repo, &x.revision, &self.hf_token()).unwrap_or_default()
+                });
+            if let Some(t) = tree
+                .iter()
+                .find(|t| t["path"].as_str() == Some(x.file.as_str()))
+            {
+                if x.sha256.is_none() {
+                    x.sha256 = t["lfs"]["oid"].as_str().map(String::from);
+                }
+                if x.size == 0 {
+                    x.size = t["size"].as_u64().unwrap_or(0);
+                }
+            }
+        }
+        let found =
+            flelink_core::locate::adopt_fetches(wanted, &self.opts.home, &models, &mut |_| {});
+        if self.recipe_on_disk(&r) {
+            return Ok(
+                json!({"id": null, "state": "done", "title": r.title, "found": found.iter()
+                .map(|(f, p)| json!({"file": f, "path": p.to_string_lossy()})).collect::<Vec<_>>()}),
+            );
+        }
+        for x in r
+            .fetches()
+            .into_iter()
+            .filter(|x| !models.join(&x.local).exists())
+        {
             let tree = trees
                 .entry((x.repo.clone(), x.revision.clone()))
                 .or_insert_with(|| {
@@ -1292,13 +1327,18 @@ impl Studio {
                 "sha256": sha.map(Value::from).unwrap_or(Value::Null)}),
             );
         }
-        Ok(self.downloads.add(
+        let mut job = self.downloads.add(
             &r.title,
             &files,
             "model",
             json!({"recipe": r.id}),
             &format!("recipe:{}", r.id),
-        ))
+        );
+        job["found"] = json!(found
+            .iter()
+            .map(|(f, p)| json!({"file": f, "path": p.to_string_lossy()}))
+            .collect::<Vec<_>>());
+        Ok(job)
     }
 
     /// The start plan for a plugin engine: its server (installed from its release the first time, which this request

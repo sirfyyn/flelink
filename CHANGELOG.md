@@ -48,6 +48,8 @@ First version of FLE Link: the layer between an inference engine and the tools t
   says `{draft}`; `{physical_cores}` is the core count without SMT; `model.save_as` stores a part under the name the
   loader expects. Built in: `deepseek-v41-ista-dspark`, DeepSeek-V4.1-Flash (ISTA IQ2_XXS) with FLE's DSpark draft model
   and the measured start command (FLE engine v1.2.1 or newer).
+- **Models already on the machine are used:** before a download, a recipe looks in the models folder, `FLE_MODEL_DIRS`, the
+  Hugging Face cache, LM Studio and Ollama for the same file (name, and SHA-256 where known) and links it instead.
 - **Engine adapters:** `fle`, `upstream` and `custom` (any llama-server-compatible binary) behind one interface.
 - **One data folder** for the terminal, the Studio and the app (`FLE Link` in the user's app data, `flelink` on Linux). A model
   `flelink ask` downloaded shows up in the Studio, and an engine is installed once. Until that folder exists, an older `FLE

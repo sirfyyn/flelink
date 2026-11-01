@@ -72,6 +72,14 @@ no absolute path), environment names are letters, digits and `_`, the context is
 keys are refused (a typo does not silently do nothing). A file that fails is skipped with the reason; `flelink recipes`
 prints it.
 
+## Models you already have
+
+Before a recipe downloads a file, FLE Link looks for it on this machine: the models folder, the folders in
+`FLE_MODEL_DIRS` (separated like PATH, e.g. `FLE_MODEL_DIRS=/mnt/models:/data/gguf`), the Hugging Face cache, LM Studio's
+folders and Ollama's blobs. A file with the same name is taken when its SHA-256 matches (from the recipe, or in the Studio
+from Hugging Face's file list); it is read once for that and remembered. Without a checksum the name (and the size, when
+known) decides. The copy is linked into the models folder, never moved or changed.
+
 ## Commands
 
 ```bash

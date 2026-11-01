@@ -99,7 +99,13 @@ export function mount(main) {
         } }, icon("play", "sm"), "Start")
       : job ? h("span", { class: "pill" }, `Downloading ${Math.round((job.progress || 0) * 100)} %`)
       : h("button", { class: "btn sm", onclick: async () => {
-          try { await post(`/api/recipes/${encodeURIComponent(r.id)}/download`, {}); emit("downloads"); toast(`Downloading ${r.title}`); }
+          try {
+            const res = await post(`/api/recipes/${encodeURIComponent(r.id)}/download`, {});
+            emit("downloads");
+            // files already on this machine are linked, not downloaded again
+            const found = res.found?.length ? ` (${res.found.length} file${res.found.length > 1 ? "s" : ""} found on this machine)` : "";
+            toast(res.state === "done" ? `${r.title} is already on this machine${found}` : `Downloading ${r.title}${found}`);
+          }
           catch (e) { toast(e.message, "bad"); }
         } }, icon("download", "sm"), r.size ? `Download ${fmt.bytes(r.size)}` : "Download");
     return h("div", { class: "card cat" },
