@@ -134,7 +134,7 @@ fn mcp_servers_become_tools() {
         Command::new("python3")
             .args(["-c", HTTP, &port.to_string()])
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(std::fs::File::create(home.0.join("http.err")).unwrap())
             .spawn()
             .unwrap(),
     );
@@ -147,7 +147,7 @@ fn mcp_servers_become_tools() {
         Command::new("python3")
             .args(["-c", OLD_SSE, &old_port.to_string()])
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(std::fs::File::create(home.0.join("sse.err")).unwrap())
             .spawn()
             .unwrap(),
     );
@@ -157,7 +157,9 @@ fn mcp_servers_become_tools() {
     {
         assert!(
             t.elapsed() < Duration::from_secs(30),
-            "the fake servers did not start"
+            "the fake servers did not start: http {:?}, sse {:?}",
+            std::fs::read_to_string(home.0.join("http.err")).unwrap_or_default(),
+            std::fs::read_to_string(home.0.join("sse.err")).unwrap_or_default()
         );
         std::thread::sleep(Duration::from_millis(50));
     }
