@@ -262,17 +262,68 @@ fn summary(tests: &[Value]) -> Value {
             json!(stats::round_to(stats::median(&vals), 2))
         }
     };
+    let mut out = json!({"decode": med("decode", &GEN_TESTS), "prefill": med("prefill", &PREFILL_TESTS),
+           "ttft_ms": med("ttft_ms", &GEN_TESTS), "accept": med("accept", &GEN_TESTS), "n": tests.len()});
+    for (k, v) in run_stats(tests).as_object().unwrap() {
+        out[k] = v.clone();
+    }
+    out
+}
+
+/// Why a measurement ended early: Cancel was pressed, or the engine failed (the message says how).
+#[derive(Debug)]
+pub enum Stop {
+    Cancelled,
+    Failed(String),
+}
+
+/// One decode and one prefill speed per run, with the median and 95 % interval (`run_stats` in bench.py).
+pub fn run_stats(tests: &[Value]) -> Value {
     let decode = per_run(tests, "decode", &GEN_TESTS);
     let prefill = per_run(tests, "prefill", &PREFILL_TESTS);
-    json!({"decode": med("decode", &GEN_TESTS), "prefill": med("prefill", &PREFILL_TESTS),
-           "ttft_ms": med("ttft_ms", &GEN_TESTS), "accept": med("accept", &GEN_TESTS), "n": tests.len(),
-           "decode_runs": decode, "prefill_runs": prefill,
+    json!({"decode_runs": decode, "prefill_runs": prefill,
            "decode_ci": stats::summarize(&decode), "prefill_ci": stats::summarize(&prefill)})
 }
 
-enum Stop {
-    Cancelled,
-    Failed(String),
+/// What the tuner and the A/B/A comparison run per measurement: no 768-token code answer, which takes the most time.
+pub fn quick_tests() -> Vec<&'static Test> {
+    TESTS.iter().filter(|t| t.name != "Code").collect()
+}
+
+/// Run `tests` `runs` times against the engine at `base`, one after the other (blocking). Used by the speed test and
+/// by the tuner and the A/B/A comparison, which restart the engine between their measurements.
+#[allow(clippy::too_many_arguments)]
+pub fn measure(
+    base: &str,
+    key: &str,
+    runs: usize,
+    tests: &[&Test],
+    cancel: &AtomicBool,
+    run_offset: usize,
+    on_step: &mut dyn FnMut(usize, &Test),
+    on_result: &mut dyn FnMut(&Value),
+) -> Result<Vec<Value>, Stop> {
+    let mut out = vec![];
+    for run in 0..runs {
+        for (i, test) in tests.iter().enumerate() {
+            if cancel.load(Ordering::SeqCst) {
+                return Err(Stop::Cancelled);
+            }
+            on_step(run, test);
+            let mut res = one(
+                base,
+                key,
+                test,
+                (1000 * (run + run_offset) + i) as u64,
+                cancel,
+            )?;
+            res["run"] = json!(run + run_offset + 1);
+            res["name"] = json!(test.name);
+            on_result(&res);
+            out.push(res);
+        }
+    }
+    Ok(out)
 }
 
 #[derive(Clone)]
@@ -373,22 +424,25 @@ impl Bench {
 
     fn run(&self, runs: usize, base: &str, key: &str) {
         let result = (|| -> Result<(), Stop> {
-            for run in 0..runs {
-                for (i, test) in TESTS.iter().enumerate() {
-                    if self.cancel.load(Ordering::SeqCst) {
-                        return Err(Stop::Cancelled);
-                    }
+            let all: Vec<&Test> = TESTS.iter().collect();
+            measure(
+                base,
+                key,
+                runs,
+                &all,
+                &self.cancel,
+                0,
+                &mut |run, test| {
                     let step = format!("Run {}/{runs}: {}", run + 1, test.name);
                     self.set(|c| c["step"] = json!(step));
-                    let mut res = self.one(base, key, test, (1000 * run + i) as u64)?;
-                    res["run"] = json!(run + 1);
-                    res["name"] = json!(test.name);
+                },
+                &mut |res| {
                     self.set(|c| {
-                        c["tests"].as_array_mut().unwrap().push(res);
+                        c["tests"].as_array_mut().unwrap().push(res.clone());
                         c["done"] = json!(c["done"].as_i64().unwrap_or(0) + 1);
-                    });
-                }
-            }
+                    })
+                },
+            )?;
             // summary and comparison first, then "done": the page reads them as soon as it sees the state change
             let (id, context, tests) = {
                 let c = self.status();
@@ -443,8 +497,11 @@ impl Bench {
             );
         }
     }
+}
 
-    fn one(&self, base: &str, key: &str, test: &Test, seed: u64) -> Result<Value, Stop> {
+/// One streamed request; the speeds come from the server's own timings.
+fn one(base: &str, key: &str, test: &Test, seed: u64, cancel: &AtomicBool) -> Result<Value, Stop> {
+    {
         let body = json!({"messages": [{"role": "user", "content": (test.prompt)()}], "max_tokens": test.max_tokens,
             "temperature": 0, "stream": true, "seed": seed, "cache_prompt": false, "timings_per_token": false});
         let agent = ureq::AgentBuilder::new()
@@ -464,7 +521,7 @@ impl Bench {
         let mut timings = json!({});
         let mut finish_reason = String::new();
         for line in std::io::BufReader::new(resp.into_reader()).lines() {
-            if self.cancel.load(Ordering::SeqCst) {
+            if cancel.load(Ordering::SeqCst) {
                 return Err(Stop::Cancelled);
             }
             let line = line.map_err(|e| Stop::Failed(e.to_string()))?;

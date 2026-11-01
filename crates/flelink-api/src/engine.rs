@@ -185,6 +185,10 @@ impl Engine {
         *self.on_load_failure.lock().unwrap() = Some(f);
     }
 
+    pub fn restart_on_crash(&self) -> bool {
+        self.st.lock().unwrap().restart_on_crash
+    }
+
     pub fn set_restart_on_crash(&self, on: bool) {
         self.st.lock().unwrap().restart_on_crash = on;
     }

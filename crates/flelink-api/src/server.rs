@@ -7,7 +7,7 @@ use crate::engines::{EngineError, Engines};
 use crate::launch::Profiles;
 use crate::library::{LibError, Library};
 use crate::live::Live;
-use crate::settings::Config;
+use crate::settings::{py_str, py_truthy, Config};
 use axum::body::{to_bytes, Body};
 use axum::extract::{ConnectInfo, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
@@ -44,6 +44,7 @@ pub struct Studio {
     pub profiles: Mutex<Profiles>,
     pub engine: Engine,
     pub bench: crate::bench::Bench,
+    pub tuner: crate::tuner::Tuner,
     pub live: Live,
     /// the server listens beyond this machine (host mode); set by the starter
     pub lan: std::sync::atomic::AtomicBool,
@@ -102,6 +103,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         lan: std::sync::atomic::AtomicBool::new(lan),
         live: Live::new(engine.clone(), 1.0),
         bench: crate::bench::Bench::new(engine.clone(), &home),
+        tuner: crate::tuner::Tuner::new(&home),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
         downloads,
@@ -1130,6 +1132,102 @@ impl Studio {
         Ok(plan)
     }
 
+    /// The model a tuning run or comparison measures: the one named, else the last one started.
+    fn tuning_model(&self, body: &Value) -> Result<String, ApiError> {
+        let ident = if py_truthy(&body["model"]) {
+            py_str(&body["model"])
+        } else {
+            self.config
+                .lock()
+                .unwrap()
+                .get("last_model")
+                .filter(|v| py_truthy(v))
+                .map(py_str)
+                .unwrap_or_default()
+        };
+        let m = self.library.lock().unwrap().get(&self.models_dir(), &ident);
+        m.map(|m| py_str(&m["id"]))
+            .ok_or_else(|| ApiError(400, "Choose a model first".into()))
+    }
+
+    fn clamp_int(v: &Value, default: i64, low: i64, high: i64) -> i64 {
+        let n = v
+            .as_i64()
+            .or_else(|| v.as_f64().map(|f| f as i64))
+            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()));
+        n.map_or(default, |n| n.clamp(low, high))
+    }
+
+    /// `GET /api/tuning`
+    pub fn tuning_state(self: &Arc<Self>, model: &str) -> Value {
+        use crate::tuner::*;
+        let best = if model.is_empty() {
+            Value::Null
+        } else {
+            Tuner::tuned_profile(self, model)
+        };
+        json!({"current": self.tuner.status(), "results": self.tuner.results(), "best": best,
+            "params": PARAM_LABELS.iter().map(|(k, l)| json!({"key": k, "label": l})).collect::<Vec<_>>(),
+            "defaults": {"params": DEFAULT_PARAMS, "runs": 3, "budget_min": 20}})
+    }
+
+    /// `POST /api/tuning/start`
+    pub fn tuning_start(self: &Arc<Self>, body: &Value) -> Result<Value, ApiError> {
+        use crate::tuner::*;
+        let model = self.tuning_model(body)?;
+        let params: Vec<String> = match body["params"].as_array().filter(|a| !a.is_empty()) {
+            Some(a) => a.iter().map(py_str).collect(),
+            None => DEFAULT_PARAMS.iter().map(|s| s.to_string()).collect(),
+        };
+        let state = self.engine.status()["state"].clone();
+        if state != "stopped" && state != "crashed" {
+            return Err(ApiError(409, "Stop the engine first: the tuner starts it itself, once for every setting it tries.".into()));
+        }
+        let profile = if py_truthy(&body["profile"]) {
+            py_str(&body["profile"])
+        } else {
+            "auto".into()
+        };
+        let screen = body.get("screen").is_none_or(py_truthy);
+        Tuner::start_tune(
+            self,
+            &model,
+            &profile,
+            Self::clamp_int(&body["budget_min"], 20, 1, 1440) * 60,
+            Self::clamp_int(&body["runs"], 3, MIN_RUNS, MAX_RUNS),
+            params,
+            screen,
+        )
+    }
+
+    /// `POST /api/tuning/aba`
+    pub fn tuning_aba(self: &Arc<Self>, body: &Value) -> Result<Value, ApiError> {
+        use crate::tuner::*;
+        let model = self.tuning_model(body)?;
+        let get = |k: &str| {
+            if py_truthy(&body[k]) {
+                py_str(&body[k])
+            } else {
+                String::new()
+            }
+        };
+        let (a, b) = (get("a"), get("b"));
+        if a.is_empty() || b.is_empty() {
+            return Err(ApiError(
+                400,
+                "Pick the two settings to compare (launch profiles, or Automatic)".into(),
+            ));
+        }
+        Tuner::start_aba(
+            self,
+            &model,
+            &a,
+            &b,
+            Self::clamp_int(&body["runs"], 3, MIN_RUNS, MAX_RUNS),
+            &get("label"),
+        )
+    }
+
     /// `POST /api/bench/start`: what is running (model, profile, engine, command, machine) goes with the result, so runs
     /// of different settings can be told apart. The knowledge probe of the Python Studio is not here yet.
     pub fn bench_start(&self, body: &Value) -> Result<Value, ApiError> {
@@ -1472,6 +1570,16 @@ fn download_action(p: &str) -> Option<(&str, &str)> {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         && matches!(what, "pause" | "resume" | "cancel" | "remove"))
     .then_some((id, what))
+}
+
+/// `<prefix><id><suffix>` -> the id when it is `[0-9a-f]+`
+fn hex_id<'a>(p: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
+    let id = p.strip_prefix(prefix)?.strip_suffix(suffix)?;
+    (!id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then_some(id)
 }
 
 /// `/api/bench/<id>/delete` -> the result id (`[0-9a-f]+`)
@@ -1881,6 +1989,28 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             st.bench.delete(bench_delete_id(p).unwrap());
             Ok(json!({"ok": true}))
         }
+        ("GET", "/api/tuning") => {
+            Ok(st.tuning_state(r.query.get("model").and_then(|v| v.as_str()).unwrap_or("")))
+        }
+        ("GET", "/api/tuning/best") => Ok(json!({"profile": crate::tuner::Tuner::tuned_profile(
+            st,
+            r.query.get("model").and_then(|v| v.as_str()).unwrap_or(""),
+        )})),
+        ("POST", "/api/tuning/start") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.tuning_start(&Value::Object(body))),
+        ("POST", "/api/tuning/aba") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.tuning_aba(&Value::Object(body))),
+        ("POST", "/api/tuning/cancel") => {
+            st.tuner.cancel();
+            Ok(json!({"ok": true}))
+        }
+        ("POST", _) if hex_id(p, "/api/tuning/", "/delete").is_some() => {
+            st.tuner
+                .delete(hex_id(p, "/api/tuning/", "/delete").unwrap());
+            Ok(json!({"ok": true}))
+        }
         ("GET", "/api/recipes") => Ok(st.recipes()),
         ("POST", _) if recipe_download_id(p).is_some() => {
             st.recipe_download(recipe_download_id(p).unwrap())
@@ -2143,8 +2273,6 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
     let is = |p: &str| path == p || path.starts_with(&format!("{p}/"));
     Some(if is("/api/forge") {
         "The model forge"
-    } else if is("/api/tuning") {
-        "The tuner"
     } else if is("/api/quality") {
         "The quality measurements"
     } else if is("/api/cache") {

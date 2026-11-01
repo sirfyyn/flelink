@@ -283,6 +283,130 @@ pub fn summarize(values: &[f64]) -> Value {
     out
 }
 
+// ------------------------------------------------------------------------------------------------ two samples
+
+fn variance(xs: &[f64]) -> f64 {
+    let m = mean(xs);
+    xs.iter().map(|x| (x - m) * (x - m)).sum::<f64>() / (xs.len() - 1) as f64
+}
+
+/// Interval of `b - a` and the method; None when a group has fewer than 2 runs.
+pub fn difference_interval(xa: &[f64], xb: &[f64], level: f64) -> Option<(f64, f64, &'static str)> {
+    if xa.len() < 2 || xb.len() < 2 {
+        return None;
+    }
+    if xa.len().min(xb.len()) >= BOOTSTRAP_MIN {
+        let mut rng = PyRandom::new(SEED);
+        let (na, nb) = (xa.len(), xb.len());
+        let mut diffs: Vec<f64> = (0..BOOTSTRAP_DRAWS)
+            .map(|_| {
+                // Python evaluates the B sample first, then A
+                let sb: Vec<f64> = (0..nb).map(|_| xb[rng.randrange(nb)]).collect();
+                let sa: Vec<f64> = (0..na).map(|_| xa[rng.randrange(na)]).collect();
+                median(&sb) - median(&sa)
+            })
+            .collect();
+        diffs.sort_by(f64::total_cmp);
+        let alpha = (1.0 - level) / 2.0;
+        let d = BOOTSTRAP_DRAWS as f64;
+        return Some((
+            diffs[(alpha * d) as usize],
+            diffs[(BOOTSTRAP_DRAWS - 1).min(((1.0 - alpha) * d) as usize)],
+            "bootstrap",
+        ));
+    }
+    let (va, vb) = (
+        variance(xa) / xa.len() as f64,
+        variance(xb) / xb.len() as f64,
+    );
+    let diff = mean(xb) - mean(xa);
+    let se = (va + vb).sqrt();
+    if se == 0.0 {
+        return Some((diff, diff, "welch"));
+    }
+    let df =
+        (va + vb).powi(2) / (va * va / (xa.len() - 1) as f64 + vb * vb / (xb.len() - 1) as f64);
+    let q = t_quantile(0.5 + level / 2.0, df);
+    Some((diff - q * se, diff + q * se, "welch"))
+}
+
+/// Is B different from A? `diff` is B - A, `pct` relative to A; "better"/"worse" only when the interval excludes 0.
+pub fn compare(a: &[f64], b: &[f64], higher_is_better: bool, min_effect_pct: f64) -> Value {
+    let xa: Vec<f64> = a.iter().copied().filter(|v| !v.is_nan()).collect();
+    let xb: Vec<f64> = b.iter().copied().filter(|v| !v.is_nan()).collect();
+    let mut out = json!({"n_a": xa.len(), "n_b": xb.len(), "a": summarize(&xa), "b": summarize(&xb), "diff": null,
+        "lo": null, "hi": null, "pct": null, "pct_lo": null, "pct_hi": null, "method": null,
+        "verdict": "not enough runs", "within_noise": null});
+    let Some((lo, hi, method)) = difference_interval(&xa, &xb, 0.95) else {
+        return out;
+    };
+    let boot = method == "bootstrap";
+    let base = if boot { median(&xa) } else { mean(&xa) };
+    let center = if boot {
+        median(&xb) - median(&xa)
+    } else {
+        mean(&xb) - mean(&xa)
+    };
+    out["diff"] = json!(round_to(center, 4));
+    out["lo"] = json!(round_to(lo, 4));
+    out["hi"] = json!(round_to(hi, 4));
+    out["method"] = json!(method);
+    if base != 0.0 {
+        out["pct"] = json!(round_to(100.0 * center / base, 2));
+        out["pct_lo"] = json!(round_to(100.0 * lo / base, 2));
+        out["pct_hi"] = json!(round_to(100.0 * hi / base, 2));
+    }
+    let excludes_zero = lo > 0.0 || hi < 0.0;
+    let big_enough =
+        base == 0.0 || (100.0 * lo / base).abs().min((100.0 * hi / base).abs()) >= min_effect_pct;
+    if excludes_zero && big_enough {
+        let up = lo > 0.0;
+        out["verdict"] = json!(if up == higher_is_better {
+            "better"
+        } else {
+            "worse"
+        });
+        out["within_noise"] = json!(false);
+    } else {
+        out["verdict"] = json!("within noise");
+        out["within_noise"] = json!(true);
+    }
+    out
+}
+
+/// A, then B, then A again: B against both A blocks pooled, with the drift between the two A blocks checked.
+pub fn aba(a1: &[f64], b: &[f64], a2: &[f64]) -> Value {
+    let pooled: Vec<f64> = a1.iter().chain(a2).copied().collect();
+    let mut main = compare(&pooled, b, true, 0.0);
+    let vs1 = compare(a1, b, true, 0.0);
+    let vs2 = compare(a2, b, true, 0.0);
+    let drift_cmp = compare(a1, a2, true, 0.0);
+    let drift = drift_cmp["within_noise"] == json!(false);
+    let mut verdict = main["verdict"].as_str().unwrap_or("").to_string();
+    let mut reason = "";
+    if verdict == "better" || verdict == "worse" {
+        let d = |v: &Value| v["diff"].as_f64().unwrap_or(0.0);
+        if d(&vs1) * d(&vs2) <= 0.0 {
+            verdict = "within noise".into();
+            reason = "B does not lie on the same side of both A blocks";
+        } else if drift && !(vs1["verdict"] == json!(verdict) && vs2["verdict"] == json!(verdict)) {
+            verdict = "within noise".into();
+            reason = "the two A blocks differ (drift), so the pooled difference is not trusted";
+        }
+    }
+    if verdict == "within noise" && main["verdict"] == "not enough runs" {
+        verdict = "not enough runs".into();
+    }
+    main["within_noise"] = json!(verdict == "within noise");
+    main["verdict"] = json!(verdict);
+    main["drift"] = json!(drift);
+    main["drift_pct"] = drift_cmp["pct"].clone();
+    main["vs_a1"] = vs1;
+    main["vs_a2"] = vs2;
+    main["reason"] = json!(reason);
+    main
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,6 +420,27 @@ mod tests {
     }
 
     const PY_RANDRANGE_10: [usize; 12] = [7, 5, 7, 5, 4, 0, 0, 5, 7, 0, 0, 5];
+
+    /// compare and aba against answers of fle_studio.stats (Python Studio 055f4aa): Welch, bootstrap, drift, too few runs
+    #[test]
+    fn comparisons_match_python() {
+        let cases: Vec<Value> = serde_json::from_str(include_str!("stats_ref.json")).unwrap();
+        let v = |x: &Value| -> Vec<f64> {
+            x.as_array()
+                .unwrap()
+                .iter()
+                .map(|n| n.as_f64().unwrap())
+                .collect()
+        };
+        for c in &cases {
+            let a = &c["args"];
+            let got = match c["fn"].as_str().unwrap() {
+                "aba" => aba(&v(&a[0]), &v(&a[1]), &v(&a[2])),
+                _ => compare(&v(&a[0]), &v(&a[1]), true, 0.0),
+            };
+            assert_eq!(got, c["out"], "{} {}", c["fn"], a);
+        }
+    }
 
     #[test]
     fn summaries_match_python() {
