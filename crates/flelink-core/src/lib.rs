@@ -13,6 +13,7 @@ pub mod download;
 pub mod engines;
 pub mod gguf;
 pub mod launch;
+pub mod locate;
 pub mod orphans;
 pub mod plan;
 pub mod plugin;
