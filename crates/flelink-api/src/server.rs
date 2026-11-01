@@ -1030,8 +1030,103 @@ impl Studio {
         ))
     }
 
+    /// The start plan for a plugin engine: its server (installed from its release the first time, which this request
+    /// waits for), then either its own start template or the automatic llama-server arguments for what that binary knows,
+    /// plus the plugin's arguments, environment and readiness path.
+    fn plugin_plan(
+        &self,
+        r: &flelink_core::recipe::Recipe,
+        e: &flelink_core::plugin::PluginEngine,
+        main: &str,
+    ) -> Result<crate::launch::Plan, ApiError> {
+        let sys = flelink_core::system::detect(&self.opts.home);
+        let server =
+            flelink_core::plugin::server(&self.opts.home, e, &sys.os, &sys.arch, &mut |_, _, _| {})
+                .map_err(|x| ApiError(409, format!("{x:#}")))?;
+        let model = self
+            .library
+            .lock()
+            .unwrap()
+            .get(&self.models_dir(), main)
+            .unwrap_or_else(|| json!({"path": main}));
+        let settings = Value::Object(self.config.lock().unwrap().data.clone());
+        let want_port = settings["launch"]
+            .get("port")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+            .clamp(0, 65535) as u16;
+        let port = crate::launch::free_port(want_port);
+        let mut plan = if e.command.is_empty() {
+            let d = self.engines.detect(&server.to_string_lossy());
+            if d["ok"] != json!(true) {
+                return Err(ApiError(
+                    409,
+                    format!(
+                        "The {} engine does not run here: {}",
+                        e.label,
+                        crate::settings::py_str(&d["problem"])
+                    ),
+                ));
+            }
+            let eng = json!({"kind": "custom", "flavor": d["flavor"], "backend": d["backend"],
+                "path": server.to_string_lossy(), "version": d["version"],
+                "log_verbosity": d["log_verbosity"], "spec_type": d["spec_type"]});
+            let info = self.sysinfo();
+            let mut p = crate::launch::auto_plan(&crate::launch::AutoInput {
+                model: &model,
+                engine: &eng,
+                settings: &settings,
+                sysinfo: &info,
+                port: i64::from(port),
+                data_dir: &self.opts.home,
+            })
+            .map_err(|x| ApiError(400, x.0))?;
+            p.args.extend(e.args.iter().cloned());
+            p
+        } else {
+            let filled = flelink_core::plugin::fill_command(
+                e,
+                &server,
+                std::path::Path::new(main),
+                "127.0.0.1",
+                port,
+                r.run.context.unwrap_or(8192),
+                &r.id,
+            );
+            let first = PathBuf::from(&filled[0]);
+            let program = if first.is_absolute() {
+                first
+            } else {
+                flelink_core::launch::which(&filled[0])
+                    .ok_or_else(|| ApiError(409, format!("{} is not on the PATH", filled[0])))?
+            };
+            crate::launch::Plan {
+                engine: "custom".into(),
+                binary: program.to_string_lossy().to_string(),
+                args: filled[1..].to_vec(),
+                env: vec![],
+                port: i64::from(port),
+                model,
+                profile: "auto".into(),
+                notes: vec![],
+                draft: None,
+                fallback: String::new(),
+                health: String::new(),
+            }
+        };
+        for (k, v) in &e.env {
+            match plan.env.iter_mut().find(|(a, _)| a == k) {
+                Some(x) => x.1 = v.clone(),
+                None => plan.env.push((k.clone(), v.clone())),
+            }
+        }
+        plan.health = e.health.clone();
+        plan.notes.push(format!("Engine {} from a plugin", e.label));
+        Ok(plan)
+    }
+
     /// `POST /api/recipes/<id>/start`: start the engine with the recipe's model and start values, and use its chat
-    /// defaults. Engines from plugins start from the terminal only (`flelink run <id>`) for now.
+    /// defaults. A recipe that prefers a plugin engine starts that engine (as `flelink run <id>` does).
     pub fn recipe_start(&self, id: &str) -> Result<Value, ApiError> {
         let r = flelink_core::recipe::find(&self.opts.home, id)
             .map_err(|e| ApiError(404, e.to_string()))?;
@@ -1043,26 +1138,45 @@ impl Studio {
         {
             return Err(ApiError(409, format!("Download {} first", r.title)));
         }
-        let builtin = ["fle", "upstream"];
-        if let Some(p) = r
-            .engine
-            .prefer
-            .iter()
-            .find(|e| !builtin.contains(&e.as_str()))
-        {
-            if r.engine.strict || r.engine.prefer.first() == Some(p) {
-                return Err(ApiError(
-                    409,
-                    format!("{} wants the {p} engine from a plugin; start it from a terminal: flelink run {}", r.title, r.id),
-                ));
-            }
-        }
         let main = self
             .recipe_file(&r, &r.model.files[0])
             .to_string_lossy()
             .to_string();
-        let mut plan = self.make_plan(&main, Some(&json!("auto")))?;
-        if r.engine.strict && !r.engine.prefer.contains(&plan.engine) {
+        // an engine a plugin brings, when the recipe prefers one and no built-in engine comes before it (as `flelink run`)
+        let builtin = ["fle", "upstream"];
+        let builtin_first = r
+            .engine
+            .prefer
+            .iter()
+            .position(|w| builtin.contains(&w.as_str()));
+        let plugin_first = r
+            .engine
+            .prefer
+            .iter()
+            .position(|w| flelink_core::plugin::engine(&self.opts.home, w).is_some());
+        let plugin = plugin_first
+            .filter(|pi| builtin_first.is_none_or(|bi| *pi < bi))
+            .and_then(|pi| flelink_core::plugin::engine(&self.opts.home, &r.engine.prefer[pi]));
+        if plugin.is_none()
+            && builtin_first.is_none()
+            && !r.engine.prefer.is_empty()
+            && r.engine.strict
+        {
+            return Err(ApiError(
+                409,
+                format!(
+                    "{} needs the {} engine from a plugin that is not installed (flelink plugins lists them)",
+                    r.title,
+                    r.engine.prefer.join(" or ")
+                ),
+            ));
+        }
+        let template = plugin.as_ref().is_some_and(|(_, e)| !e.command.is_empty());
+        let mut plan = match &plugin {
+            Some((_, e)) => self.plugin_plan(&r, e, &main)?,
+            None => self.make_plan(&main, Some(&json!("auto")))?,
+        };
+        if plugin.is_none() && r.engine.strict && !r.engine.prefer.contains(&plan.engine) {
             return Err(ApiError(
                 409,
                 format!(
@@ -1072,7 +1186,8 @@ impl Studio {
                 ),
             ));
         }
-        if let Some(c) = r.run.context {
+        // a template already carries the context in {ctx}
+        if let Some(c) = r.run.context.filter(|_| !template) {
             match plan
                 .args
                 .iter()

@@ -27,7 +27,9 @@ First version of FLE Link: the layer between an inference engine and the tools t
 - **Recipes and plugins:** a recipe (TOML) is a model with its engine, start settings and chat defaults (also started from the
   Studio's Models page), shared as a file or
   URL (`flelink recipes`, `flelink run my.recipe.toml`, docs/RECIPES.md). A plugin is a folder that brings engines (from a
-  GitHub release or your own build) and recipes (`flelink plugins`, docs/PLUGINS.md); it is data, not code.
+  GitHub release, your own build or a program on the PATH, with its own start template if it does not speak like
+  llama-server) and recipes (`flelink plugins`, docs/PLUGINS.md); it is data, not code. Recipes with a plugin engine start
+  from the terminal and from the Studio.
 - **The FLE engine updates itself:** once a day FLE Link asks for a newer FLE release and installs it next to the old one
   (`FLE_NO_UPDATE=1` turns it off). The newest installed build of an engine is the one that runs.
 - **Any GGUF from Hugging Face:** search, open a repo, see per quant whether it fits this machine, download (resumable,

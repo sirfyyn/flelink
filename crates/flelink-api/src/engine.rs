@@ -118,6 +118,8 @@ struct State {
     state: String, // stopped | starting | ready | stopping | crashed | attached
     plan: Option<(u64, Plan)>,
     base_url: String,
+    /// the readiness path of the running engine ("/health" unless a plugin engine names another)
+    health_path: String,
     api_key: String,
     reachable: bool,
     lines: VecDeque<(u64, f64, String)>,
@@ -169,6 +171,7 @@ impl Engine {
             state: "stopped".into(),
             plan: None,
             base_url: String::new(),
+            health_path: "/health".into(),
             api_key: String::new(),
             reachable: false,
             lines: VecDeque::new(),
@@ -253,6 +256,7 @@ impl Engine {
             s.state = "starting".into();
             s.phase = "Starting the engine".into();
             s.base_url = format!("http://127.0.0.1:{}", plan.port);
+            s.health_path = plan.health.clone();
             s.plan = Some((gen, plan.clone()));
             s.error.clear();
             s.hint.clear();
@@ -329,6 +333,7 @@ impl Engine {
             }
             s.state = "attached".into();
             s.base_url = url;
+            s.health_path = "/health".into();
             s.api_key = key.to_string();
             s.plan = None;
             s.error.clear();
@@ -834,9 +839,12 @@ impl Engine {
     }
 
     pub fn health(&self) -> i64 {
-        let base = self.st.lock().unwrap().base_url.clone();
+        let (base, path) = {
+            let s = self.st.lock().unwrap();
+            (s.base_url.clone(), s.health_path.clone())
+        };
         match self
-            .authed(Self::agent(2).get(&format!("{base}/health")))
+            .authed(Self::agent(2).get(&format!("{base}{path}")))
             .call()
         {
             Ok(r) => i64::from(r.status()),

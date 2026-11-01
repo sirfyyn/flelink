@@ -90,9 +90,12 @@ export function mount(main) {
     const [cls, label] = FIT[r.fit?.verdict] || ["", ""];
     const job = store.downloads.find((d) => d.meta?.recipe === r.id && !["done", "cancelled"].includes(d.state));
     const runCmd = `flelink run ${r.id}`;
-    const action = r.downloaded ? h("button", { class: "btn primary sm", onclick: async () => {
+    // a plugin engine is installed from its release the first time, which the start request waits for
+    const action = r.downloaded ? h("button", { class: "btn primary sm", onclick: async (ev) => {
+          const b = ev.currentTarget; b.disabled = true;
           try { await post(`/api/recipes/${encodeURIComponent(r.id)}/start`, {}); await refreshState(); toast(`Starting ${r.title}`); navigate("/"); }
           catch (e) { toast(e.message, "bad"); }
+          finally { b.disabled = false; }
         } }, icon("play", "sm"), "Start")
       : job ? h("span", { class: "pill" }, `Downloading ${Math.round((job.progress || 0) * 100)} %`)
       : h("button", { class: "btn sm", onclick: async () => {

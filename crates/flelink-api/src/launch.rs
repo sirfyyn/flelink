@@ -483,6 +483,8 @@ pub struct Plan {
     pub draft: Option<String>,
     /// set when this plan replaces one that failed to load or could not be built: why (it is not tried a second time)
     pub fallback: String,
+    /// the address that answers 200 once the engine is ready ("/health"; a plugin engine can name its own)
+    pub health: String,
 }
 
 impl Plan {
@@ -1025,6 +1027,7 @@ pub fn auto_plan(i: &AutoInput) -> R<Plan> {
             notes,
             draft,
             fallback: String::new(),
+            health: "/health".into(),
         },
         engine
             .get("log_verbosity")
@@ -1517,6 +1520,7 @@ pub fn profile_plan(i: &ProfileInput) -> R<Plan> {
         notes,
         draft,
         fallback: String::new(),
+        health: "/health".into(),
     };
     // For a custom profile `engine` is the check of its own binary (None if that could not run): no -lv unless known.
     let lv = i

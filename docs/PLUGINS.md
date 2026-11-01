@@ -76,6 +76,9 @@ flelink recipes           # recipes from plugins show the plugin as their source
 flelink run RECIPE        # a recipe that prefers a plugin engine installs and starts it
 ```
 
+The Studio starts such a recipe too (Models, Recipes, Start): the engine's release is installed the first time (the
+button waits for it), then the Engine page shows the plugin engine like any other, with its log and its readiness path.
+
 ## Not yet
 
 A Studio page per plugin and routes under `/api/p/<id>/` (the Python Studio had them as Python code) need a sandboxed
