@@ -21,11 +21,17 @@ for line in sys.stdin:
               "properties": {"a": {"type": "number"}, "b": {"type": "number"}}, "required": ["a", "b"]}},
              {"name": "pid", "description": "The process id"},
              {"name": "quit", "description": "Exit"},
-             {"name": "app_only", "description": "x", "_meta": {"ui": {"visibility": ["app"]}}}]}
+             {"name": "app_only", "description": "x", "_meta": {"ui": {"visibility": ["app"]}}},
+             {"name": "chart", "description": "A chart", "_meta": {"ui": {"resourceUri": "ui://calc/chart"}}}]}
+    elif meth == "resources/read":
+        r = {"contents": [{"uri": p["uri"], "mimeType": "text/html;profile=mcp-app", "text": "<p>chart</p>",
+              "_meta": {"ui": {"csp": {"connectDomains": ["https://api.example.com", "https://x;y"]}, "prefersBorder": True}}}]}
     elif meth == "tools/call":
         a = p["arguments"]
         if p["name"] == "add":
             r = {"content": [{"type": "text", "text": str(a["a"] + a["b"])}]}
+        elif p["name"] in ("chart", "app_only"):
+            r = {"content": [{"type": "text", "text": p["name"] + " done"}], "structuredContent": {"points": [1, 2]}}
         elif p["name"] == "quit":
             sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": {"content": [{"type": "text", "text": "bye"}]}}) + "\n"); sys.stdout.flush()
             sys.exit(0)
@@ -214,7 +220,7 @@ fn mcp_servers_become_tools() {
     };
     assert_eq!(server("calc")["status"], "ready", "{tools}");
     assert_eq!(server("calc")["info"], "calc");
-    assert_eq!(server("calc")["tools"], 4);
+    assert_eq!(server("calc")["tools"], 5);
     assert_eq!(server("remote")["status"], "ready", "{tools}");
     assert_eq!(server("remote")["trusted"], true);
     assert_eq!(server("locked")["status"], "auth_required");
@@ -276,6 +282,68 @@ fn mcp_servers_become_tools() {
     assert_eq!(c, 200, "{v}");
     assert_eq!(v["content"], "echo: hi");
 
+    // an MCP App: the tool's result carries the whole result for the app, the frame serves its document under its own
+    // policy, and the app may call only its own server's app tools, with the same approval as the model
+    let (_, v) = call(
+        "POST",
+        "api/tools/call",
+        json!({"name": "calc__chart", "approved": true}),
+    );
+    assert_eq!(v["content"], "chart done");
+    assert_eq!(v["app"]["uri"], "ui://calc/chart");
+    assert_eq!(
+        v["app"]["result"]["structuredContent"]["points"],
+        json!([1, 2])
+    );
+    let (c, app) = call("POST", "api/apps/prepare", json!({"name": "calc__chart"}));
+    assert_eq!(c, 200, "{app}");
+    assert_eq!(app["prefers_border"], true);
+    assert_eq!(app["trusted"], false);
+    let frame = agent
+        .get(&format!(
+            "{}{}",
+            s.url,
+            app["url"].as_str().unwrap().trim_start_matches('/')
+        ))
+        .call()
+        .unwrap();
+    let csp = frame.header("Content-Security-Policy").unwrap().to_string();
+    assert!(
+        csp.contains("connect-src https://api.example.com;") && !csp.contains("x;y"),
+        "{csp}"
+    );
+    assert!(
+        csp.contains("frame-src 'none'") && csp.contains("default-src 'none'"),
+        "{csp}"
+    );
+    assert_eq!(frame.into_string().unwrap(), "<p>chart</p>");
+    let f = app["frame"].clone();
+    let (c, _) = call(
+        "POST",
+        "api/apps/call",
+        json!({"frame": f, "name": "app_only"}),
+    );
+    assert_eq!(c, 409);
+    let (c, v) = call(
+        "POST",
+        "api/apps/call",
+        json!({"frame": f, "name": "app_only", "approved": true}),
+    );
+    assert_eq!(c, 200);
+    assert_eq!(v["result"]["content"][0]["text"], "app_only done");
+    let (c, _) = call(
+        "POST",
+        "api/apps/call",
+        json!({"frame": f, "name": "nope", "approved": true}),
+    );
+    assert_eq!(c, 404, "a tool the server does not have");
+    let (c, _) = call("POST", "api/apps/prepare", json!({"name": "calc__add"}));
+    assert_eq!(c, 404);
+    assert!(agent
+        .get(&format!("{}app-frame/{}", s.url, "x".repeat(24)))
+        .call()
+        .is_err());
+
     // the older HTTP+SSE server, reached after the POST to its address was refused
     let (_, v) = call(
         "POST",
@@ -311,7 +379,7 @@ fn mcp_servers_become_tools() {
     let known: Value =
         serde_json::from_str(&std::fs::read_to_string(home.0.join("mcp-tools.json")).unwrap())
             .unwrap();
-    assert_eq!(known["calc"]["tools"].as_array().unwrap().len(), 4);
+    assert_eq!(known["calc"]["tools"].as_array().unwrap().len(), 5);
 
     // turning MCP off ends the servers
     call(

@@ -1,6 +1,6 @@
 //! A small MCP client (Model Context Protocol): the servers named in the tool settings become tools in the chat. Port of
-//! `fle_studio/mcp.py`: stdio, Streamable HTTP and the older HTTP+SSE revision, with the OAuth sign-in (`oauth.rs`); MCP
-//! Apps come later.
+//! `fle_studio/mcp.py`: stdio, Streamable HTTP and the older HTTP+SSE revision, the OAuth sign-in (`oauth.rs`) and MCP
+//! Apps (`ui://` views in a frame of their own).
 //!
 //! Servers are written in the usual `mcpServers` JSON (`tools::parse_servers`):
 //!
@@ -31,6 +31,9 @@ pub const PROTOCOL: &str = "2025-11-25";
 /// a first `npx -y …` may have to download the server
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(90);
 pub const MAX_RESULT_CHARS: usize = 60_000;
+pub const UI_EXTENSION: &str = "io.modelcontextprotocol/ui";
+pub const UI_MIME: &str = "text/html;profile=mcp-app";
+const MAX_APP_BYTES: usize = 4_000_000;
 
 /// A server could not be reached or answered with an error; `status` is the HTTP status when there was one.
 #[derive(Debug, Clone)]
@@ -1011,7 +1014,7 @@ impl McpServer {
     fn handshake(&self, t: &Arc<dyn Transport>) -> R<()> {
         let result = t.request(
             "initialize",
-            json!({"protocolVersion": PROTOCOL, "capabilities": {},
+            json!({"protocolVersion": PROTOCOL, "capabilities": {"extensions": {UI_EXTENSION: {"mimeTypes": [UI_MIME]}}},
                 "clientInfo": {"name": "flelink", "version": env!("CARGO_PKG_VERSION")}}),
             CONNECT_TIMEOUT,
         )?;
@@ -1188,6 +1191,60 @@ impl McpServer {
         })
     }
 
+    /// A `ui://` resource for MCP Apps: {html, mime, meta}. Anything else is refused.
+    pub fn read_resource(&self, uri: &str) -> R<Value> {
+        if !uri.starts_with("ui://") {
+            return Err(McpError::new("Only ui:// resources can be shown as apps"));
+        }
+        let t = self.ready_transport()?;
+        let result = t.request(
+            "resources/read",
+            json!({"uri": uri}),
+            Duration::from_secs(30),
+        )?;
+        let Some(item) = result["contents"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|c| c.is_object() && c.get("uri").is_none_or(|u| u == uri))
+        else {
+            return Err(McpError::new(format!(
+                "The server returned nothing for {uri}"
+            )));
+        };
+        let mime = item["mimeType"].as_str().unwrap_or("");
+        if mime.replace(' ', "").to_lowercase() != UI_MIME {
+            return Err(McpError::new(format!(
+                "{uri} is {}, not {UI_MIME}",
+                if mime.is_empty() { "untyped" } else { mime }
+            )));
+        }
+        let html = if let Some(t) = item["text"].as_str() {
+            t.to_string()
+        } else if let Some(b) = item["blob"].as_str() {
+            use base64::Engine as _;
+            base64::engine::general_purpose::STANDARD
+                .decode(b.trim())
+                .ok()
+                .and_then(|b| String::from_utf8(b).ok())
+                .ok_or_else(|| McpError::new(format!("{uri} is not valid text")))?
+        } else {
+            return Err(McpError::new(format!("{uri} has no content")));
+        };
+        if html.len() > MAX_APP_BYTES {
+            return Err(McpError::new(format!(
+                "{uri} is larger than {} MB",
+                MAX_APP_BYTES / 1_000_000
+            )));
+        }
+        let meta = item
+            .get("_meta")
+            .filter(|m| m.is_object())
+            .cloned()
+            .unwrap_or(json!({}));
+        Ok(json!({"html": html, "mime": UI_MIME, "meta": meta}))
+    }
+
     pub fn close(&self) {
         if let Some(t) = self.transport.lock().unwrap().take() {
             t.close();
@@ -1362,9 +1419,106 @@ pub fn tool_ui_uri(t: &Value) -> String {
     .to_string()
 }
 
+/// A CallToolResult for an app, kept to a size the page can handle.
+fn app_result(raw: Value) -> Value {
+    if raw.to_string().len() <= 2_000_000 {
+        return raw;
+    }
+    json!({"content": [{"type": "text", "text": "[the result was too large to hand to the app]"}], "isError": true})
+}
+
+// ------------------------------------------------------------------------------------------------ app frames
+
+/// The entries of a CSP domain list that are plain origins; anything else (quotes, semicolons, `*`) is dropped.
+fn origins(value: &Value) -> Vec<String> {
+    let re = regex::Regex::new(
+        r"^(?:(?:https|wss)://(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::\d{1,5})?|(?:http|ws)://(?:127\.0\.0\.1|localhost)(?::\d{1,5})?)$",
+    )
+    .unwrap();
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|v| re.is_match(v))
+        .take(30)
+        .map(String::from)
+        .collect()
+}
+
+/// The Content-Security-Policy of an app's document, from `_meta.ui.csp` of its resource. Without metadata the app may run
+/// its own inline scripts and styles and show `data:` images and media, and nothing else: no network, no frames, no forms.
+pub fn frame_csp(meta: &Value) -> String {
+    let csp = &meta["ui"]["csp"];
+    let resources = origins(&csp["resourceDomains"]).join(" ");
+    let or_none = |k: &str| {
+        let v = origins(&csp[k]).join(" ");
+        if v.is_empty() {
+            "'none'".to_string()
+        } else {
+            v
+        }
+    };
+    let with = |head: &str| format!("{head} {resources}").trim().to_string();
+    [
+        "default-src 'none'".to_string(),
+        with("script-src 'unsafe-inline'"),
+        with("style-src 'unsafe-inline'"),
+        with("img-src data:"),
+        with("font-src data:"),
+        with("media-src data:"),
+        format!("connect-src {}", or_none("connectDomains")),
+        format!("frame-src {}", or_none("frameDomains")),
+        format!("base-uri {}", or_none("baseUriDomains")),
+        "object-src 'none'".to_string(),
+        "form-action 'none'".to_string(),
+        "frame-ancestors 'self'".to_string(),
+    ]
+    .join("; ")
+}
+
+const FRAME_LIMIT: usize = 64;
+const FRAME_SECONDS: f64 = 6.0 * 3600.0;
+
+/// The app documents handed out, by a random id: what `/app-frame/<id>` serves and whom its calls may reach.
+#[derive(Default)]
+pub struct Frames {
+    frames: Mutex<HashMap<String, (f64, Value)>>,
+}
+
+impl Frames {
+    pub fn add(&self, record: Value) -> String {
+        use base64::Engine as _;
+        let mut b = [0u8; 24];
+        getrandom::getrandom(&mut b).expect("random bytes");
+        let id = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        let mut f = self.frames.lock().unwrap();
+        f.retain(|_, (at, _)| now - *at <= FRAME_SECONDS);
+        while f.len() >= FRAME_LIMIT {
+            let oldest = f
+                .iter()
+                .min_by(|a, b| a.1 .0.total_cmp(&b.1 .0))
+                .map(|(k, _)| k.clone())
+                .unwrap();
+            f.remove(&oldest);
+        }
+        f.insert(id.clone(), (now, record));
+        id
+    }
+
+    pub fn get(&self, id: &str) -> Option<Value> {
+        self.frames.lock().unwrap().get(id).map(|(_, r)| r.clone())
+    }
+}
+
 /// The tools that are on right now: the built-in ones and those of the MCP servers, read from the settings every time.
 pub struct ToolBox {
     pub mcp: McpManager,
+    pub frames: Frames,
     pub oauth: Arc<crate::oauth::OAuthManager>,
     known: Mutex<Map<String, Value>>,
     known_file: PathBuf,
@@ -1391,6 +1545,7 @@ impl ToolBox {
                 oauth: Some(oauth.clone()),
             },
             oauth,
+            frames: Frames::default(),
             known: Mutex::new(known),
             known_file,
         }
@@ -1612,6 +1767,7 @@ impl ToolBox {
             );
         }
         let t0 = Instant::now();
+        let mut app: Option<Value> = None;
         let (content, is_error) = if tool.source == "mcp" {
             match self.mcp.get(&tool.server) {
                 None => (
@@ -1619,7 +1775,16 @@ impl ToolBox {
                     true,
                 ),
                 Some(sv) => match sv.call_raw(&tool.remote_name, &args) {
-                    Ok(raw) => result_text(&raw),
+                    Ok(raw) => {
+                        // the app gets the whole result (structuredContent, _meta), not the model's text
+                        if !tool.ui.is_empty() {
+                            app = Some(
+                                json!({"server": tool.server, "uri": tool.ui, "tool": tool.remote_name,
+                                "result": app_result(raw.clone())}),
+                            );
+                        }
+                        result_text(&raw)
+                    }
                     Err(e) => (e.message, true),
                 },
             }
@@ -1629,7 +1794,53 @@ impl ToolBox {
                 Err(e) => (e.0, true),
             }
         };
-        Ok(json!({"content": content, "is_error": is_error, "ms": t0.elapsed().as_millis() as i64}))
+        let mut out = json!({"content": content, "is_error": is_error, "ms": t0.elapsed().as_millis() as i64});
+        if let Some(a) = app {
+            out["app"] = a;
+        }
+        Ok(out)
+    }
+
+    /// The server's tool description when an app may call it (its visibility holds "app").
+    pub fn app_tool(&self, server: &str, remote: &str) -> Option<Value> {
+        let sv = self.mcp.get(server)?;
+        let st = sv.state();
+        if st.status != "ready" {
+            return None;
+        }
+        st.tools
+            .into_iter()
+            .find(|t| t["name"] == remote && tool_visibility(t).iter().any(|v| v == "app"))
+    }
+
+    /// A tools/call made by an MCP App: only to its own server, only tools meant for apps, and with the same confirmation
+    /// as the model's calls (unless the server is trusted).
+    pub fn app_call(
+        &self,
+        s: &Value,
+        server: &str,
+        remote: &str,
+        args: &Value,
+        approved: bool,
+    ) -> Result<Value, CallRefused> {
+        self.app_tool(server, remote).ok_or(CallRefused::Unknown)?;
+        if !Self::trusted(s).iter().any(|t| t == server) && !approved {
+            return Err(CallRefused::NeedsApproval);
+        }
+        let args = if args.is_object() {
+            args.clone()
+        } else {
+            json!({})
+        };
+        let sv = self.mcp.get(server).ok_or(CallRefused::Unknown)?;
+        Ok(match sv.call_raw(remote, &args) {
+            Ok(raw) => app_result(raw),
+            Err(e) => json!({"content": [{"type": "text", "text": e.message}], "isError": true}),
+        })
+    }
+
+    pub fn is_trusted(s: &Value, server: &str) -> bool {
+        Self::trusted(s).iter().any(|t| t == server)
     }
 
     fn remote_server(&self, name: &str) -> Option<Arc<McpServer>> {
@@ -1675,6 +1886,32 @@ impl ToolBox {
             .sign_out(name, server.spec["url"].as_str().unwrap_or(""));
         self.mcp.reconnect(Some(name));
         Some(removed)
+    }
+
+    /// `POST /api/apps/prepare`: read the tool's ui:// resource and hand out a frame for it.
+    pub fn prepare_app(&self, s: &Value, name: &str) -> Result<Value, (u16, String)> {
+        let Some(tool) = self
+            .tools(s)
+            .into_iter()
+            .find(|t| t.name == name && t.source == "mcp" && !t.ui.is_empty())
+        else {
+            return Err((404, "That tool has no app.".into()));
+        };
+        let sv = self
+            .mcp
+            .get(&tool.server)
+            .ok_or((404, "That tool's server is not connected.".to_string()))?;
+        let res = sv.read_resource(&tool.ui).map_err(|e| (502, e.message))?;
+        let meta = &res["meta"];
+        let frame = self.frames.add(
+            json!({"html": res["html"], "csp": frame_csp(meta), "server": tool.server,
+            "uri": tool.ui, "tool": tool.remote_name, "wire_name": tool.name}),
+        );
+        Ok(
+            json!({"frame": frame, "url": format!("/app-frame/{frame}"), "server": tool.server, "tool": tool.remote_name,
+            "uri": tool.ui, "prefers_border": meta["ui"]["prefersBorder"].as_bool().map_or(Value::Null, Value::Bool),
+            "trusted": Self::is_trusted(s, &tool.server)}),
+        )
     }
 
     /// `POST /api/tools/reload`: connect every server again.

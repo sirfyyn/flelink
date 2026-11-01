@@ -1999,6 +1999,37 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .and_then(|l| l.parse().ok());
             Ok(st.cache.snapshot(layer))
         }
+        ("POST", "/api/apps/prepare") => r.json(MAX_JSON).and_then(|body| {
+            let name = body.get("name").map(py_str).unwrap_or_default();
+            st.toolbox
+                .prepare_app(&st.tool_settings(), &name)
+                .map_err(|(c, m)| ApiError(c, m))
+        }),
+        ("POST", "/api/apps/call") => r.json(MAX_JSON).and_then(|body| {
+            let frame = body.get("frame").map(py_str).unwrap_or_default();
+            let rec = st.toolbox.frames.get(&frame).ok_or_else(|| {
+                ApiError(404, "This app is no longer available. Run the tool again.".into())
+            })?;
+            let name = body.get("name").map(py_str).unwrap_or_default();
+            let args = body.get("arguments").cloned().unwrap_or(json!({}));
+            let approved = body.get("approved") == Some(&json!(true));
+            match st.toolbox.app_call(
+                &st.tool_settings(),
+                rec["server"].as_str().unwrap_or(""),
+                &name,
+                &args,
+                approved,
+            ) {
+                Ok(result) => Ok(json!({"result": result})),
+                Err(crate::mcp::CallRefused::NeedsApproval) => {
+                    Err(ApiError(409, "This tool needs your approval first.".into()))
+                }
+                Err(crate::mcp::CallRefused::Unknown) => Err(ApiError(
+                    404,
+                    "That tool is not available to this app (the server it came from may have gone).".into(),
+                )),
+            }
+        }),
         ("POST", "/api/mcp/signin") => r.json(MAX_JSON).and_then(|body| {
             let name = body.get("server").map(py_str).unwrap_or_default();
             let port = st.port.load(std::sync::atomic::Ordering::SeqCst);
@@ -2185,6 +2216,11 @@ async fn handler(
     if path == "/login" {
         return login(&st, &parts.method, body, head).await;
     }
+    if let Some(frame) = path.strip_prefix("/app-frame/") {
+        if matches!(parts.method, Method::GET | Method::HEAD) {
+            return app_frame(&st, frame, head);
+        }
+    }
     if path == "/oauth/callback" && matches!(parts.method, Method::GET | Method::HEAD) {
         let q = query_of(parts.uri.query());
         let st2 = st.clone();
@@ -2237,6 +2273,38 @@ async fn handler(
             None => error_json(404, "Not found", head),
         },
     }
+}
+
+/// `/app-frame/<id>`: an MCP App's document, under the policy its resource asked for.
+fn app_frame(st: &Ctx, frame: &str, head: bool) -> Response<Body> {
+    let ok = (20..=64).contains(&frame.len())
+        && frame
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+    let Some(rec) = st.toolbox.frames.get(frame).filter(|_| ok) else {
+        return error_json(
+            404,
+            "This app is no longer available. Run the tool again.",
+            head,
+        );
+    };
+    send(
+        200,
+        rec["html"].as_str().unwrap_or("").as_bytes().to_vec(),
+        "text/html; charset=utf-8",
+        &[
+            (
+                "Content-Security-Policy",
+                rec["csp"].as_str().unwrap_or("default-src 'none'"),
+            ),
+            (
+                "Permissions-Policy",
+                "camera=(), microphone=(), geolocation=(), payment=(), usb=(), clipboard-write=()",
+            ),
+            ("Cross-Origin-Resource-Policy", "same-origin"),
+        ],
+        head,
+    )
 }
 
 const CALLBACK_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><title>FLE Link</title>
@@ -2347,8 +2415,6 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
         "The model forge"
     } else if is("/api/quality") {
         "The quality measurements"
-    } else if is("/api/apps") || is("/app-frame") {
-        "MCP Apps"
     } else if is("/api/remote") || is("/h") || is("/api/hosts") {
         "Remote access"
     } else if is("/api/update") {

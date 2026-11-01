@@ -22,7 +22,8 @@ First version of FLE Link: the layer between an inference engine and the tools t
   appear as `server__tool`, ask before each call unless the server is trusted, and the last tool list is remembered so the
   prompt stays the same while a server starts. Servers of the older HTTP+SSE revision are found by themselves. **Sign
   in** to remote servers that want it (OAuth with PKCE, discovery and client registration; tokens in `<data>/oauth/`, mode
-  0600, refreshed by themselves). MCP Apps follow.
+  0600, refreshed by themselves). **MCP Apps:** a tool with a `ui://` view shows it in the chat, in a frame under the
+  policy its resource asks for; the app may call only its own server's tools, with the same approval as the model.
 - **Desktop app** (Tauri 2, `app/`): the same server inside the app on a free loopback port; closing the window stops the
   server and the model. On Windows the engine ends with the app, also after a crash.
 - **Host mode:** `flelink studio --host 0.0.0.0` for another machine to look at: access key, https with a certificate of its
