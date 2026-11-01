@@ -1030,6 +1030,99 @@ impl Studio {
         ))
     }
 
+    /// `POST /api/recipes/<id>/start`: start the engine with the recipe's model and start values, and use its chat
+    /// defaults. Engines from plugins start from the terminal only (`flelink run <id>`) for now.
+    pub fn recipe_start(&self, id: &str) -> Result<Value, ApiError> {
+        let r = flelink_core::recipe::find(&self.opts.home, id)
+            .map_err(|e| ApiError(404, e.to_string()))?;
+        if !r
+            .model
+            .files
+            .iter()
+            .all(|f| self.recipe_file(&r, f).exists())
+        {
+            return Err(ApiError(409, format!("Download {} first", r.title)));
+        }
+        let builtin = ["fle", "upstream"];
+        if let Some(p) = r
+            .engine
+            .prefer
+            .iter()
+            .find(|e| !builtin.contains(&e.as_str()))
+        {
+            if r.engine.strict || r.engine.prefer.first() == Some(p) {
+                return Err(ApiError(
+                    409,
+                    format!("{} wants the {p} engine from a plugin; start it from a terminal: flelink run {}", r.title, r.id),
+                ));
+            }
+        }
+        let main = self
+            .recipe_file(&r, &r.model.files[0])
+            .to_string_lossy()
+            .to_string();
+        let mut plan = self.make_plan(&main, Some(&json!("auto")))?;
+        if r.engine.strict && !r.engine.prefer.contains(&plan.engine) {
+            return Err(ApiError(
+                409,
+                format!(
+                    "{} needs the {} engine; install it on the Engine page",
+                    r.title,
+                    r.engine.prefer.join(" or ")
+                ),
+            ));
+        }
+        if let Some(c) = r.run.context {
+            match plan
+                .args
+                .iter()
+                .position(|a| a == "-c" || a == "--ctx-size")
+            {
+                Some(i) if i + 1 < plan.args.len() => plan.args[i + 1] = c.to_string(),
+                _ => plan.args.extend(["-c".to_string(), c.to_string()]),
+            }
+        }
+        plan.args.extend(r.run.args.iter().cloned());
+        for (k, v) in &r.run.env {
+            match plan.env.iter_mut().find(|(a, _)| a == k) {
+                Some(e) => e.1 = v.clone(),
+                None => plan.env.push((k.clone(), v.clone())),
+            }
+        }
+        plan.notes.push(format!("Recipe {}", r.id));
+        self.engine.start(plan).map_err(engine_err)?;
+        // the recipe's chat defaults become the chat settings; what it does not say stays as it was
+        let mut chat = serde_json::Map::new();
+        if let Some(t) = r.chat.thinking {
+            chat.insert("thinking".into(), json!(t));
+        }
+        if !r.chat.system.is_empty() {
+            chat.insert("system_prompt".into(), json!(r.chat.system));
+        }
+        if r.chat.temperature.is_some() || r.chat.top_p.is_some() {
+            chat.insert("sampling".into(), json!("custom"));
+            if let Some(t) = r.chat.temperature {
+                chat.insert("temperature".into(), json!(t));
+            }
+            if let Some(p) = r.chat.top_p {
+                chat.insert("top_p".into(), json!(p));
+            }
+        }
+        let mut patch = json!({"last_model": main, "launch": {"profile": "auto"}});
+        if !chat.is_empty() {
+            patch["chat"] = Value::Object(chat);
+        }
+        if let Some(t) = r.chat.tools {
+            patch["tools"] = json!({"enabled": t});
+        }
+        self.config
+            .lock()
+            .unwrap()
+            .update(patch.as_object().unwrap())
+            .map_err(|e| ApiError(400, e))?;
+        Ok(self.engine.status())
+    }
+
     fn hf_token(&self) -> String {
         self.config
             .lock()
@@ -1195,6 +1288,16 @@ fn download_action(p: &str) -> Option<(&str, &str)> {
 /// `/api/recipes/<id>/download` -> the recipe id (`[\w.-]+`)
 fn recipe_download_id(p: &str) -> Option<&str> {
     let id = p.strip_prefix("/api/recipes/")?.strip_suffix("/download")?;
+    (!id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')))
+    .then_some(id)
+}
+
+/// `/api/recipes/<id>/start` -> the recipe id (`[\w.-]+`)
+fn recipe_start_id(p: &str) -> Option<&str> {
+    let id = p.strip_prefix("/api/recipes/")?.strip_suffix("/start")?;
     (!id.is_empty()
         && id
             .chars()
@@ -1568,6 +1671,7 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
         ("POST", _) if recipe_download_id(p).is_some() => {
             st.recipe_download(recipe_download_id(p).unwrap())
         }
+        ("POST", _) if recipe_start_id(p).is_some() => st.recipe_start(recipe_start_id(p).unwrap()),
         ("GET", "/api/hf/search") => {
             st.hf_search(r.query.get("q").and_then(|v| v.as_str()).unwrap_or(""))
         }
