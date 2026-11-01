@@ -30,6 +30,11 @@ pub fn data_dir() -> PathBuf {
 
 /// The address other machines on the network reach this one by: the source address of the default route.
 /// Connecting a UDP socket sends nothing; it only makes the system pick the outgoing interface.
+/// This machine's address on the local network, as text (for the host's address hints).
+pub fn lan_ip_string() -> Option<String> {
+    lan_address().map(|a| a.to_string())
+}
+
 fn lan_address() -> Option<std::net::IpAddr> {
     let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
     s.connect("192.0.2.1:9").ok()?;
@@ -180,6 +185,11 @@ pub fn run(o: RunOptions) -> i32 {
                 Err(e) => return Err(format!("could not set up TLS: {e}")),
             }
         };
+        if let Some(i) = &identity {
+            *st.tls_fingerprint.lock().unwrap() = crate::remote::normalize_fp(&i.fingerprint);
+        }
+        *st.listen.lock().unwrap() =
+            serde_json::json!({"host": host, "port": actual, "tls": identity.is_some()});
         let scheme = if identity.is_some() { "https" } else { "http" };
         let url = format!("{scheme}://127.0.0.1:{actual}/");
         println!("FLE Link {} — {url}", env!("CARGO_PKG_VERSION"));
@@ -295,6 +305,7 @@ pub fn run(o: RunOptions) -> i32 {
         println!("Stopping FLE Link …");
         st.engine.shutdown();
         st.toolbox.mcp.close_all();
+        st.hosts.shutdown();
         Ok(())
     });
     match result {
@@ -381,6 +392,7 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
             .await;
             st.engine.shutdown();
             st.toolbox.mcp.close_all();
+            st.hosts.shutdown();
         });
     });
     match ready_rx.recv_timeout(Duration::from_secs(15)) {

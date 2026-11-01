@@ -29,6 +29,11 @@ First version of FLE Link: the layer between an inference engine and the tools t
   plain text and, for the file the installer put in place, updates in one click: archive checked against the release's
   SHA-256, the new program beside the old one, the same arguments again. The app, a cargo install, a source build or a
   system folder get the command or page that fits. Turn it off in Settings.
+- **Remote access:** one FLE Link computes for another. The host shows a pairing code (Settings or `flelink pair-code`,
+  10 minutes, one use); the client proves it with an HMAC bound to the certificate it pinned and gets a token of its own.
+  Rights per client (chat, look and measure; admin for changes, installs confirmed on the client), revoke any time. Hosts
+  by address (pinned TLS) or SSH target (`ssh -N -L`, keys only, kept alive); everything under `/h/<host>/` is passed on,
+  streams included; a mirrored host shows its chats offline.
 - **Desktop app** (Tauri 2, `app/`): the same server inside the app on a free loopback port; closing the window stops the
   server and the model. On Windows the engine ends with the app, also after a crash.
 - **Host mode:** `flelink studio --host 0.0.0.0` for another machine to look at: access key, https with a certificate of its

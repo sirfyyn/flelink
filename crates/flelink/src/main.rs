@@ -102,6 +102,8 @@ enum Cmd {
         #[arg(long, value_name = "DIR", hide = true)]
         web_dir: Option<std::path::PathBuf>,
     },
+    /// A pairing code for another FLE Link (valid 10 minutes, one use); the host side of Remote access
+    PairCode,
     /// Show the llama-server command and the numbers behind it
     Plan(Box<plancmd::PlanArgs>),
     /// Check model, engine, memory, disk and the command that would start
@@ -490,6 +492,15 @@ fn run() -> Result<()> {
             attach: attach.unwrap_or_default(),
             web_dir,
         })),
+        Some(Cmd::PairCode) => {
+            let c = flelink_api::remote::Clients::new(&home).new_code();
+            println!(
+                "Pairing code: {}  (valid for 10 minutes, one use)",
+                c["pretty"].as_str().unwrap_or("")
+            );
+            println!("On the other machine: Settings → Remote access → Add host, with this machine's address and the code.");
+            Ok(())
+        }
         Some(Cmd::Plan(a)) => plancmd::run(*a, &home),
         Some(Cmd::System) => {
             let s = system::detect(&home);

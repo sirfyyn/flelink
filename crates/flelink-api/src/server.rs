@@ -47,6 +47,12 @@ pub struct Studio {
     pub tuner: crate::tuner::Tuner,
     pub quality: crate::quality::Quality,
     pub updates: crate::updates::Updates,
+    pub clients: crate::remote::Clients,
+    pub hosts: crate::remote::Hosts,
+    /// the TLS certificate's fingerprint (64 hex digits) when this server speaks https; what clients pin
+    pub tls_fingerprint: Mutex<String>,
+    /// where this server listens: {host, port, tls}
+    pub listen: Mutex<Value>,
     pub cache: Arc<crate::cachewatch::CacheWatch>,
     pub toolbox: crate::mcp::ToolBox,
     /// the port this server listens on (for the sign-in's loopback redirect); set when it starts serving
@@ -118,6 +124,10 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         tuner: crate::tuner::Tuner::new(&home),
         quality: crate::quality::Quality::new(&home),
         updates: crate::updates::Updates::new(&home, &github_api),
+        clients: crate::remote::Clients::new(&home),
+        hosts: crate::remote::Hosts::new(&home),
+        tls_fingerprint: Mutex::new(String::new()),
+        listen: Mutex::new(json!({})),
         cache,
         toolbox: crate::mcp::ToolBox::new(&home),
         port: std::sync::atomic::AtomicU16::new(0),
@@ -351,6 +361,25 @@ fn guard(
     if path == "/login" || path == "/api/remote/pair" {
         return None;
     }
+    if let Some(tok) = bearer(headers).filter(|t| t.starts_with(crate::remote::TOKEN_PREFIX)) {
+        let Some(client) = st.clients.find(&tok, &peer.ip().to_string()) else {
+            return Some(send_json(
+                401,
+                &json!({"error": {"message": "This client is not paired with this host (any more).", "code": "unpaired"}}),
+                head,
+            ));
+        };
+        let confirmed = headers.get("x-fle-confirm").and_then(|v| v.to_str().ok()) == Some("1");
+        return crate::remote::check_rights(&client, method.as_str(), path, confirmed).map(
+            |(status, message, code)| {
+                let mut err = json!({"message": message, "code": code});
+                if status == 428 {
+                    err["confirm"] = json!(true);
+                }
+                send_json(status, &json!({"error": err}), head)
+            },
+        );
+    }
     if !authed(st, headers, peer) {
         if path.starts_with("/api/") || path.starts_with("/v1/") {
             return Some(error_json_auth(head));
@@ -411,6 +440,15 @@ fn guard(
     None
 }
 
+/// The token of an `Authorization: Bearer …` header.
+fn bearer(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t.trim().to_string())
+}
+
 fn error_json_auth(head: bool) -> Response<Body> {
     send_json(
         401,
@@ -430,6 +468,10 @@ fn query_of(q: Option<&str>) -> Map<String, Value> {
 }
 
 pub struct Req {
+    /// the address the request came from
+    pub peer: String,
+    /// the paired client a `Bearer fcl_…` token belongs to (null for everything else)
+    pub client: Value,
     pub method: Method,
     pub path: String,
     pub query: Map<String, Value>,
@@ -1187,6 +1229,43 @@ impl Studio {
             .ok_or_else(|| ApiError(400, "Choose a model first".into()))
     }
 
+    /// The name this machine shows to the others (`remote.name` in the settings, else the machine's name).
+    pub fn host_name(&self) -> String {
+        let n = self
+            .config
+            .lock()
+            .unwrap()
+            .get("remote.name")
+            .map(py_str)
+            .unwrap_or_default();
+        let n = n.trim();
+        if n.is_empty() || n == "None" {
+            machine_name().split('.').next().unwrap_or("").to_string()
+        } else {
+            n.to_string()
+        }
+    }
+
+    /// `GET /api/remote`: what the host side shows: where it listens, its fingerprint, the code, the clients.
+    pub fn remote_view(&self) -> Value {
+        let listen = self.listen.lock().unwrap().clone();
+        let fp = self.tls_fingerprint.lock().unwrap().clone();
+        let port = listen["port"]
+            .as_u64()
+            .unwrap_or(crate::remote::DEFAULT_PORT as u64);
+        let own = machine_name();
+        let addresses: Vec<String> = [own]
+            .into_iter()
+            .chain(crate::run::lan_ip_string())
+            .filter(|n| !n.is_empty())
+            .map(|n| format!("{n}:{port}"))
+            .collect();
+        json!({"name": self.host_name(),
+            "listening": {"host": listen["host"].as_str().unwrap_or(""), "port": listen["port"].as_u64().unwrap_or(0), "tls": listen["tls"] == true},
+            "fingerprint": fp, "fingerprint_pretty": crate::remote::pretty_fp(&fp), "addresses": addresses,
+            "code": self.clients.code_state(), "clients": self.clients.list()})
+    }
+
     /// `POST /api/quality/kld`: KL divergence of a candidate against a reference, with the engine's llama-perplexity.
     pub fn quality_kld(&self, body: &Value) -> Result<Value, ApiError> {
         let reference = self.library_model(&body["reference"])?;
@@ -1670,6 +1749,26 @@ fn download_action(p: &str) -> Option<(&str, &str)> {
     .then_some((id, what))
 }
 
+/// `/api/hosts/<12 hex>/<check|connect|repair|update|remove>` -> (id, action)
+fn host_action(p: &str) -> Option<(&str, &str)> {
+    let (id, action) = p.strip_prefix("/api/hosts/")?.split_once('/')?;
+    let ok = id.len() == 12
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    (ok && matches!(action, "check" | "connect" | "repair" | "update" | "remove"))
+        .then_some((id, action))
+}
+
+fn remote_err(e: crate::remote::RemoteError) -> ApiError {
+    // the page reads `code` from the message: the code travels after a marker the error helper understands
+    if e.2.is_empty() {
+        ApiError(e.0, e.1)
+    } else {
+        ApiError(e.0, format!("{}\u{1f}{}", e.1, e.2))
+    }
+}
+
 /// `<prefix><id><suffix>` -> the id when it is `[0-9a-f]+`
 fn hex_id<'a>(p: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
     let id = p.strip_prefix(prefix)?.strip_suffix(suffix)?;
@@ -1957,6 +2056,93 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 Err(ApiError(404, format!("No plugin named {id} is installed")))
             }
         }
+        ("GET", "/api/remote") => Ok(st.remote_view()),
+        ("POST", "/api/remote/code") => Ok(st.clients.new_code()),
+        ("POST", "/api/remote/pair") => r.json(MAX_JSON).and_then(|body| {
+            let g = |k: &str| body.get(k).map(py_str).unwrap_or_default();
+            let fp = st.tls_fingerprint.lock().unwrap().clone();
+            match st.clients.pair(&g("proof"), &g("name"), &r.peer, &fp) {
+                Ok(mut v) => {
+                    v["host"] = json!(st.host_name());
+                    v["fingerprint"] = json!(fp);
+                    Ok(v)
+                }
+                Err(e) => Err(remote_err(e)),
+            }
+        }),
+        ("GET", "/api/remote/whoami") => Ok(json!({"host": st.host_name(),
+            "name": r.client["name"].as_str().unwrap_or(""),
+            "admin": if r.client.is_null() { true } else { r.client["admin"] == true },
+            "paired": !r.client.is_null()})),
+        ("POST", _) if hex_id(p, "/api/remote/clients/", "/revoke").is_some() => {
+            if st.clients.revoke(hex_id(p, "/api/remote/clients/", "/revoke").unwrap()) {
+                Ok(json!({"ok": true, "clients": st.clients.list()}))
+            } else {
+                Err(ApiError(404, "No such client".into()))
+            }
+        }
+        ("POST", _) if hex_id(p, "/api/remote/clients/", "/admin").is_some() => r.json(MAX_JSON).and_then(|body| {
+            let admin = body.get("admin").is_some_and(py_truthy);
+            if st.clients.set_admin(hex_id(p, "/api/remote/clients/", "/admin").unwrap(), admin) {
+                Ok(json!({"ok": true, "clients": st.clients.list()}))
+            } else {
+                Err(ApiError(404, "No such client".into()))
+            }
+        }),
+        ("GET", "/api/hosts") => Ok(json!({"hosts": st.hosts.all().iter().map(|h| st.hosts.public(h)).collect::<Vec<_>>(),
+            "ssh": crate::remote::ssh_available(), "client_name": st.host_name()})),
+        ("POST", "/api/hosts") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.hosts.add(&Value::Object(body), &st.host_name()).map_err(remote_err)),
+        ("POST", _) if host_action(p).is_some() => r.json(MAX_JSON).and_then(|body| {
+            let (id, action) = host_action(p).unwrap();
+            let body = Value::Object(body);
+            let h = st.hosts.get(id).map_err(remote_err)?;
+            match action {
+                "check" => {
+                    let mut v = st.hosts.probe(&h);
+                    v["host"] = st.hosts.public(&h);
+                    Ok(v)
+                }
+                "connect" => {
+                    st.hosts.reconnect(&h);
+                    let mut v = st.hosts.probe(&h);
+                    v["host"] = st.hosts.public(&h);
+                    Ok(v)
+                }
+                "repair" => {
+                    let mut rec = h.clone();
+                    rec["expect"] = json!(body["fingerprint"].as_str().unwrap_or(""));
+                    let paired = st
+                        .hosts
+                        .pair(&rec, body["code"].as_str().unwrap_or(""), &st.host_name())
+                        .map_err(remote_err)?;
+                    st.hosts.save(&paired);
+                    Ok(json!({"host": st.hosts.public(&paired), "probe": st.hosts.probe(&paired)}))
+                }
+                "update" => {
+                    let mut h = h;
+                    if let Some(n) = body.get("name") {
+                        let old = h["name"].as_str().unwrap_or("").to_string();
+                        h["name"] = json!(crate::remote::clean_name(&py_str(n), &old));
+                    }
+                    if let Some(m) = body.get("mirror") {
+                        h["mirror"] = json!(py_truthy(m));
+                    }
+                    if let Some(c) = body["color"].as_str().filter(|c| {
+                        c.len() == 7 && c.starts_with('#') && c[1..].bytes().all(|b| b.is_ascii_hexdigit())
+                    }) {
+                        h["color"] = json!(c);
+                    }
+                    st.hosts.save(&h);
+                    Ok(json!({"host": st.hosts.public(&h)}))
+                }
+                _ => {
+                    st.hosts.remove(id);
+                    Ok(json!({"ok": true, "hosts": st.hosts.all().iter().map(|h| st.hosts.public(h)).collect::<Vec<_>>()}))
+                }
+            }
+        }),
         ("GET", "/api/update") => Ok(st.updates.view(&Value::Object(st.config.lock().unwrap().data.clone()))),
         ("POST", "/api/update/check") => {
             let config = Value::Object(st.config.lock().unwrap().data.clone());
@@ -2288,11 +2474,18 @@ const STATIC_TYPES: [(&str, &str); 12] = [
 
 /// The built web page: a folder when one is given (tests, development), else the copy inside the binary.
 /// The plugins that are part of FLE Link (their pages live in web/plugins/<id>/): (id, title, summary).
-const BUILTIN_PLUGINS: [(&str, &str, &str); 1] = [(
-    "updater",
-    "Updates",
-    "Tells you when a new FLE Link or FLE engine is out, and updates in one click.",
-)];
+const BUILTIN_PLUGINS: [(&str, &str, &str); 2] = [
+    (
+        "remote",
+        "Remote access",
+        "One FLE Link computes for another: pairing with a code, rights per client, hosts by address or SSH.",
+    ),
+    (
+        "updater",
+        "Updates",
+        "Tells you when a new FLE Link or FLE engine is out, and updates in one click.",
+    ),
+];
 
 static PLUGIN_WEB: include_dir::Dir<'static> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../web/plugins");
@@ -2446,6 +2639,9 @@ async fn handler(
     if path.starts_with("/v1/") {
         return proxy(&st, parts, body, head).await;
     }
+    if path.starts_with("/h/") {
+        return forward(&st, parts, body, head).await;
+    }
     let declared: usize = parts
         .headers
         .get(header::CONTENT_LENGTH)
@@ -2460,7 +2656,13 @@ async fn handler(
             Err(_) => (vec![], true),
         }
     };
+    let client = bearer(&parts.headers)
+        .filter(|t| t.starts_with(crate::remote::TOKEN_PREFIX))
+        .and_then(|t| st.clients.find(&t, &peer.ip().to_string()))
+        .unwrap_or(Value::Null);
     let r = Req {
+        peer: peer.ip().to_string(),
+        client,
         method: parts.method.clone(),
         path: path.clone(),
         query: query_of(parts.uri.query()),
@@ -2473,7 +2675,13 @@ async fn handler(
         .unwrap_or(None);
     match routed {
         Some(Ok(v)) => send_json(200, &v, head),
-        Some(Err(ApiError(s, m))) => error_json(s, &m, head),
+        Some(Err(ApiError(s, m))) => match m.split_once('\u{1f}') {
+            // an error with a code the page acts on (remote_err)
+            Some((msg, code)) => {
+                send_json(s, &json!({"error": {"message": msg, "code": code}}), head)
+            }
+            None => error_json(s, &m, head),
+        },
         None if matches!(parts.method, Method::GET | Method::HEAD)
             && !path.starts_with("/api/") =>
         {
@@ -2520,6 +2728,202 @@ fn app_frame(st: &Ctx, frame: &str, head: bool) -> Response<Body> {
         ],
         head,
     )
+}
+
+/// `/h/<host id>/api/…` and `/h/<host id>/v1/…` to a paired host, with the client token. Small answers are read whole (and
+/// mirrored); streams, downloads and other large answers are passed on as they arrive.
+async fn forward(
+    st: &Ctx,
+    parts: axum::http::request::Parts,
+    body: Body,
+    head: bool,
+) -> Response<Body> {
+    let path = parts.uri.path().to_string();
+    let Some(rest) = path.strip_prefix("/h/") else {
+        return error_json(404, "Not found", head);
+    };
+    let (id, rest) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
+    let rest = rest.to_string();
+    let ok_id = id.len() == 12
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    if !ok_id {
+        return error_json(404, "Not found", head);
+    }
+    let h = match st.hosts.get(id) {
+        Ok(h) => h,
+        Err(e) => return error_json(e.0, &e.1, head),
+    };
+    let app_page = rest.starts_with("/app-frame/") && parts.method == Method::GET;
+    if !(rest.starts_with("/api/") || rest.starts_with("/v1/") || app_page)
+        || crate::remote::never_forwarded(&rest)
+    {
+        return error_json(403, "This path is not passed on to a host.", head);
+    }
+    if h["token"].as_str().is_none_or(|t| t.is_empty()) {
+        return send_json(
+            424,
+            &json!({"error": {"message": "This host is not paired.", "code": "unpaired"}}),
+            head,
+        );
+    }
+    let bytes = match to_bytes(body, MAX_CHAT).await {
+        Ok(b) => b.to_vec(),
+        Err(_) => return error_json(413, "Request too large", head),
+    };
+    let target = match parts.uri.query() {
+        Some(q) => format!("{rest}?{q}"),
+        None => rest.clone(),
+    };
+    let method = parts.method.as_str().to_string();
+    let pass: Vec<(String, String)> = ["content-type", "accept", "x-fle-confirm"]
+        .iter()
+        .filter_map(|n| {
+            parts
+                .headers
+                .get(*n)
+                .and_then(|v| v.to_str().ok())
+                .map(|v| (n.to_string(), v.to_string()))
+        })
+        .collect();
+    let stream_like = rest.starts_with("/v1/");
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(16);
+    let (meta_tx, meta_rx) = tokio::sync::oneshot::channel::<
+        Result<(u16, Vec<(String, String)>, Option<Vec<u8>>), Value>,
+    >();
+    let st2 = st.clone();
+    let rest2 = rest.clone();
+    std::thread::spawn(move || {
+        let timeout = Duration::from_secs(if stream_like { 900 } else { 60 });
+        let pinned = h["fingerprint"].as_str().unwrap_or("").to_string();
+        let mirror_dir = st2.hosts.mirror_dir(h["id"].as_str().unwrap_or(""));
+        let fail = |e: String, seen: String| -> Value {
+            let (code, message, extra) = crate::remote::describe_failure(&e, &seen, &pinned);
+            if code == "unreachable" && h["mirror"] == true && method == "GET" {
+                if let Some(v) = crate::remote::mirror_read(&mirror_dir, &rest2) {
+                    return json!({"mirror": v});
+                }
+            }
+            let mut err = json!({"message": message, "code": code});
+            for (k, v) in extra.as_object().into_iter().flatten() {
+                err[k] = v.clone();
+            }
+            json!({"error": err})
+        };
+        let (base, agent, seen) = match st2.hosts.connection(&h, timeout) {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = meta_tx.send(Err(fail(e, String::new())));
+                return;
+            }
+        };
+        let mut req = agent.request(&method, &format!("{base}{target}")).set(
+            "Authorization",
+            &format!("Bearer {}", h["token"].as_str().unwrap_or("")),
+        );
+        for (k, v) in &pass {
+            req = req.set(k, v);
+        }
+        let result = if bytes.is_empty() && (method == "GET" || method == "HEAD") {
+            req.call()
+        } else {
+            req.send_bytes(&bytes)
+        };
+        let resp = match result {
+            Ok(r) => r,
+            Err(ureq::Error::Status(_, r)) => r,
+            Err(e) => {
+                let s = seen.lock().unwrap().clone();
+                let _ = meta_tx.send(Err(fail(e.to_string(), s)));
+                return;
+            }
+        };
+        let status = resp.status();
+        let mut headers: Vec<(String, String)> = vec![];
+        for n in [
+            "Content-Type",
+            "Content-Disposition",
+            "Content-Range",
+            "Accept-Ranges",
+            "Content-Security-Policy",
+            "Permissions-Policy",
+        ] {
+            if let Some(v) = resp.header(n) {
+                headers.push((n.to_string(), v.to_string()));
+            }
+        }
+        let sse = resp
+            .header("Content-Type")
+            .is_some_and(|c| c.contains("text/event-stream"));
+        let size: Option<usize> = resp.header("Content-Length").and_then(|v| v.parse().ok());
+        let mut reader = resp.into_reader();
+        if !sse && size.is_some_and(|n| n <= 8 * 1024 * 1024) {
+            let mut data = vec![];
+            let _ = std::io::Read::read_to_end(&mut reader, &mut data);
+            if status == 200 && h["mirror"] == true {
+                crate::remote::mirror_save(&mirror_dir, &rest2, &data);
+            }
+            let _ = meta_tx.send(Ok((status, headers, Some(data))));
+            return;
+        }
+        let _ = meta_tx.send(Ok((status, headers, None)));
+        let mut buf = vec![0u8; 65536];
+        loop {
+            match std::io::Read::read(&mut reader, &mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if tx
+                        .blocking_send(Ok(bytes::Bytes::copy_from_slice(&buf[..n])))
+                        .is_err()
+                    {
+                        break; // the page stopped reading; closing the host side ends the generation there too
+                    }
+                }
+            }
+        }
+    });
+    match meta_rx.await {
+        Err(_) => error_json(502, "The host did not answer", head),
+        Ok(Err(v)) if v.get("mirror").is_some() => send_json(200, &v["mirror"], head),
+        Ok(Err(v)) => send_json(502, &v, head),
+        Ok(Ok((401, _, _))) => send_json(
+            424,
+            &json!({"error": {"message": "The host does not accept this client any more. It may have been revoked: pair again.", "code": "unpaired"}}),
+            head,
+        ),
+        Ok(Ok((status, headers, Some(data)))) => {
+            let ctype = headers
+                .iter()
+                .find(|(k, _)| k == "Content-Type")
+                .map_or("application/octet-stream".to_string(), |(_, v)| v.clone());
+            let extra: Vec<(&str, &str)> = headers
+                .iter()
+                .filter(|(k, _)| k != "Content-Type")
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            send(status, data, &ctype, &extra, head)
+        }
+        Ok(Ok((status, headers, None))) => {
+            let mut r = Response::new(Body::from_stream(
+                tokio_stream::wrappers::ReceiverStream::new(rx),
+            ));
+            *r.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
+            let hm = r.headers_mut();
+            for (k, v) in &headers {
+                if let (Ok(n), Ok(v)) = (
+                    axum::http::HeaderName::from_bytes(k.as_bytes()),
+                    HeaderValue::from_str(v),
+                ) {
+                    hm.insert(n, v);
+                }
+            }
+            hm.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+            hm.insert("x-accel-buffering", HeaderValue::from_static("no"));
+            hm.insert(header::CONNECTION, HeaderValue::from_static("close"));
+            r
+        }
+    }
 }
 
 const CALLBACK_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><title>FLE Link</title>
@@ -2628,8 +3032,6 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
     let is = |p: &str| path == p || path.starts_with(&format!("{p}/"));
     Some(if is("/api/forge") {
         "The model forge"
-    } else if is("/api/remote") || is("/h") || is("/api/hosts") {
-        "Remote access"
     } else {
         return None;
     })
