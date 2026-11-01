@@ -58,7 +58,9 @@ class H(BaseHTTPRequestHandler):
         q = body["messages"][-1]["content"].lower()
         a = "Canberra." if "australia" in q or "australien" in q else "100 degrees" if "boil" in q or "siede" in q else "I do not know"
         self._json(200, {"choices": [{"message": {"content": a}}]})
-ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+SRV = ThreadingHTTPServer(("127.0.0.1", 0), H)
+print(SRV.server_address[1], flush=True)
+SRV.serve_forever()
 "#;
 
 struct Kill(Child);
@@ -98,27 +100,31 @@ fn quality_measurements() {
         std::fs::write(eng.join(name), text).unwrap();
         std::fs::set_permissions(eng.join(name), std::fs::Permissions::from_mode(0o755)).unwrap();
     }
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
-    let _chat = Kill(
-        Command::new("python3")
-            .args(["-c", CHAT, &port.to_string()])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap(),
-    );
-    let t = Instant::now();
-    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
-        assert!(
-            t.elapsed() < Duration::from_secs(30),
-            "the fake server did not start"
-        );
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    // the fake takes a free port itself and prints it (no race for a port picked here)
+    let err = home.0.join("chat.err");
+    let mut child = Command::new("python3")
+        .args(["-c", CHAT])
+        .stdout(Stdio::piped())
+        .stderr(std::fs::File::create(&err).unwrap())
+        .spawn()
+        .unwrap();
+    let out = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        use std::io::BufRead;
+        let mut line = String::new();
+        let _ = std::io::BufReader::new(out).read_line(&mut line);
+        let _ = tx.send(line);
+    });
+    let line = rx.recv_timeout(Duration::from_secs(60)).unwrap_or_default();
+    let port: u16 = line.trim().parse().unwrap_or_else(|_| {
+        panic!(
+            "the fake server did not start ({line:?}, exit {:?}): {}",
+            child.try_wait().ok().flatten(),
+            std::fs::read_to_string(&err).unwrap_or_default()
+        )
+    });
+    let _chat = Kill(child);
     let mut s = start_embedded(Some(home.0.clone()), None).expect("start");
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(30))
