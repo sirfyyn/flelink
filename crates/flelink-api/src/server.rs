@@ -1726,6 +1726,8 @@ impl Studio {
     pub fn recipe_start(&self, id: &str) -> Result<Value, ApiError> {
         let r = flelink_core::recipe::find(&self.opts.home, id)
             .map_err(|e| ApiError(404, e.to_string()))?;
+        // copies already on this machine count as downloaded
+        flelink_core::locate::adopt(&r, &self.opts.home, &self.models_dir(), &mut |_| {});
         if !self.recipe_on_disk(&r) {
             return Err(ApiError(409, format!("Download {} first", r.title)));
         }

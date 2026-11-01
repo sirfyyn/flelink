@@ -30,6 +30,10 @@ pub fn ensure_and_start_recipe(
     emit: &mut dyn FnMut(Event),
 ) -> Result<Server> {
     let sys = system::detect(home);
+    // copies already on this machine first: the fit check then counts only what is really missing
+    crate::locate::adopt(r, home, &home.join("models"), &mut |s| {
+        emit(Event::Step(s.to_string()))
+    });
     if r.fit(&home.join("models"), &sys) == catalog::Fit::TooBig {
         bail!(
             "{} does not fit this machine ({} RAM, {} free on disk)",
@@ -146,9 +150,6 @@ fn start_with(
     emit: &mut dyn FnMut(Event),
 ) -> Result<Server> {
     let parts = r.model.files.len();
-    crate::locate::adopt(r, home, &home.join("models"), &mut |s| {
-        emit(Event::Step(s.to_string()))
-    });
     for (i, x) in r.fetches().iter().enumerate() {
         let path = home.join("models").join(&x.local);
         let f = &x.file;
