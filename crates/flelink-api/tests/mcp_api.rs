@@ -68,6 +68,36 @@ class H(BaseHTTPRequestHandler):
 ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
 "#;
 
+/// A server of the 2024-11-05 revision: GET /sse opens the event stream and names the message address; a POST to /sse
+/// (what a Streamable HTTP client tries first) is refused with 405.
+const OLD_SSE: &str = r#"
+import sys, json, queue, threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+Q = queue.Queue()
+class H(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    def log_message(self, *x): pass
+    def do_GET(self):
+        self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+        self.wfile.write(b"event: endpoint\ndata: /messages?sid=1\n\n"); self.wfile.flush()
+        while True:
+            m = Q.get()
+            self.wfile.write(("event: message\ndata: " + json.dumps(m) + "\n\n").encode()); self.wfile.flush()
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        if not self.path.startswith("/messages"):
+            self.send_response(405); self.send_header("Content-Length", "0"); self.end_headers(); return
+        self.send_response(202); self.send_header("Content-Length", "0"); self.end_headers()
+        m = json.loads(body)
+        if "id" not in m: return
+        meth = m["method"]
+        if meth == "initialize": r = {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "old"}}
+        elif meth == "tools/list": r = {"tools": [{"name": "hello", "inputSchema": {"type": "object"}}]}
+        else: r = {"content": [{"type": "text", "text": "hello from the old transport"}]}
+        Q.put({"jsonrpc": "2.0", "id": m["id"], "result": r})
+ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+"#;
+
 struct Kill(Child);
 impl Drop for Kill {
     fn drop(&mut self) {
@@ -102,8 +132,23 @@ fn mcp_servers_become_tools() {
             .spawn()
             .unwrap(),
     );
+    let old_port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let _old = Kill(
+        Command::new("python3")
+            .args(["-c", OLD_SSE, &old_port.to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
     let t = Instant::now();
-    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
+    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err()
+        || std::net::TcpStream::connect(("127.0.0.1", old_port)).is_err()
+    {
         assert!(t.elapsed() < Duration::from_secs(10));
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -141,6 +186,7 @@ fn mcp_servers_become_tools() {
         "calc": {"command": "python3", "args": [script.to_string_lossy()]},
         "remote": {"url": format!("http://127.0.0.1:{port}/mcp"), "headers": {"Authorization": "Bearer t0k"}},
         "locked": {"url": format!("http://127.0.0.1:{port}/mcp")},
+        "old": {"url": format!("http://127.0.0.1:{old_port}/sse")},
         "missing": {"command": "definitely-not-a-program-here"}}});
     let (c, v) = call(
         "POST",
@@ -172,6 +218,8 @@ fn mcp_servers_become_tools() {
     assert_eq!(server("remote")["status"], "ready", "{tools}");
     assert_eq!(server("remote")["trusted"], true);
     assert_eq!(server("locked")["status"], "auth_required");
+    assert_eq!(server("old")["status"], "ready", "{tools}");
+    assert_eq!(server("old")["legacy_sse"], true);
     assert_eq!(server("missing")["status"], "error");
     assert!(server("missing")["error"]
         .as_str()
@@ -227,6 +275,14 @@ fn mcp_servers_become_tools() {
     );
     assert_eq!(c, 200, "{v}");
     assert_eq!(v["content"], "echo: hi");
+
+    // the older HTTP+SSE server, reached after the POST to its address was refused
+    let (_, v) = call(
+        "POST",
+        "api/tools/call",
+        json!({"name": "old__hello", "approved": true}),
+    );
+    assert_eq!(v["content"], "hello from the old transport", "{v}");
 
     // the stdio server exits; the next call starts it again
     let (_, v) = call(

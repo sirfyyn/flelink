@@ -47,6 +47,8 @@ pub struct Studio {
     pub tuner: crate::tuner::Tuner,
     pub cache: Arc<crate::cachewatch::CacheWatch>,
     pub toolbox: crate::mcp::ToolBox,
+    /// the port this server listens on (for the sign-in's loopback redirect); set when it starts serving
+    pub port: std::sync::atomic::AtomicU16,
     pub live: Live,
     /// the server listens beyond this machine (host mode); set by the starter
     pub lan: std::sync::atomic::AtomicBool,
@@ -113,6 +115,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         tuner: crate::tuner::Tuner::new(&home),
         cache,
         toolbox: crate::mcp::ToolBox::new(&home),
+        port: std::sync::atomic::AtomicU16::new(0),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
         downloads,
@@ -1996,6 +1999,23 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .and_then(|l| l.parse().ok());
             Ok(st.cache.snapshot(layer))
         }
+        ("POST", "/api/mcp/signin") => r.json(MAX_JSON).and_then(|body| {
+            let name = body.get("server").map(py_str).unwrap_or_default();
+            let port = st.port.load(std::sync::atomic::Ordering::SeqCst);
+            let redirect = format!("http://127.0.0.1:{port}/oauth/callback");
+            match st.toolbox.begin_sign_in(&name, &redirect) {
+                None => Err(ApiError(404, "Not found".into())),
+                Some(Err(e)) => Err(ApiError(400, e)),
+                Some(Ok(v)) => Ok(v),
+            }
+        }),
+        ("POST", "/api/mcp/signout") => r.json(MAX_JSON).and_then(|body| {
+            let name = body.get("server").map(py_str).unwrap_or_default();
+            match st.toolbox.sign_out(&name) {
+                None => Err(ApiError(404, "Not found".into())),
+                Some(had) => Ok(json!({"signed_out": true, "had_token": had})),
+            }
+        }),
         ("GET", "/api/flags") => Ok(crate::flaghelp::table()),
         ("POST", "/api/flags/explain") => r.json(MAX_JSON).map(|body| {
             let args: Vec<String> = body
@@ -2165,6 +2185,13 @@ async fn handler(
     if path == "/login" {
         return login(&st, &parts.method, body, head).await;
     }
+    if path == "/oauth/callback" && matches!(parts.method, Method::GET | Method::HEAD) {
+        let q = query_of(parts.uri.query());
+        let st2 = st.clone();
+        return tokio::task::spawn_blocking(move || oauth_callback(&st2, &q, head))
+            .await
+            .unwrap_or_else(|_| error_json(500, "The sign-in failed", head));
+    }
     if path.starts_with("/v1/") {
         return proxy(&st, parts, body, head).await;
     }
@@ -2210,6 +2237,52 @@ async fn handler(
             None => error_json(404, "Not found", head),
         },
     }
+}
+
+const CALLBACK_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><title>FLE Link</title>
+<style>body{font:16px system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}
+@media (prefers-color-scheme:dark){body{background:#16181c;color:#e6e6e6}}h1{font-size:1.2rem}</style>
+<h1>__TITLE__</h1><p>__TEXT__</p>"#;
+
+fn html_escape(t: &str) -> String {
+    t.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
+/// The browser comes back from a sign-in: exchange the code, connect the server again, say how it went.
+fn oauth_callback(st: &Ctx, q: &Map<String, Value>, head: bool) -> Response<Body> {
+    let g = |k: &str| q.get(k).and_then(Value::as_str).unwrap_or("");
+    let (title, text, status) =
+        match st
+            .toolbox
+            .finish_sign_in(g("state"), g("code"), g("error"), g("error_description"))
+        {
+            Ok(name) => (
+                "Signed in".to_string(),
+                format!("{name} is connected. You can close this tab and go back to FLE Link."),
+                200,
+            ),
+            Err(e) => ("Sign-in did not work".to_string(), e, 400),
+        };
+    let page = CALLBACK_PAGE
+        .replace("__TITLE__", &html_escape(&title))
+        .replace("__TEXT__", &html_escape(&text));
+    send(
+        status,
+        page.into_bytes(),
+        "text/html; charset=utf-8",
+        &[
+            (
+                "Content-Security-Policy",
+                "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+            ),
+            ("X-Frame-Options", "DENY"),
+        ],
+        head,
+    )
 }
 
 const LOGIN_PAGE: &str = r#"<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -2274,8 +2347,6 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
         "The model forge"
     } else if is("/api/quality") {
         "The quality measurements"
-    } else if is("/api/mcp") || is("/oauth") {
-        "Signing in to MCP servers"
     } else if is("/api/apps") || is("/app-frame") {
         "MCP Apps"
     } else if is("/api/remote") || is("/h") || is("/api/hosts") {
@@ -2297,6 +2368,9 @@ pub async fn serve_listener(
     l: tokio::net::TcpListener,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
+    if let Ok(a) = l.local_addr() {
+        st.port.store(a.port(), std::sync::atomic::Ordering::SeqCst);
+    }
     axum::serve(
         l,
         router(st).into_make_service_with_connect_info::<SocketAddr>(),

@@ -1,5 +1,6 @@
 //! A small MCP client (Model Context Protocol): the servers named in the tool settings become tools in the chat. Port of
-//! `fle_studio/mcp.py` (stdio and Streamable HTTP; the sign-in, the older HTTP+SSE revision and MCP Apps come later).
+//! `fle_studio/mcp.py`: stdio, Streamable HTTP and the older HTTP+SSE revision, with the OAuth sign-in (`oauth.rs`); MCP
+//! Apps come later.
 //!
 //! Servers are written in the usual `mcpServers` JSON (`tools::parse_servers`):
 //!
@@ -36,6 +37,8 @@ pub const MAX_RESULT_CHARS: usize = 60_000;
 pub struct McpError {
     pub message: String,
     pub status: Option<u16>,
+    /// the `WWW-Authenticate` header of a 401
+    pub www_auth: String,
 }
 
 impl McpError {
@@ -43,6 +46,7 @@ impl McpError {
         McpError {
             message: m.into(),
             status: None,
+            www_auth: String::new(),
         }
     }
 }
@@ -358,7 +362,11 @@ impl Transport for StdioServer {
 
 // ------------------------------------------------------------------------------------------------ Streamable HTTP
 
+/// The sign-in of one server: the manager, the server's name and address.
+type Provider = (Arc<crate::oauth::OAuthManager>, String, String);
+
 struct Http {
+    provider: Option<Provider>,
     url: String,
     headers: Vec<(String, String)>,
     session: Mutex<String>,
@@ -367,8 +375,9 @@ struct Http {
 }
 
 impl Http {
-    fn new(spec: &Value) -> Http {
+    fn new(spec: &Value, provider: Option<Provider>) -> Http {
         Http {
+            provider,
             url: spec["url"].as_str().unwrap_or("").to_string(),
             headers: spec["headers"]
                 .as_object()
@@ -392,6 +401,34 @@ impl Http {
     }
 
     fn post(&self, payload: &Value, timeout: Duration, want: Option<u64>) -> R<Option<Value>> {
+        match self.post_once(payload, timeout, want) {
+            // a 401 with a refresh token to hand: get a new token and repeat the request once
+            Err(e) if e.status == Some(401) => match &self.provider {
+                Some((m, name, url)) if m.refresh(name, url).is_ok() => {
+                    self.post_once(payload, timeout, want)
+                }
+                _ => Err(e),
+            },
+            r => r,
+        }
+    }
+
+    /// The Authorization header from the sign-in, unless the entry sets its own.
+    fn auth(&self) -> Option<String> {
+        if self
+            .headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("authorization"))
+        {
+            return None;
+        }
+        let (m, name, url) = self.provider.as_ref()?;
+        m.access_token(name, url)
+            .ok()
+            .map(|t| format!("Bearer {t}"))
+    }
+
+    fn post_once(&self, payload: &Value, timeout: Duration, want: Option<u64>) -> R<Option<Value>> {
         let agent = ureq::AgentBuilder::new().timeout(timeout).build();
         let mut req = agent
             .post(&self.url)
@@ -403,6 +440,9 @@ impl Http {
             );
         for (k, v) in &self.headers {
             req = req.set(k, v);
+        }
+        if let Some(a) = self.auth() {
+            req = req.set("Authorization", &a);
         }
         let session = self.session.lock().unwrap().clone();
         if !session.is_empty() {
@@ -416,6 +456,7 @@ impl Http {
         let resp = match req.send_string(&payload.to_string()) {
             Ok(r) => r,
             Err(ureq::Error::Status(code, r)) => {
+                let www_auth = r.header("WWW-Authenticate").unwrap_or("").to_string();
                 let body: String = r
                     .into_string()
                     .unwrap_or_default()
@@ -431,13 +472,19 @@ impl Http {
                             format!(": {body}")
                         },
                     status: Some(code),
+                    www_auth,
                 });
             }
-            Err(e) => {
+            Err(ureq::Error::Transport(t)) => {
+                // the transport error's own text names the URL again; the host is enough
+                let why = t
+                    .message()
+                    .map(String::from)
+                    .unwrap_or_else(|| t.kind().to_string());
                 return Err(McpError::new(format!(
-                    "Could not reach {}: {e}",
+                    "Could not reach {}: {why}",
                     self.host()
-                )))
+                )));
             }
         };
         if let Some(s) = resp.header("Mcp-Session-Id") {
@@ -535,11 +582,268 @@ impl Transport for Http {
         for (k, v) in &self.headers {
             req = req.set(k, v);
         }
+        if let Some(a) = self.auth() {
+            req = req.set("Authorization", &a);
+        }
         let _ = req.call();
     }
 
     fn set_version(&self, v: &str) {
         *self.version.lock().unwrap() = v.to_string();
+    }
+}
+
+// ------------------------------------------------------------------------------------------------ HTTP+SSE (2024-11-05)
+
+/// `base` joined with an `endpoint` event: an absolute address, an absolute path, or a path relative to the base.
+fn join_url(base: &str, target: &str) -> String {
+    if target.contains("://") {
+        return target.to_string();
+    }
+    let (scheme, rest) = base.split_once("://").unwrap_or(("http", base));
+    let netloc = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if target.starts_with('/') {
+        return format!("{scheme}://{netloc}{target}");
+    }
+    let path = rest[netloc.len()..].split(['?', '#']).next().unwrap_or("");
+    let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+    format!("{scheme}://{netloc}{dir}/{target}")
+}
+
+fn origin(url: &str) -> String {
+    let (scheme, rest) = url.split_once("://").unwrap_or(("", url));
+    format!(
+        "{}://{}",
+        scheme.to_lowercase(),
+        rest.split(['/', '?', '#'])
+            .next()
+            .unwrap_or("")
+            .to_lowercase()
+    )
+}
+
+/// The older HTTP+SSE transport: a GET that stays open and delivers the server's messages as events, and a separate
+/// address (named by the first event, `endpoint`) that takes the client's messages in POSTs.
+struct Sse {
+    http: Http,
+    endpoint: Arc<Mutex<String>>,
+    pending: Arc<Mutex<HashMap<u64, Sender<Value>>>>,
+    failure: Arc<Mutex<Option<McpError>>>,
+    closed: Arc<std::sync::atomic::AtomicBool>,
+    next: AtomicU64,
+}
+
+impl Sse {
+    fn start(spec: &Value, provider: Option<Provider>) -> R<Sse> {
+        let t = Sse {
+            http: Http::new(spec, provider),
+            endpoint: Arc::new(Mutex::new(String::new())),
+            pending: Arc::new(Mutex::new(HashMap::new())),
+            failure: Arc::new(Mutex::new(None)),
+            closed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            next: AtomicU64::new(0),
+        };
+        let (ready_tx, ready_rx) = channel::<()>();
+        let url = t.http.url.clone();
+        // the stream has no read timeout: it stays open as long as the server keeps it
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(30))
+            .build();
+        let mut req = agent.get(&url).set("Accept", "text/event-stream").set(
+            "User-Agent",
+            &format!("flelink/{}", env!("CARGO_PKG_VERSION")),
+        );
+        for (k, v) in &t.http.headers {
+            req = req.set(k, v);
+        }
+        if let Some(a) = t.http.auth() {
+            req = req.set("Authorization", &a);
+        }
+        let (endpoint, pending, failure, closed) = (
+            t.endpoint.clone(),
+            t.pending.clone(),
+            t.failure.clone(),
+            t.closed.clone(),
+        );
+        let host = t.http.host();
+        std::thread::Builder::new()
+            .name("mcp-sse".into())
+            .spawn(move || {
+                let fail = |e: McpError| *failure.lock().unwrap() = Some(e);
+                let resp = match req.call() {
+                    Ok(r) => r,
+                    Err(ureq::Error::Status(code, r)) => {
+                        let www_auth = r.header("WWW-Authenticate").unwrap_or("").to_string();
+                        let body: String = r.into_string().unwrap_or_default().trim().chars().take(300).collect();
+                        fail(McpError {
+                            message: format!("HTTP {code} from the server")
+                                + &if body.is_empty() { String::new() } else { format!(": {body}") },
+                            status: Some(code),
+                            www_auth,
+                        });
+                        let _ = ready_tx.send(());
+                        return;
+                    }
+                    Err(e) => {
+                        fail(McpError::new(format!("Could not reach {host}: {e}")));
+                        let _ = ready_tx.send(());
+                        return;
+                    }
+                };
+                let (mut event, mut data) = ("message".to_string(), Vec::<String>::new());
+                for line in BufReader::new(resp.into_reader()).lines() {
+                    if closed.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    let Ok(line) = line else { break };
+                    let line = line.trim_end_matches(['\r', '\n']);
+                    if let Some(e) = line.strip_prefix("event:") {
+                        event = Some(e.trim()).filter(|e| !e.is_empty()).unwrap_or("message").to_string();
+                    } else if let Some(d) = line.strip_prefix("data:") {
+                        data.push(d.trim_start_matches(' ').to_string());
+                    } else if line.is_empty() {
+                        if !data.is_empty() {
+                            let text = data.join("\n");
+                            if event == "endpoint" {
+                                let target = join_url(&url, text.trim());
+                                if origin(&target) != origin(&url) {
+                                    // never send to another host than the one configured
+                                    fail(McpError::new("The server named a message address on a different host; refusing it"));
+                                } else {
+                                    *endpoint.lock().unwrap() = target;
+                                }
+                                let _ = ready_tx.send(());
+                            } else if let Ok(msg) = serde_json::from_str::<Value>(&text) {
+                                let items = match msg {
+                                    Value::Array(a) => a,
+                                    v => vec![v],
+                                };
+                                for one in items.into_iter().filter(|o| o.get("method").is_none()) {
+                                    if let Some(w) = one["id"].as_u64().and_then(|id| pending.lock().unwrap().remove(&id)) {
+                                        let _ = w.send(one);
+                                    }
+                                }
+                            }
+                        }
+                        event = "message".into();
+                        data.clear();
+                    }
+                }
+                if !closed.load(Ordering::SeqCst) {
+                    let mut f = failure.lock().unwrap();
+                    if f.is_none() {
+                        *f = Some(McpError::new("The server closed the event stream"));
+                    }
+                }
+                let why = failure.lock().unwrap().as_ref().map_or("closed".to_string(), |e| e.message.clone());
+                for (_, w) in pending.lock().unwrap().drain() {
+                    let _ = w.send(json!({"error": {"code": -32000, "message": why}}));
+                }
+                let _ = ready_tx.send(());
+            })
+            .map_err(|e| McpError::new(e.to_string()))?;
+        if ready_rx.recv_timeout(Duration::from_secs(30)).is_err() {
+            t.close();
+            return Err(McpError::new(
+                "The server did not name its message address (no `endpoint` event within 30 s)",
+            ));
+        }
+        if let Some(e) = t.failure.lock().unwrap().clone() {
+            return Err(e);
+        }
+        Ok(t)
+    }
+
+    fn send(&self, payload: &Value, timeout: Duration) -> R<()> {
+        let endpoint = self.endpoint.lock().unwrap().clone();
+        if endpoint.is_empty() {
+            return Err(self
+                .failure
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| McpError::new("Not connected")));
+        }
+        let agent = ureq::AgentBuilder::new().timeout(timeout).build();
+        let mut req = agent
+            .post(&endpoint)
+            .set("Content-Type", "application/json")
+            .set(
+                "User-Agent",
+                &format!("flelink/{}", env!("CARGO_PKG_VERSION")),
+            );
+        for (k, v) in &self.http.headers {
+            req = req.set(k, v);
+        }
+        if let Some(a) = self.http.auth() {
+            req = req.set("Authorization", &a);
+        }
+        match req.send_string(&payload.to_string()) {
+            Ok(r) => {
+                let _ = r.into_string();
+                Ok(())
+            }
+            Err(ureq::Error::Status(code, r)) => {
+                let www_auth = r.header("WWW-Authenticate").unwrap_or("").to_string();
+                let body: String = r
+                    .into_string()
+                    .unwrap_or_default()
+                    .trim()
+                    .chars()
+                    .take(300)
+                    .collect();
+                Err(McpError {
+                    message: format!("HTTP {code} from the server")
+                        + &if body.is_empty() {
+                            String::new()
+                        } else {
+                            format!(": {body}")
+                        },
+                    status: Some(code),
+                    www_auth,
+                })
+            }
+            Err(e) => Err(McpError::new(format!(
+                "Could not reach {}: {e}",
+                self.http.host()
+            ))),
+        }
+    }
+}
+
+impl Transport for Sse {
+    fn request(&self, method: &str, params: Value, timeout: Duration) -> R<Value> {
+        let id = self.next.fetch_add(1, Ordering::SeqCst) + 1;
+        let (tx, rx) = channel();
+        self.pending.lock().unwrap().insert(id, tx);
+        let r = self
+            .send(
+                &json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}),
+                timeout.min(Duration::from_secs(30)),
+            )
+            .and_then(|_| {
+                rx.recv_timeout(timeout).map_err(|_| {
+                    McpError::new(format!("No answer to {method} within {} s", secs(timeout)))
+                })
+            });
+        self.pending.lock().unwrap().remove(&id);
+        result_of(r?)
+    }
+
+    fn notify(&self, method: &str) -> R<()> {
+        self.send(
+            &json!({"jsonrpc": "2.0", "method": method, "params": {}}),
+            Duration::from_secs(15),
+        )
+    }
+
+    fn alive(&self) -> bool {
+        !self.closed.load(Ordering::SeqCst) && self.failure.lock().unwrap().is_none()
+    }
+
+    /// The reading thread ends at the next event or when the server closes the stream.
+    fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
     }
 }
 
@@ -628,6 +932,10 @@ pub struct ServerState {
 pub struct McpServer {
     pub name: String,
     pub spec: Value,
+    oauth: Option<Arc<crate::oauth::OAuthManager>>,
+    /// what the server's 401 said (resource_metadata, scope)
+    pub challenge: Mutex<HashMap<String, String>>,
+    fallback: std::sync::atomic::AtomicBool,
     call_timeout: Mutex<Duration>,
     state: Mutex<ServerState>,
     transport: Mutex<Option<Arc<dyn Transport>>>,
@@ -635,10 +943,18 @@ pub struct McpServer {
 }
 
 impl McpServer {
-    fn new(name: &str, spec: Value, call_timeout: Duration) -> McpServer {
+    fn new(
+        name: &str,
+        spec: Value,
+        call_timeout: Duration,
+        oauth: Option<Arc<crate::oauth::OAuthManager>>,
+    ) -> McpServer {
         McpServer {
             name: name.to_string(),
             spec,
+            oauth,
+            challenge: Mutex::new(HashMap::new()),
+            fallback: std::sync::atomic::AtomicBool::new(false),
             call_timeout: Mutex::new(call_timeout),
             state: Mutex::new(ServerState {
                 status: "idle".into(),
@@ -649,6 +965,39 @@ impl McpServer {
             transport: Mutex::new(None),
             connect_lock: Mutex::new(()),
         }
+    }
+
+    fn provider(&self) -> Option<Provider> {
+        self.oauth.clone().map(|m| {
+            (
+                m,
+                self.name.clone(),
+                self.spec["url"].as_str().unwrap_or("").to_string(),
+            )
+        })
+    }
+
+    /// A connection that failed before the handshake: the same states as a failed handshake.
+    fn fail_connect(&self, e: McpError) {
+        if e.status == Some(401) && self.oauth.is_some() {
+            *self.challenge.lock().unwrap() = crate::oauth::bearer_challenge(&e.www_auth);
+        }
+        let oauth = self.oauth.is_some();
+        self.set(|s| {
+            s.tools.clear();
+            if e.status == Some(401) && oauth {
+                s.status = "auth_required".into();
+                s.error = "Sign in to use this server.".into();
+            } else {
+                s.status = "error".into();
+                s.error = e.message;
+            }
+        });
+    }
+
+    /// True when the older HTTP+SSE transport had to be used.
+    pub fn legacy_sse(&self) -> bool {
+        self.fallback.load(Ordering::SeqCst)
     }
 
     pub fn state(&self) -> ServerState {
@@ -709,6 +1058,7 @@ impl McpServer {
             s.status = "connecting".into();
             s.error.clear();
         });
+        self.fallback.store(false, Ordering::SeqCst);
         let kind = self.spec["transport"].as_str().unwrap_or("");
         let t: Arc<dyn Transport> = match kind {
             "stdio" => match StdioServer::start(&self.spec) {
@@ -723,24 +1073,52 @@ impl McpServer {
                 }
             },
             "sse" => {
-                self.set(|s| {
-                    s.status = "error".into();
-                    s.error = "Servers of the older HTTP+SSE revision are not supported by FLE Link yet; use the server's Streamable HTTP address.".into();
-                });
-                return;
+                self.fallback.store(true, Ordering::SeqCst);
+                match Sse::start(&self.spec, self.provider()) {
+                    Ok(t) => Arc::new(t),
+                    Err(e) => {
+                        self.fail_connect(e);
+                        return;
+                    }
+                }
             }
-            _ => Arc::new(Http::new(&self.spec)),
+            _ => Arc::new(Http::new(&self.spec, self.provider())),
         };
         *self.transport.lock().unwrap() = Some(t.clone());
-        match self.handshake(&t) {
+        self.challenge.lock().unwrap().clear();
+        let mut result = self.handshake(&t);
+        // not a 401/403: a server of the older revision answers a POST to its URL with 4xx (404, 405, 400)
+        if let Err(e) = &result {
+            let s = e.status.unwrap_or(0);
+            if kind == "http" && (400..500).contains(&s) && s != 401 && s != 403 {
+                t.close();
+                self.fallback.store(true, Ordering::SeqCst);
+                match Sse::start(&self.spec, self.provider()) {
+                    Ok(sse) => {
+                        let sse: Arc<dyn Transport> = Arc::new(sse);
+                        *self.transport.lock().unwrap() = Some(sse.clone());
+                        result = self.handshake(&sse);
+                        if result.is_err() {
+                            sse.close();
+                        }
+                    }
+                    Err(e) => result = Err(e),
+                }
+            }
+        }
+        match result {
             Ok(()) => self.set(|s| s.status = "ready".into()),
             Err(e) => {
                 t.close();
+                if e.status == Some(401) && self.oauth.is_some() {
+                    *self.challenge.lock().unwrap() = crate::oauth::bearer_challenge(&e.www_auth);
+                }
+                let oauth = self.oauth.is_some();
                 self.set(|s| {
                     s.tools.clear();
-                    if e.status == Some(401) {
+                    if e.status == Some(401) && oauth {
                         s.status = "auth_required".into();
-                        s.error = "This server wants a sign-in, which FLE Link does not do yet. Put an access token into its \"headers\" ({\"Authorization\": \"Bearer …\"}).".into();
+                        s.error = "Sign in to use this server.".into();
                     } else {
                         s.status = "error".into();
                         s.error = e.message;
@@ -786,11 +1164,23 @@ impl McpServer {
     pub fn call_raw(&self, tool: &str, arguments: &Value) -> R<Value> {
         let t = self.ready_transport()?;
         let timeout = *self.call_timeout.lock().unwrap();
-        let r = t.request(
+        let r = match t.request(
             "tools/call",
             json!({"name": tool, "arguments": arguments}),
             timeout,
-        )?;
+        ) {
+            // the sign-in ended while we were connected
+            Err(e) if e.status == Some(401) && self.oauth.is_some() => {
+                *self.challenge.lock().unwrap() = crate::oauth::bearer_challenge(&e.www_auth);
+                let msg = "Sign in again to use this server.".to_string();
+                self.set(|s| {
+                    s.status = "auth_required".into();
+                    s.error = msg.clone();
+                });
+                return Err(McpError::new(msg));
+            }
+            r => r?,
+        };
         Ok(if r.is_object() {
             r
         } else {
@@ -811,6 +1201,7 @@ impl McpServer {
 #[derive(Default)]
 pub struct McpManager {
     servers: Mutex<BTreeMap<String, Arc<McpServer>>>,
+    oauth: Option<Arc<crate::oauth::OAuthManager>>,
 }
 
 impl McpManager {
@@ -830,7 +1221,12 @@ impl McpManager {
             match servers.get(name) {
                 Some(s) => *s.call_timeout.lock().unwrap() = call_timeout,
                 None => {
-                    let s = Arc::new(McpServer::new(name, spec.clone(), call_timeout));
+                    let s = Arc::new(McpServer::new(
+                        name,
+                        spec.clone(),
+                        call_timeout,
+                        self.oauth.clone(),
+                    ));
                     servers.insert(name.clone(), s.clone());
                     s.set(|st| st.status = "connecting".into());
                     let _ = std::thread::Builder::new()
@@ -969,6 +1365,7 @@ pub fn tool_ui_uri(t: &Value) -> String {
 /// The tools that are on right now: the built-in ones and those of the MCP servers, read from the settings every time.
 pub struct ToolBox {
     pub mcp: McpManager,
+    pub oauth: Arc<crate::oauth::OAuthManager>,
     known: Mutex<Map<String, Value>>,
     known_file: PathBuf,
 }
@@ -987,8 +1384,13 @@ impl ToolBox {
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
             .and_then(|v| v.as_object().cloned())
             .unwrap_or_default();
+        let oauth = Arc::new(crate::oauth::OAuthManager::new(data_dir));
         ToolBox {
-            mcp: McpManager::default(),
+            mcp: McpManager {
+                servers: Mutex::new(BTreeMap::new()),
+                oauth: Some(oauth.clone()),
+            },
+            oauth,
             known: Mutex::new(known),
             known_file,
         }
@@ -1126,14 +1528,21 @@ impl ToolBox {
                 let st = sv.state();
                 let remote = sv.spec["transport"] != "stdio";
                 let auth = if remote {
-                    json!({"remote": true, "required": st.status == "auth_required",
-                        "client_id_set": sv.spec["oauth"]["client_id"].as_str().is_some_and(|c| !c.is_empty())})
+                    let mut a = json!({"remote": true, "required": st.status == "auth_required"});
+                    let url = sv.spec["url"].as_str().unwrap_or("");
+                    if let Some(o) = self.oauth.status(&sv.name, url).as_object() {
+                        for (k, v) in o {
+                            a[k] = v.clone();
+                        }
+                    }
+                    a["client_id_set"] = json!(sv.spec["oauth"]["client_id"].as_str().is_some_and(|c| !c.is_empty()));
+                    a
                 } else {
                     json!({"remote": false})
                 };
                 json!({"name": sv.name, "status": st.status, "error": st.error, "tools": st.tools.len(),
                     "transport": sv.spec["transport"], "trusted": trusted.contains(&sv.name),
-                    "info": st.info["name"].as_str().unwrap_or(""), "auth": auth, "legacy_sse": false})
+                    "info": st.info["name"].as_str().unwrap_or(""), "auth": auth, "legacy_sse": sv.legacy_sse()})
             })
             .collect();
         for (name, why) in problems {
@@ -1221,6 +1630,51 @@ impl ToolBox {
             }
         };
         Ok(json!({"content": content, "is_error": is_error, "ms": t0.elapsed().as_millis() as i64}))
+    }
+
+    fn remote_server(&self, name: &str) -> Option<Arc<McpServer>> {
+        self.mcp
+            .get(name)
+            .filter(|s| s.spec["transport"] != "stdio")
+    }
+
+    /// `POST /api/mcp/signin`: {auth_url, issuer, scope}; None when there is no such remote server.
+    pub fn begin_sign_in(&self, name: &str, redirect_uri: &str) -> Option<Result<Value, String>> {
+        let server = self.remote_server(name)?;
+        let challenge = server.challenge.lock().unwrap().clone();
+        let url = server.spec["url"].as_str().unwrap_or("");
+        Some(
+            self.oauth
+                .begin(name, url, redirect_uri, &challenge, &server.spec["oauth"])
+                .map(|v| json!({"auth_url": v["auth_url"], "issuer": v["issuer"], "scope": v["scope"]}))
+                .map_err(|e| e.message),
+        )
+    }
+
+    /// `GET /oauth/callback`: the server's name, or why it did not work.
+    pub fn finish_sign_in(
+        &self,
+        state: &str,
+        code: &str,
+        error: &str,
+        description: &str,
+    ) -> Result<String, String> {
+        let name = self
+            .oauth
+            .complete(state, code, error, description)
+            .map_err(|e| e.message)?;
+        self.mcp.reconnect(Some(&name));
+        Ok(name)
+    }
+
+    /// `POST /api/mcp/signout`: whether there was a token; None when there is no such remote server.
+    pub fn sign_out(&self, name: &str) -> Option<bool> {
+        let server = self.remote_server(name)?;
+        let removed = self
+            .oauth
+            .sign_out(name, server.spec["url"].as_str().unwrap_or(""));
+        self.mcp.reconnect(Some(name));
+        Some(removed)
     }
 
     /// `POST /api/tools/reload`: connect every server again.
