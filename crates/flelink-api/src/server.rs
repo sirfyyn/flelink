@@ -45,6 +45,7 @@ pub struct Studio {
     pub engine: Engine,
     pub bench: crate::bench::Bench,
     pub tuner: crate::tuner::Tuner,
+    pub quality: crate::quality::Quality,
     pub cache: Arc<crate::cachewatch::CacheWatch>,
     pub toolbox: crate::mcp::ToolBox,
     /// the port this server listens on (for the sign-in's loopback redirect); set when it starts serving
@@ -113,6 +114,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         live: Live::new(engine.clone(), 1.0),
         bench: crate::bench::Bench::new(engine.clone(), &home),
         tuner: crate::tuner::Tuner::new(&home),
+        quality: crate::quality::Quality::new(&home),
         cache,
         toolbox: crate::mcp::ToolBox::new(&home),
         port: std::sync::atomic::AtomicU16::new(0),
@@ -1151,6 +1153,80 @@ impl Studio {
         n.map_or(default, |n| n.clamp(low, high))
     }
 
+    /// A library model by id or path, or 400 "Choose a model first".
+    fn library_model(&self, ident: &Value) -> Result<Value, ApiError> {
+        let ident = if py_truthy(ident) {
+            py_str(ident)
+        } else {
+            String::new()
+        };
+        self.library
+            .lock()
+            .unwrap()
+            .get(&self.models_dir(), &ident)
+            .ok_or_else(|| ApiError(400, "Choose a model first".into()))
+    }
+
+    /// `POST /api/quality/kld`: KL divergence of a candidate against a reference, with the engine's llama-perplexity.
+    pub fn quality_kld(&self, body: &Value) -> Result<Value, ApiError> {
+        let reference = self.library_model(&body["reference"])?;
+        let candidate = self.library_model(&body["candidate"])?;
+        let engine = self.engine_for("auto", &self.sysinfo())?;
+        self.quality
+            .start_kld(
+                &json!({"name": reference["name"], "path": reference["path"]}),
+                &json!({"name": candidate["name"], "path": candidate["path"]}),
+                engine["path"].as_str().unwrap_or(""),
+                &if py_truthy(&body["text"]) {
+                    py_str(&body["text"])
+                } else {
+                    String::new()
+                },
+                Self::clamp_int(&body["ctx"], crate::quality::KLD_CTX, 64, 8192),
+                Self::clamp_int(&body["chunks"], 0, 0, 1000),
+                Self::clamp_int(&body["threads"], 0, 0, 512),
+            )
+            .map_err(|(c, m)| ApiError(c, m))
+    }
+
+    /// `POST /api/quality/probe`: the knowledge questions to the running engine.
+    pub fn quality_probe(&self, body: &Value) -> Result<Value, ApiError> {
+        let (state, base, key) = self.engine.target();
+        if !matches!(state.as_str(), "ready" | "attached") || base.is_empty() {
+            return Err(ApiError(
+                400,
+                "Load a model first: the knowledge probe asks the running engine".into(),
+            ));
+        }
+        let name = self.engine.status()["model"]["name"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        let g = |k: &str| {
+            if py_truthy(&body[k]) {
+                py_str(&body[k])
+            } else {
+                String::new()
+            }
+        };
+        let source = if g("source").is_empty() {
+            crate::quality::BUILTIN.to_string()
+        } else {
+            g("source")
+        };
+        self.quality
+            .start_probe(
+                &base,
+                &key,
+                &name,
+                &source,
+                &g("lang"),
+                Self::clamp_int(&body["limit"], 0, 0, 1000) as usize,
+                &g("label"),
+            )
+            .map_err(|(c, m)| ApiError(c, m))
+    }
+
     /// `GET /api/tuning`
     pub fn tuning_state(self: &Arc<Self>, model: &str) -> Value {
         use crate::tuner::*;
@@ -1222,14 +1298,8 @@ impl Studio {
     }
 
     /// `POST /api/bench/start`: what is running (model, profile, engine, command, machine) goes with the result, so runs
-    /// of different settings can be told apart. The knowledge probe of the Python Studio is not here yet.
+    /// of different settings can be told apart. With `knowledge` the knowledge probe runs after the speed requests.
     pub fn bench_start(&self, body: &Value) -> Result<Value, ApiError> {
-        if crate::settings::py_truthy(&body["knowledge"]) {
-            return Err(ApiError(
-                501,
-                "The knowledge probe is not in FLE Link yet; run the speed test without it".into(),
-            ));
-        }
         let st = self.engine.status();
         let info = self.sysinfo();
         let gib = |v: &Value| v.as_f64().unwrap_or(0.0) / 1024f64.powi(3);
@@ -1279,6 +1349,21 @@ impl Studio {
             "engine": if truthy(&plan["engine"]) { plan["engine"].clone() } else { json!("") },
             "build": st.get("build").cloned().unwrap_or(Value::Null), "n_ctx": st.get("n_ctx").cloned().unwrap_or(Value::Null),
             "machine": machine, "command": command});
+        let mut context = context;
+        let probe = if truthy(&body["knowledge"]) {
+            let source = if truthy(&body["knowledge_set"]) {
+                py_str(&body["knowledge_set"])
+            } else {
+                crate::quality::BUILTIN.to_string()
+            };
+            // fail now, not after the speed requests
+            crate::quality::load_questions(&source, &self.opts.home, "", 0)
+                .map_err(|e| ApiError(400, e))?;
+            context["knowledge_set"] = json!(source);
+            Some((source, self.opts.home.clone()))
+        } else {
+            None
+        };
         let runs = body["runs"].as_i64().filter(|r| *r != 0).unwrap_or(1);
         let label = if truthy(&body["label"]) {
             crate::settings::py_str(&body["label"])
@@ -1286,7 +1371,7 @@ impl Studio {
             String::new()
         };
         self.bench
-            .start(runs, &label, context)
+            .start(runs, &label, context, probe)
             .map_err(|e| ApiError(409, e))
     }
 
@@ -1968,6 +2053,35 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             st.bench.delete(bench_delete_id(p).unwrap());
             Ok(json!({"ok": true}))
         }
+        ("GET", "/api/quality") => {
+            let builtin = crate::quality::load_questions(crate::quality::BUILTIN, &st.opts.home, "", 0)
+                .map(|(m, _)| m)
+                .unwrap_or(Value::Null);
+            Ok(json!({"current": st.quality.status(), "results": st.quality.results(),
+                "kld_by_model": st.quality.latest_kld_by_model(), "builtin": builtin,
+                "mkqa_license": crate::quality::MKQA_LICENSE, "kld_ctx": crate::quality::KLD_CTX}))
+        }
+        ("POST", "/api/quality/kld") => r.json(MAX_JSON).and_then(|body| st.quality_kld(&Value::Object(body))),
+        ("POST", "/api/quality/probe") => r.json(MAX_JSON).and_then(|body| st.quality_probe(&Value::Object(body))),
+        ("POST", "/api/quality/mkqa") => r.json(MAX_JSON).and_then(|body| {
+            let body = Value::Object(body);
+            let lang = if py_truthy(&body["lang"]) { py_str(&body["lang"]) } else { "en".into() };
+            crate::quality::import_mkqa(
+                &st.opts.home,
+                &lang,
+                Studio::clamp_int(&body["count"], 48, 1, 500) as usize,
+                Studio::clamp_int(&body["offset"], 0, 0, 100_000) as usize,
+            )
+            .map_err(|e| ApiError(400, e))
+        }),
+        ("POST", "/api/quality/cancel") => {
+            st.quality.cancel();
+            Ok(json!({"ok": true}))
+        }
+        ("POST", _) if hex_id(p, "/api/quality/", "/delete").is_some() => {
+            st.quality.delete(hex_id(p, "/api/quality/", "/delete").unwrap());
+            Ok(json!({"ok": true}))
+        }
         ("GET", "/api/tuning") => {
             Ok(st.tuning_state(r.query.get("model").and_then(|v| v.as_str()).unwrap_or("")))
         }
@@ -2413,8 +2527,6 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
     let is = |p: &str| path == p || path.starts_with(&format!("{p}/"));
     Some(if is("/api/forge") {
         "The model forge"
-    } else if is("/api/quality") {
-        "The quality measurements"
     } else if is("/api/remote") || is("/h") || is("/api/hosts") {
         "Remote access"
     } else if is("/api/update") {

@@ -17,6 +17,7 @@ pub mod live;
 pub mod mcp;
 pub mod oauth;
 pub mod planview;
+pub mod quality;
 pub mod report_time;
 pub mod run;
 pub mod server;

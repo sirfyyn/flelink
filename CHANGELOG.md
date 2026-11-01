@@ -16,8 +16,9 @@ First version of FLE Link: the layer between an inference engine and the tools t
   context one at a time, keeps only what is faster with a 95 % interval and saves the winner as a launch profile.
   **A/B/A comparison** of two settings with drift check. **Flag help:** every part of the start command explained in
   one sentence on the Engine page. **Expert cache view:** hit rate over time and per layer, fill, hot experts, read
-  from the FLE engine's log. The knowledge probe and KL divergence are not in FLE Link yet;
-  their card stays hidden.
+  from the FLE engine's log. **Quality next to speed:** KL divergence of a quantization
+  against its reference (with the engine's `llama-perplexity`; the reference run is kept and reused) and a knowledge probe
+  (48 own questions in English and German, CC0; MKQA can be imported on request), also right after a speed test.
 - **MCP servers as chat tools:** the `mcpServers` JSON in Settings, stdio programs and Streamable HTTP servers; their tools
   appear as `server__tool`, ask before each call unless the server is trusted, and the last tool list is remembered so the
   prompt stays the same while a server starts. Servers of the older HTTP+SSE revision are found by themselves. **Sign

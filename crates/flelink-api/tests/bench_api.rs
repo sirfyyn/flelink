@@ -122,9 +122,12 @@ fn the_speed_test_measures_stores_and_compares() {
     let (code, v) = api(
         "POST",
         "api/bench/start",
-        json!({"runs": 1, "knowledge": true}),
+        json!({"runs": 1, "knowledge": true, "knowledge_set": "/no/such/questions.json"}),
     );
-    assert_eq!(code, 501, "{v}");
+    assert_eq!(
+        code, 400,
+        "a bad question set fails before the speed requests: {v}"
+    );
 
     let run = |label: &str| -> Value {
         let (code, v) = api(

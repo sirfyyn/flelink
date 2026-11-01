@@ -390,8 +390,15 @@ impl Bench {
         self.cancel.store(true, Ordering::SeqCst);
     }
 
-    /// Start the speed test in a thread; Err is the message of a 409.
-    pub fn start(&self, runs: i64, label: &str, context: Value) -> Result<Value, String> {
+    /// Start the speed test in a thread; Err is the message of a 409. `probe`: (question set, data folder) of the knowledge
+    /// probe that runs after the speed requests and is stored in the same record.
+    pub fn start(
+        &self,
+        runs: i64,
+        label: &str,
+        context: Value,
+        probe: Option<(String, PathBuf)>,
+    ) -> Result<Value, String> {
         let mut cur = self.current.lock().unwrap();
         if cur.as_ref().is_some_and(|c| c["state"] == "running") {
             return Err("A speed test is already running".into());
@@ -411,7 +418,7 @@ impl Bench {
         let me = self.clone();
         std::thread::Builder::new()
             .name("bench".into())
-            .spawn(move || me.run(runs as usize, &base, &key))
+            .spawn(move || me.run(runs as usize, &base, &key, probe))
             .map_err(|e| e.to_string())?;
         Ok(rec)
     }
@@ -422,7 +429,7 @@ impl Bench {
         }
     }
 
-    fn run(&self, runs: usize, base: &str, key: &str) {
+    fn run(&self, runs: usize, base: &str, key: &str, probe: Option<(String, PathBuf)>) {
         let result = (|| -> Result<(), Stop> {
             let all: Vec<&Test> = TESTS.iter().collect();
             measure(
@@ -443,6 +450,25 @@ impl Bench {
                     })
                 },
             )?;
+            if let Some((source, data_dir)) = &probe {
+                if self.cancel.load(Ordering::SeqCst) {
+                    return Err(Stop::Cancelled);
+                }
+                let say = |t: &str| -> Result<(), crate::quality::Stop> {
+                    if self.cancel.load(Ordering::SeqCst) {
+                        return Err(crate::quality::Stop::Cancelled);
+                    }
+                    self.set(|c| c["step"] = json!(t));
+                    Ok(())
+                };
+                say("Knowledge probe").map_err(|_| Stop::Cancelled)?;
+                let q = crate::quality::run_probe(base, key, &say, source, data_dir, "", 0)
+                    .map_err(|e| match e {
+                        crate::quality::Stop::Cancelled => Stop::Cancelled,
+                        crate::quality::Stop::Failed(m) => Stop::Failed(m),
+                    })?;
+                self.set(|c| c["quality"] = q);
+            }
             // summary and comparison first, then "done": the page reads them as soon as it sees the state change
             let (id, context, tests) = {
                 let c = self.status();
