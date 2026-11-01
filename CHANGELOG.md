@@ -10,6 +10,9 @@ First version of FLE Link: the layer between an inference engine and the tools t
   `fetch-sidecars`, `report`, `bench`, `studio`.
 - **Browser interface** (`flelink studio`): the FLE Studio 0.4.1 page under the FLE Link name, served by a Rust server that answers the same `/api` and
   `/v1` as the Python original (compared request by request in the tests; deliberate differences in `DEVIATIONS.md`).
+- **Speed test in the browser** (Experiments): the three requests of FLE Studio against the running engine, stored with the
+  exact command, compared with the last run of the same setting (median and 95 % interval, the same numbers as the Python
+  Studio). The tuner, the A/B/A comparison and the knowledge probe are not in FLE Link yet; their cards stay hidden.
 - **Desktop app** (Tauri 2, `app/`): the same server inside the app on a free loopback port; closing the window stops the
   server and the model. On Windows the engine ends with the app, also after a crash.
 - **Host mode:** `flelink studio --host 0.0.0.0` for another machine to look at: access key, https with a certificate of its

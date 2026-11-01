@@ -43,6 +43,7 @@ pub struct Studio {
     pub engines: Engines,
     pub profiles: Mutex<Profiles>,
     pub engine: Engine,
+    pub bench: crate::bench::Bench,
     pub live: Live,
     /// the server listens beyond this machine (host mode); set by the starter
     pub lan: std::sync::atomic::AtomicBool,
@@ -100,6 +101,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         engines,
         lan: std::sync::atomic::AtomicBool::new(lan),
         live: Live::new(engine.clone(), 1.0),
+        bench: crate::bench::Bench::new(engine.clone(), &home),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
         downloads,
@@ -1128,6 +1130,75 @@ impl Studio {
         Ok(plan)
     }
 
+    /// `POST /api/bench/start`: what is running (model, profile, engine, command, machine) goes with the result, so runs
+    /// of different settings can be told apart. The knowledge probe of the Python Studio is not here yet.
+    pub fn bench_start(&self, body: &Value) -> Result<Value, ApiError> {
+        if crate::settings::py_truthy(&body["knowledge"]) {
+            return Err(ApiError(
+                501,
+                "The knowledge probe is not in FLE Link yet; run the speed test without it".into(),
+            ));
+        }
+        let st = self.engine.status();
+        let info = self.sysinfo();
+        let gib = |v: &Value| v.as_f64().unwrap_or(0.0) / 1024f64.powi(3);
+        let gpu = info["gpus"]
+            .as_array()
+            .map(|g| {
+                g.iter()
+                    .map(|g| {
+                        format!(
+                            "{} {:.0} GB",
+                            crate::settings::py_str(&g["name"]),
+                            gib(&g["memory_total"])
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        let svc = st["service"].as_object().cloned().unwrap_or_default();
+        let plan = &st["plan"];
+        let truthy = crate::settings::py_truthy;
+        let profile = if truthy(&plan["profile"]) {
+            plan["profile"].clone()
+        } else if !svc.is_empty() {
+            json!(format!("service {}", crate::settings::py_str(&svc["unit"])))
+        } else if truthy(&st["attached"]) {
+            json!("attached")
+        } else {
+            json!("")
+        };
+        let command = if truthy(&plan["command"]) {
+            plan["command"].clone()
+        } else {
+            svc.get("command").cloned().unwrap_or(Value::Null)
+        };
+        let machine = format!(
+            "{}, {:.0} GB RAM{}",
+            crate::settings::py_str(&info["cpu"]["name"]),
+            gib(&info["memory"]["total"]),
+            if gpu.is_empty() {
+                String::new()
+            } else {
+                format!(", {gpu}")
+            }
+        );
+        let context = json!({"model": st["model"].get("name").cloned().unwrap_or(Value::Null), "profile": profile,
+            "engine": if truthy(&plan["engine"]) { plan["engine"].clone() } else { json!("") },
+            "build": st.get("build").cloned().unwrap_or(Value::Null), "n_ctx": st.get("n_ctx").cloned().unwrap_or(Value::Null),
+            "machine": machine, "command": command});
+        let runs = body["runs"].as_i64().filter(|r| *r != 0).unwrap_or(1);
+        let label = if truthy(&body["label"]) {
+            crate::settings::py_str(&body["label"])
+        } else {
+            String::new()
+        };
+        self.bench
+            .start(runs, &label, context)
+            .map_err(|e| ApiError(409, e))
+    }
+
     /// `POST /api/recipes/<id>/start`: start the engine with the recipe's model and start values, and use its chat
     /// defaults. A recipe that prefers a plugin engine starts that engine (as `flelink run <id>` does).
     pub fn recipe_start(&self, id: &str) -> Result<Value, ApiError> {
@@ -1401,6 +1472,16 @@ fn download_action(p: &str) -> Option<(&str, &str)> {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         && matches!(what, "pause" | "resume" | "cancel" | "remove"))
     .then_some((id, what))
+}
+
+/// `/api/bench/<id>/delete` -> the result id (`[0-9a-f]+`)
+fn bench_delete_id(p: &str) -> Option<&str> {
+    let id = p.strip_prefix("/api/bench/")?.strip_suffix("/delete")?;
+    (!id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then_some(id)
 }
 
 /// `/api/recipes/<id>/download` -> the recipe id (`[\w.-]+`)
@@ -1785,6 +1866,21 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .action(id, what)
                 .ok_or(ApiError(404, "Not found".into()))
         }
+        ("GET", "/api/bench") => Ok(
+            json!({"current": st.bench.status(), "results": st.bench.results(),
+            "tests": crate::bench::Bench::test_names()}),
+        ),
+        ("POST", "/api/bench/start") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.bench_start(&Value::Object(body))),
+        ("POST", "/api/bench/cancel") => {
+            st.bench.cancel();
+            Ok(json!({"ok": true}))
+        }
+        ("POST", _) if bench_delete_id(p).is_some() => {
+            st.bench.delete(bench_delete_id(p).unwrap());
+            Ok(json!({"ok": true}))
+        }
         ("GET", "/api/recipes") => Ok(st.recipes()),
         ("POST", _) if recipe_download_id(p).is_some() => {
             st.recipe_download(recipe_download_id(p).unwrap())
@@ -2045,9 +2141,7 @@ async fn login(st: &Ctx, method: &Method, body: Body, head: bool) -> Response<Bo
 /// Features of the Python Studio that this server does not have yet: a clear 501 instead of a 404 that looks like a bug.
 fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
     let is = |p: &str| path == p || path.starts_with(&format!("{p}/"));
-    Some(if is("/api/bench") {
-        "The speed test"
-    } else if is("/api/forge") {
+    Some(if is("/api/forge") {
         "The model forge"
     } else if is("/api/tuning") {
         "The tuner"

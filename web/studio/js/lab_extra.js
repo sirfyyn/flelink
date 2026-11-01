@@ -9,7 +9,7 @@ import { loadStyle, pctText, verdictPill, withCi } from "./tuner.js";
 const completeModels = () => (store.state?.models || []).filter((m) => m.kind === "model" && m.complete && !m.error);
 const profileName = (id) => (id === "auto" ? "Automatic settings" : (store.state?.profiles || []).find((p) => p.id === id)?.name || id);
 
-export function mountExtras(abaBox, qualityBox, { onQuality } = {}) {
+export function mountExtras(abaBox, qualityBox, { onQuality, onUnavailable } = {}) {
   loadStyle();
   let tuning = { current: null, results: [] };
   let quality = { current: null, results: [], builtin: {}, mkqa_license: "" };
@@ -22,6 +22,8 @@ export function mountExtras(abaBox, qualityBox, { onQuality } = {}) {
     try {
       [tuning, quality] = await Promise.all([get("/api/tuning"), get("/api/quality")]);
     } catch (e) {
+      // a server without the tuner and the quality measurements (FLE Link answers 501): no cards that fail on use
+      if (e.status === 501) { abaBox.hidden = true; qualityBox.hidden = true; onUnavailable?.(); return; }
       if (!gone) toast(e.message, "bad");
       return;
     }
