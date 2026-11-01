@@ -109,17 +109,18 @@ fn tool_routes_hosts_capabilities_and_update_match_the_python_studio() {
         }
     };
     both("tools default", "GET", "/api/tools", None, &[]);
+    // the list itself differs by design: FLE Link's own plugins (forge, remote, updater) are built in
     both(
-        "plugins (none in the core)",
+        "plugins (built in, list not compared)",
         "GET",
         "/api/plugins",
         None,
-        &[],
+        &["plugins"],
     );
     both(
         "plugin toggle unknown",
         "POST",
-        "/api/plugins/forge/enable",
+        "/api/plugins/nosuch/enable",
         Some(&json!({})),
         &[],
     );
@@ -138,8 +139,8 @@ fn tool_routes_hosts_capabilities_and_update_match_the_python_studio() {
         Some(&json!({})),
         &[],
     );
-    both("plugin files", "GET", "/plugins/forge/boot.js", None, &[]);
-    both("plugin files bad", "GET", "/plugins/forge", None, &[]);
+    both("plugin files", "GET", "/plugins/nosuch/boot.js", None, &[]);
+    both("plugin files bad", "GET", "/plugins/nosuch", None, &[]);
     both(
         "capabilities, nothing loaded",
         "GET",

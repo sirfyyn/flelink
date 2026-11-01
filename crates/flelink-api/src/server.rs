@@ -46,6 +46,7 @@ pub struct Studio {
     pub bench: crate::bench::Bench,
     pub tuner: crate::tuner::Tuner,
     pub quality: crate::quality::Quality,
+    pub forge: crate::forge::Forge,
     pub updates: crate::updates::Updates,
     pub clients: crate::remote::Clients,
     pub hosts: crate::remote::Hosts,
@@ -123,6 +124,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         bench: crate::bench::Bench::new(engine.clone(), &home),
         tuner: crate::tuner::Tuner::new(&home),
         quality: crate::quality::Quality::new(&home),
+        forge: crate::forge::Forge::new(&home),
         updates: crate::updates::Updates::new(&home, &github_api),
         clients: crate::remote::Clients::new(&home),
         hosts: crate::remote::Hosts::new(&home),
@@ -984,6 +986,202 @@ impl Studio {
 
     pub fn sysinfo(&self) -> Value {
         crate::system::info(&self.models_dir())
+    }
+
+    /// The llama-server files whose folders are searched for the Forge tools.
+    fn forge_engine_paths(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = self
+            .engines
+            .installed()
+            .iter()
+            .map(|e| ("engine".to_string(), py_str(&e["path"])))
+            .collect();
+        let custom = self
+            .config
+            .lock()
+            .unwrap()
+            .get("engine.custom_path")
+            .map(py_str)
+            .unwrap_or_default();
+        if !custom.is_empty() {
+            out.push(("custom engine".into(), custom));
+        }
+        out
+    }
+
+    fn forge_tools(
+        &self,
+        refresh: bool,
+    ) -> std::collections::HashMap<String, crate::forge::tools::Tool> {
+        let dir = self
+            .config
+            .lock()
+            .unwrap()
+            .get("forge.tools_dir")
+            .map(py_str)
+            .unwrap_or_default();
+        self.forge.tools(refresh, &dir, &self.forge_engine_paths())
+    }
+
+    fn forge_overview(&self) -> Value {
+        let found = self.forge_tools(true);
+        let dir = self
+            .config
+            .lock()
+            .unwrap()
+            .get("forge.tools_dir")
+            .map(py_str)
+            .unwrap_or_default();
+        self.forge.overview(&found, &dir, &self.models_dir())
+    }
+
+    /// Add a finished Forge model to the library and save a start profile for it.
+    fn forge_publish(&self, id: &str) -> Result<Value, ApiError> {
+        let info = self.sysinfo();
+        let gpus = info["gpus"].as_array().cloned().unwrap_or_default();
+        let unified = gpus.iter().any(|g| g["unified"] == true);
+        let (final_, name, args, notes) = self
+            .forge
+            .publish_plan(id, !gpus.is_empty(), unified)
+            .map_err(|e| ApiError(e.0, e.1))?;
+        let fle = self.engines.installed().iter().any(|e| e["kind"] == "fle");
+        let model = self
+            .library
+            .lock()
+            .unwrap()
+            .add(&self.models_dir(), &final_)
+            .map_err(|e| ApiError(400, e))?;
+        let Value::Object(data) = json!({"name": format!("Forge: {name}"), "engine": if fle { "fle" } else { "upstream" },
+            "binary": "", "args": args, "env": {}, "notes": notes})
+        else {
+            unreachable!()
+        };
+        let prof = self
+            .profiles
+            .lock()
+            .unwrap()
+            .save(&data)
+            .map_err(|e| ApiError(400, e.0))?;
+        Ok(json!({"model": model, "profile": prof.public()}))
+    }
+
+    fn forge_route(
+        &self,
+        method: &str,
+        p: &str,
+        body: Option<Value>,
+        query: &Map<String, Value>,
+    ) -> Option<Result<Value, ApiError>> {
+        let fe = |e: crate::forge::ForgeError| ApiError(e.0, e.1);
+        let body = body.unwrap_or(json!({}));
+        let jobs = &self.forge.jobs;
+        let job = |suffix: &str| -> Option<String> {
+            let id = p.strip_prefix("/api/forge/jobs/")?.strip_suffix(suffix)?;
+            (id.len() == 12
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+            .then(|| id.to_string())
+        };
+        let not_found = || ApiError(404, "Not found".into());
+        Some(match (method, p) {
+            ("GET", "/api/forge") => Ok(self.forge_overview()),
+            ("POST", "/api/forge/tools") => {
+                let dir = py_str(&body["tools_dir"]);
+                let mut patch = Map::new();
+                patch.insert("forge".into(), json!({"tools_dir": if body["tools_dir"].is_null() { String::new() } else { dir }}));
+                match self.config.lock().unwrap().update(&patch) {
+                    Ok(_) => {}
+                    Err(e) => return Some(Err(ApiError(400, e))),
+                }
+                Ok(self.forge_overview())
+            }
+            ("POST", "/api/forge/inspect") => {
+                self.forge.inspect(&py_str(&body["path"])).map_err(fe)
+            }
+            ("POST", "/api/forge/calculate") => self.forge.calculate(&body).map_err(fe),
+            ("POST", "/api/forge/corpus") => self.forge.make_corpus(&body).map_err(fe),
+            ("POST", "/api/forge/recipe/import") => {
+                let r = if body["recipe"].is_null() || body["recipe"] == false {
+                    body.clone()
+                } else {
+                    body["recipe"].clone()
+                };
+                self.forge.import_recipe(&r.to_string()).map_err(fe)
+            }
+            ("POST", "/api/forge/recipe/share") => {
+                let r = if body["recipe"].is_object() {
+                    body["recipe"].clone()
+                } else {
+                    json!({})
+                };
+                crate::forge::recipe::portable(&r)
+                    .map(|r| json!({"recipe": r}))
+                    .map_err(|e| ApiError(400, e.0))
+            }
+            ("POST", "/api/forge/check") => {
+                let r = if body["recipe"].is_object() {
+                    body["recipe"].clone()
+                } else {
+                    json!({})
+                };
+                jobs.check(&r, &self.forge_tools(false))
+                    .map_err(|e| ApiError(400, e))
+            }
+            ("POST", "/api/forge/jobs") => {
+                let r = if body["recipe"].is_object() {
+                    body["recipe"].clone()
+                } else {
+                    json!({})
+                };
+                jobs.create(&r, self.forge_tools(true), &self.models_dir().join("forge"))
+                    .map_err(|(c, m)| ApiError(c, m))
+            }
+            ("GET", _) if job("").is_some() => {
+                let id = job("").unwrap();
+                jobs.get_job(&id)
+                    .map(|j| jobs.public(&j))
+                    .ok_or_else(not_found)
+            }
+            ("GET", _) if job("/log").is_some() => {
+                let since = query
+                    .get("since")
+                    .map(py_str)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                jobs.log_since(&job("/log").unwrap(), since)
+                    .ok_or_else(not_found)
+            }
+            ("GET", _) if job("/recipe").is_some() => {
+                self.forge.recipe_of(&job("/recipe").unwrap()).map_err(fe)
+            }
+            ("POST", _) if job("/cancel").is_some() => {
+                jobs.cancel(&job("/cancel").unwrap()).ok_or_else(not_found)
+            }
+            ("POST", _) if job("/resume").is_some() => {
+                let id = job("/resume").unwrap();
+                if jobs.get_job(&id).is_none() {
+                    Err(not_found())
+                } else {
+                    jobs.resume(&id, self.forge_tools(true))
+                        .map_err(|e| ApiError(409, e))
+                }
+            }
+            ("POST", _) if job("/delete").is_some() => {
+                let id = job("/delete").unwrap();
+                if jobs.get_job(&id).is_none() {
+                    Err(not_found())
+                } else {
+                    jobs.delete(&id, !py_truthy(&body["delete_model"]))
+                        .map(|_| json!({"ok": true}))
+                        .map_err(|e| ApiError(409, e))
+                }
+            }
+            ("POST", _) if job("/publish").is_some() => {
+                self.forge_publish(&job("/publish").unwrap())
+            }
+            _ => return None,
+        })
     }
 
     /// Which of the two MTP files are in the models folder (`extras_view`).
@@ -2411,6 +2609,18 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 Some(had) => Ok(json!({"signed_out": true, "had_token": had})),
             }
         }),
+        (m, _) if p == "/api/forge" || p.starts_with("/api/forge/") => {
+            let body = if m == "POST" {
+                match r.json(MAX_JSON) {
+                    Ok(b) => Some(Value::Object(b)),
+                    Err(e) => return Some(Err(e)),
+                }
+            } else {
+                None
+            };
+            let q: Map<String, Value> = r.query.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            return st.forge_route(m, p, body, &q);
+        }
         ("GET", "/api/flags") => Ok(crate::flaghelp::table()),
         ("POST", "/api/flags/explain") => r.json(MAX_JSON).map(|body| {
             let args: Vec<String> = body
@@ -2474,7 +2684,12 @@ const STATIC_TYPES: [(&str, &str); 12] = [
 
 /// The built web page: a folder when one is given (tests, development), else the copy inside the binary.
 /// The plugins that are part of FLE Link (their pages live in web/plugins/<id>/): (id, title, summary).
-const BUILTIN_PLUGINS: [(&str, &str, &str); 2] = [
+const BUILTIN_PLUGINS: [(&str, &str, &str); 3] = [
+    (
+        "forge",
+        "Forge",
+        "Build your own FLE quant: hybrid builds, expert pruning, KL checks.",
+    ),
     (
         "remote",
         "Remote access",
@@ -2495,8 +2710,14 @@ fn builtin_plugins() -> Vec<Value> {
     BUILTIN_PLUGINS
         .iter()
         .map(|(id, title, summary)| {
+            // the Forge is a page of its own and has nothing to start with the page; the others are boot scripts
+            let (page, boot) = if *id == "forge" {
+                (json!({"title": "Forge", "icon": "forge", "script": "forge.js", "path": "/forge", "nav": true}), Value::Null)
+            } else {
+                (Value::Null, json!("boot.js"))
+            };
             json!({"id": id, "package": "flelink", "version": env!("CARGO_PKG_VERSION"), "bundled": true, "enabled": true,
-                "loaded": true, "error": "", "page": null, "boot": "boot.js", "boot_early": false, "title": title,
+                "loaded": true, "error": "", "page": page, "boot": boot, "boot_early": false, "title": title,
                 "summary": summary})
         })
         .collect()
@@ -3030,11 +3251,8 @@ async fn login(st: &Ctx, method: &Method, body: Body, head: bool) -> Response<Bo
 /// Features of the Python Studio that this server does not have yet: a clear 501 instead of a 404 that looks like a bug.
 fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
     let is = |p: &str| path == p || path.starts_with(&format!("{p}/"));
-    Some(if is("/api/forge") {
-        "The model forge"
-    } else {
-        return None;
-    })
+    let _ = is;
+    None
 }
 
 pub fn router(st: Ctx) -> Router {

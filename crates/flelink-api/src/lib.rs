@@ -9,6 +9,7 @@ pub mod downloads;
 pub mod engine;
 pub mod engines;
 pub mod flaghelp;
+pub mod forge;
 pub mod gguf;
 pub mod hf;
 pub mod launch;

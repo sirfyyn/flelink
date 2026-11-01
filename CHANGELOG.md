@@ -34,6 +34,12 @@ First version of FLE Link: the layer between an inference engine and the tools t
   Rights per client (chat, look and measure; admin for changes, installs confirmed on the client), revoke any time. Hosts
   by address (pinned TLS) or SSH target (`ssh -N -L`, keys only, kept alive); everything under `/h/<host>/` is passed on,
   streams included; a mirrored host shows its chats offline.
+- **Forge** (its own page, `/forge`): build your own quant with the FLE recipe. Hybrids that take whole expert layers
+  from other quants of the same model (the layer choice for a size budget is computed exactly, with a memory preview for
+  your RAM and GPU), quantization with `llama-quantize` and an importance matrix, expert pruning (REAP, with the FLE
+  engine's `llama-fle-reap` or from the importance matrix), the KL-divergence check against the reference, and a recipe
+  file that others can rebuild. Jobs run in the background, survive a restart and resume where they stopped; a finished
+  model goes into the library with a start profile. The built files are byte for byte those of the FLE Studio Forge.
 - **Desktop app** (Tauri 2, `app/`): the same server inside the app on a free loopback port; closing the window stops the
   server and the model. On Windows the engine ends with the app, also after a crash.
 - **Host mode:** `flelink studio --host 0.0.0.0` for another machine to look at: access key, https with a certificate of its

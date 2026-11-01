@@ -38,6 +38,21 @@ fn has_avx2() -> bool {
     false
 }
 
+/// Free space in the file system of `dir` (created if missing); 0 when it cannot be told.
+pub fn free_bytes(dir: &Path) -> u64 {
+    let _ = std::fs::create_dir_all(dir);
+    run("df", &["-k", &dir.to_string_lossy()])
+        .and_then(|o| {
+            o.lines().nth(1).and_then(|l| {
+                l.split_whitespace()
+                    .nth(3)
+                    .and_then(|v| v.parse::<u64>().ok())
+            })
+        })
+        .map(|k| k * 1024)
+        .unwrap_or(0)
+}
+
 pub fn detect(dir: &Path) -> SysInfo {
     let os = std::env::consts::OS.to_string();
     let arch = match std::env::consts::ARCH {
@@ -119,17 +134,7 @@ pub fn detect(dir: &Path) -> SysInfo {
     } else {
         gpus.iter().filter_map(|g| g.vram_bytes).max().unwrap_or(0)
     };
-    let _ = std::fs::create_dir_all(dir);
-    let disk_free_bytes = run("df", &["-k", &dir.to_string_lossy()])
-        .and_then(|o| {
-            o.lines().nth(1).and_then(|l| {
-                l.split_whitespace()
-                    .nth(3)
-                    .and_then(|v| v.parse::<u64>().ok())
-            })
-        })
-        .map(|k| k * 1024)
-        .unwrap_or(0);
+    let disk_free_bytes = free_bytes(dir);
     SysInfo {
         os,
         arch,
