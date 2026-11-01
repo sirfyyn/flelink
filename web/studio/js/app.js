@@ -199,11 +199,10 @@ export function topbar(title, ...right) {
 
 // ----------------------------------------------------------------------------------------------- sidebar
 
-// Experiments (/lab) has the speed test; its tuner and quality cards hide themselves while the server answers 501 for
-// them. Expert cache (/cache) needs /api/cache, which the FLE Link server does not have yet: reachable by address only.
+// Experiments (/lab): speed test, A/B/A; its quality card hides itself while the server answers 501 for it.
 const NAV = [
   ["/", "chat", "Chat"], ["/models", "models", "Models"], ["/engine", "engine", "Engine"],
-  ["/lab", "lab", "Experiments"], ["/settings", "settings", "Settings"],
+  ["/lab", "lab", "Experiments"], ["/cache", "grid", "Expert cache"], ["/settings", "settings", "Settings"],
 ];
 
 let navKey = "";

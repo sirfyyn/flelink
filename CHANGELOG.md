@@ -15,7 +15,8 @@ First version of FLE Link: the layer between an inference engine and the tools t
   Studio). **Tuner** ("Best for my machine" on the Engine page): tries threads, expert cache or `--n-cpu-moe`, batch and
   context one at a time, keeps only what is faster with a 95 % interval and saves the winner as a launch profile.
   **A/B/A comparison** of two settings with drift check. **Flag help:** every part of the start command explained in
-  one sentence on the Engine page. The knowledge probe and KL divergence are not in FLE Link yet;
+  one sentence on the Engine page. **Expert cache view:** hit rate over time and per layer, fill, hot experts, read
+  from the FLE engine's log. The knowledge probe and KL divergence are not in FLE Link yet;
   their card stays hidden.
 - **Desktop app** (Tauri 2, `app/`): the same server inside the app on a free loopback port; closing the window stops the
   server and the model. On Windows the engine ends with the app, also after a crash.

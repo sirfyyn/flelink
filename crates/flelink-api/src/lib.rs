@@ -2,6 +2,7 @@
 //! specification and `tests/` compare both servers request by request.
 #![allow(clippy::manual_is_multiple_of)] // `is_multiple_of` needs a newer Rust than we promise
 pub mod bench;
+pub mod cachewatch;
 pub mod catalog;
 pub mod chats;
 pub mod downloads;

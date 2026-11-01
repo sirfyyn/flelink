@@ -41,6 +41,9 @@ class H(BaseHTTPRequestHandler):
 srv = ThreadingHTTPServer(("127.0.0.1", port), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
+print("MoE expert cache enabled: 4 layers x 8 slots, 1 inserts/step, 100.0 MiB device memory", flush=True)
+print("moe-cache: steps=512 hits=300 misses=100 hit-rate=75.0%", flush=True)
+print("moe-layer: steps=512 layer=2 hits=90 misses=10 filled=6 slots=8", flush=True)
 print("srv main: listening on http://127.0.0.1:%d" % port, flush=True)
 while True:
     time.sleep(0.2)
@@ -182,6 +185,28 @@ fn the_tuner_keeps_what_is_faster_and_aba_compares() {
         cur["result"]
     );
     assert_eq!(v["results"].as_array().unwrap().len(), 2);
+
+    // the expert cache view follows the engine log
+    let (c, started) = call("POST", "api/engine/start", json!({"model": model}));
+    assert_eq!(c, 200, "{started}");
+    let t = Instant::now();
+    let cache = loop {
+        let (_, c) = call("GET", "api/cache?layer=2", json!({}));
+        if c["available"]["layers"] == true || t.elapsed() > Duration::from_secs(20) {
+            break c;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    };
+    assert_eq!(cache["enabled"]["layers"], 4, "{cache}");
+    assert_eq!(cache["overall"]["hit_rate"], 75.0);
+    assert_eq!(cache["layers"][0]["fill"], 0.75);
+    assert_eq!(cache["layer_series"]["series"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        cache["missing"].as_array().unwrap().len(),
+        1,
+        "only the hot experts are missing"
+    );
+    call("POST", "api/engine/stop", json!({}));
 
     let id = v["results"][0]["id"].as_str().unwrap();
     assert_eq!(

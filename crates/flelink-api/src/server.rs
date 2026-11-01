@@ -45,6 +45,7 @@ pub struct Studio {
     pub engine: Engine,
     pub bench: crate::bench::Bench,
     pub tuner: crate::tuner::Tuner,
+    pub cache: Arc<crate::cachewatch::CacheWatch>,
     pub live: Live,
     /// the server listens beyond this machine (host mode); set by the starter
     pub lan: std::sync::atomic::AtomicBool,
@@ -83,6 +84,11 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
     );
     let engines = Engines::new(&home, downloads.clone(), config.clone(), &opts.github_api);
     let engine = Engine::new(&home);
+    let cache = Arc::new(crate::cachewatch::CacheWatch::default());
+    let feed = cache.clone();
+    engine.add_listener(Box::new(move |line| {
+        feed.feed(line);
+    }));
     engine.set_restart_on_crash(
         config
             .lock()
@@ -104,6 +110,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         live: Live::new(engine.clone(), 1.0),
         bench: crate::bench::Bench::new(engine.clone(), &home),
         tuner: crate::tuner::Tuner::new(&home),
+        cache,
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
         downloads,
@@ -2011,6 +2018,15 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .delete(hex_id(p, "/api/tuning/", "/delete").unwrap());
             Ok(json!({"ok": true}))
         }
+        ("GET", "/api/cache") => {
+            let layer = r
+                .query
+                .get("layer")
+                .and_then(|v| v.as_str())
+                .filter(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_digit()))
+                .and_then(|l| l.parse().ok());
+            Ok(st.cache.snapshot(layer))
+        }
         ("GET", "/api/flags") => Ok(crate::flaghelp::table()),
         ("POST", "/api/flags/explain") => r.json(MAX_JSON).map(|body| {
             let args: Vec<String> = body
@@ -2289,8 +2305,6 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
         "The model forge"
     } else if is("/api/quality") {
         "The quality measurements"
-    } else if is("/api/cache") {
-        "The expert cache view"
     } else if is("/api/mcp") || is("/oauth") || is("/api/apps") || is("/app-frame") {
         "MCP servers"
     } else if is("/api/remote") || is("/h") || is("/api/hosts") {
