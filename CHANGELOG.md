@@ -24,6 +24,11 @@ First version of FLE Link: the layer between an inference engine and the tools t
   FLE Link installed; without an NVIDIA GPU or with a plain llama.cpp, `auto` means plain llama.cpp settings, not a failure.
 - The Studio asks once more without tools when a small model writes a tool call the engine cannot read, and says so under the
   answer.
+- **Recipes and plugins:** a recipe (TOML) is a model with its engine, start settings and chat defaults, shared as a file or
+  URL (`flelink recipes`, `flelink run my.recipe.toml`, docs/RECIPES.md). A plugin is a folder that brings engines (from a
+  GitHub release or your own build) and recipes (`flelink plugins`, docs/PLUGINS.md); it is data, not code.
+- **The FLE engine updates itself:** once a day FLE Link asks for a newer FLE release and installs it next to the old one
+  (`FLE_NO_UPDATE=1` turns it off). The newest installed build of an engine is the one that runs.
 - **Any GGUF from Hugging Face:** search, open a repo, see per quant whether it fits this machine, download (resumable,
   checked against the repo's SHA-256).
 - GPU `auto` takes the card with the most free memory and keeps a `CUDA_VISIBLE_DEVICES` it was started with (D12, D13).

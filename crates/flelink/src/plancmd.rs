@@ -175,11 +175,21 @@ fn env_pairs(v: &[String]) -> Result<Vec<(String, String)>> {
     Ok(out)
 }
 
+/// The engines FLE Link installed, newest build of each first (so `doctor` and `plan` take the one `run` takes).
 fn installed(home: &std::path::Path) -> Vec<PathBuf> {
-    flelink_core::engines::installed(home)
-        .into_iter()
-        .map(|(_, server)| server)
-        .collect()
+    let mut all = flelink_core::engines::installed(home);
+    // variants keep their name order (fle before upstream); within one variant the newest build comes first
+    let variant = |n: &str| {
+        n.rsplit_once('-')
+            .map(|(v, _)| v.to_string())
+            .unwrap_or_default()
+    };
+    all.sort_by(|a, b| {
+        variant(&a.0).cmp(&variant(&b.0)).then_with(|| {
+            flelink_core::engines::version_key(&b.0).cmp(&flelink_core::engines::version_key(&a.0))
+        })
+    });
+    all.into_iter().map(|(_, server)| server).collect()
 }
 
 fn options(a: &PlanArgs, model: &gguf::Model, home: &std::path::Path) -> Result<Options> {

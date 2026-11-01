@@ -128,6 +128,53 @@ fn pick<'a>(assets: &'a [Asset], v: &Variant, os: &str, arch: &str) -> Option<&'
         .max_by_key(|a| a.name.clone())
 }
 
+/// The numbers of the version at the end of a folder name (`fle-cuda-v1.2.0` -> [1, 2, 0], `upstream-metal-b11540` ->
+/// [11540]), for ordering builds of one variant.
+pub fn version_key(name: &str) -> Vec<u64> {
+    let tail = name.rsplit_once('-').map(|(_, t)| t).unwrap_or(name);
+    tail.trim_start_matches(['v', 'b'])
+        .split(|c: char| !c.is_ascii_digit())
+        .filter_map(|p| p.parse().ok())
+        .collect()
+}
+
+/// The newest installed build of a variant (by its version, not by name order).
+pub fn newest_installed(dir: &Path, variant_id: &str) -> Option<(String, PathBuf)> {
+    installed(dir)
+        .into_iter()
+        .filter(|(n, _)| n.starts_with(&format!("{variant_id}-")))
+        .max_by_key(|(n, _)| version_key(n))
+}
+
+/// A newer FLE release than `installed_name`, if there is one. Asks GitHub at most once a day (the answer is kept in
+/// `<data>/engines/.latest-<variant>`); offline, on any error and with FLE_NO_UPDATE set it says nothing. Only the FLE
+/// engine follows its releases: upstream llama.cpp is pinned (LLAMA_TAG).
+pub fn update_available(dir: &Path, v: &Variant, installed_name: &str) -> Option<String> {
+    if v.kind != "fle" || std::env::var_os("FLE_NO_UPDATE").is_some_and(|x| !x.is_empty()) {
+        return None;
+    }
+    let memo = dir.join("engines").join(format!(".latest-{}", v.id));
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let cached = std::fs::read_to_string(&memo).ok().and_then(|t| {
+        let (when, tag) = t.trim().split_once(' ')?;
+        let when: u64 = when.parse().ok()?;
+        (now.saturating_sub(when) < 86_400).then(|| tag.to_string())
+    });
+    let tag = match cached {
+        Some(t) => t,
+        None => {
+            let t = release(FLE_REPO, None).ok()?.tag_name;
+            let _ = std::fs::write(&memo, format!("{now} {t}"));
+            t
+        }
+    };
+    let have = version_key(installed_name);
+    (version_key(&format!("x-{tag}")) > have).then_some(tag)
+}
+
 /// Install a server from any GitHub release (an engine a plugin brings): the archive whose name contains every token goes
 /// to `engines/<id>-<tag>/`, checked against the SHA-256 GitHub publishes. Returns the path of `binary` inside it.
 pub fn install_from_release(
@@ -411,5 +458,40 @@ mod tests {
             pick(&assets, &c, "windows", "x64").unwrap().name,
             "llama-b1-bin-win-cuda-12.4-x64.zip"
         );
+    }
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    #[test]
+    fn versions_order_by_number_not_by_name() {
+        assert!(version_key("fle-cuda-v1.10.0") > version_key("fle-cuda-v1.9.3"));
+        assert!(version_key("fle-cuda-v1.2.0") > version_key("fle-cuda-v1.1.0"));
+        assert_eq!(version_key("upstream-metal-b11540"), vec![11540]);
+        let home = std::env::temp_dir().join(format!("fle-versions-{}", std::process::id()));
+        for n in [
+            "fle-cuda-v1.9.0",
+            "fle-cuda-v1.10.0",
+            "upstream-cuda-b11540",
+        ] {
+            let d = home.join("engines").join(n);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(
+                d.join(if cfg!(windows) {
+                    "llama-server.exe"
+                } else {
+                    "llama-server"
+                }),
+                "",
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            newest_installed(&home, "fle-cuda").unwrap().0,
+            "fle-cuda-v1.10.0"
+        );
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

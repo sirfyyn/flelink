@@ -96,11 +96,30 @@ pub fn ensure_and_start_recipe(
             .context("no engine fits this machine")?,
     };
     emit(Event::Step(format!("Engine: {} - {}", v.label, v.why)));
-    let existing = engines::installed(home)
-        .into_iter()
-        .find(|(n, _)| n.starts_with(v.id));
+    let existing = engines::newest_installed(home, v.id);
     let server_bin = match existing {
-        Some((_, p)) => p,
+        // a newer FLE release replaces the installed one for this start; the old folder stays (a failed update keeps it)
+        Some((name, p)) => match engines::update_available(home, &v, &name) {
+            Some(tag) => {
+                emit(Event::Step(format!("Updating {} to {tag}", v.label)));
+                match engines::install(home, &v, &sys, &mut |l, d, t| {
+                    emit(Event::Progress {
+                        label: l.into(),
+                        done: d,
+                        total: t,
+                    })
+                }) {
+                    Ok(p2) => p2,
+                    Err(e) => {
+                        emit(Event::Log(format!(
+                            "update failed, staying on {name}: {e:#}"
+                        )));
+                        p
+                    }
+                }
+            }
+            None => p,
+        },
         None => {
             emit(Event::Step(
                 "Installing the engine (checked against the SHA-256 GitHub publishes)".into(),
