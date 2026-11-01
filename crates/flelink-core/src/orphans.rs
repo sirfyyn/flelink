@@ -5,7 +5,6 @@
 //! fires when the starting *thread* ends, and the TUI starts the engine from a worker thread. On Windows the app's job
 //! object ends the engine with the app.)
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 fn dir(home: &Path) -> PathBuf {
     home.join("run")
@@ -80,6 +79,7 @@ fn is_engine(pid: u32) -> bool {
 
 #[cfg(unix)]
 fn terminate(pid: u32) {
+    use std::time::{Duration, Instant};
     let send = |sig: &str| {
         let _ = std::process::Command::new("kill")
             .args([sig, &pid.to_string()])
