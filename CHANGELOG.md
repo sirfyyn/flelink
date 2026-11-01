@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (not yet released)
+## 0.1.0 (2026-11-01)
 
 First version of FLE Link: the layer between an inference engine and the tools that use it.
 

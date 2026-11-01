@@ -1,6 +1,6 @@
 id = "deepseek-v41-ista-dspark"
 title = "DeepSeek-V4.1-Flash ISTA IQ2_XXS + DSpark (FLE)"
-note = "ISTA's GSQ-RCO quant with FLE's DSpark draft model. Measured on one 32 GB GPU with 120 GB RAM after a warm-up, without CPU pinning: 25.0 tok/s, 23.2 without the draft model; the first answers after a start are slower (the page cache is empty). Needs the FLE engine v1.2.1 or newer and about 255 GB on a fast NVMe. Less VRAM: lower FLE_MOE_CACHE_BUDGET_MIB (under 24 GB not tested)."
+note = "ISTA's GSQ-RCO quant with FLE's DSpark draft model. Measured with flelink run on one 32 GB GPU with 120 GB RAM, after a warm-up and without CPU pinning: 23.2 tok/s (two rounds of three prompts, 22.9 and 23.6), 72-89 % of the drafts accepted. The first answers after a start are slower (the page cache is empty). Needs the FLE engine v1.2.1 or newer and about 255 GB on a fast NVMe. Less VRAM: lower FLE_MOE_CACHE_BUDGET_MIB (under 24 GB not tested)."
 
 [model]
 repo = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"
