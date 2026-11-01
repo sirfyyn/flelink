@@ -30,9 +30,7 @@ pub fn ensure_and_start_recipe(
     emit: &mut dyn FnMut(Event),
 ) -> Result<Server> {
     let sys = system::detect(home);
-    if r.model.size > 0
-        && catalog::fit_size(r.model.size, r.needs_fle(), &sys) == catalog::Fit::TooBig
-    {
+    if r.fit(&home.join("models"), &sys) == catalog::Fit::TooBig {
         bail!(
             "{} does not fit this machine ({} RAM, {} free on disk)",
             r.title,

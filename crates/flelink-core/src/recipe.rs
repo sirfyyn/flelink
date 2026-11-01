@@ -348,6 +348,64 @@ impl Recipe {
         self.engine.strict && self.engine.prefer.iter().all(|e| e == "fle")
     }
 
+    /// Bytes still to download into `models` (a model part whose size the recipe does not give counts as the model's
+    /// whole size, once).
+    pub fn missing_bytes(&self, models: &Path) -> u64 {
+        let fetches = self.fetches();
+        let parts = self.model.files.len();
+        let model_missing = fetches[..parts]
+            .iter()
+            .any(|x| !models.join(&x.local).exists());
+        let draft_missing = fetches[parts..]
+            .iter()
+            .filter(|x| !models.join(&x.local).exists())
+            .map(|x| x.size)
+            .sum::<u64>();
+        (if model_missing { self.model.size } else { 0 }) + draft_missing
+    }
+
+    /// Does it fit this machine. Disk: only what is still to download. Memory: what the recipe says it was measured
+    /// with (`[requires]`; up to a fifth less is tight: it runs, slower) or, without that, the size rule of the catalog.
+    pub fn fit(&self, models: &Path, sys: &crate::system::SysInfo) -> crate::catalog::Fit {
+        use crate::catalog::Fit;
+        let missing = self.missing_bytes(models);
+        if missing > 0 && sys.disk_free_bytes > 0 && missing + (512 << 20) > sys.disk_free_bytes {
+            return Fit::TooBig;
+        }
+        let measured = |need_gib: Option<u32>, have: u64| {
+            need_gib.map(|g| {
+                let need = u64::from(g) << 30;
+                if have >= need * 98 / 100 {
+                    Fit::Fits
+                } else if have >= need * 8 / 10 {
+                    Fit::Tight
+                } else {
+                    Fit::TooBig
+                }
+            })
+        };
+        let ram = measured(self.requires.ram_gib, sys.ram_bytes);
+        let vram = measured(self.requires.vram_gib, sys.gpu_usable_bytes);
+        if ram.is_none() && vram.is_none() {
+            let size = self.model.size + self.draft.as_ref().map_or(0, |d| d.size);
+            if size == 0 {
+                return Fit::Fits;
+            }
+            // the disk was checked above with what is missing; the rule only judges memory here
+            let mut s = sys.clone();
+            s.disk_free_bytes = 0;
+            return crate::catalog::fit_size(size, self.needs_fle(), &s);
+        }
+        [ram, vram]
+            .into_iter()
+            .flatten()
+            .fold(Fit::Fits, |a, b| match (a, b) {
+                (Fit::TooBig, _) | (_, Fit::TooBig) => Fit::TooBig,
+                (Fit::Tight, _) | (_, Fit::Tight) => Fit::Tight,
+                _ => Fit::Fits,
+            })
+    }
+
     /// Put the recipe's start values over an automatic plan; `models` is the models folder (for `{draft}`).
     pub fn apply(&self, plan: &mut crate::plan::Plan, models: &Path) {
         if let Some(c) = self.run.context {
@@ -612,6 +670,56 @@ temperature = 0.2
         assert_eq!(args[t + 1], crate::system::physical_cores().to_string());
         // the TOML that `flelink recipe` prints reads back the same
         assert_eq!(Recipe::parse(&r.to_toml(), "builtin").unwrap(), r);
+    }
+
+    #[test]
+    fn fit_counts_what_is_missing_and_the_measured_requirements() {
+        use crate::catalog::Fit;
+        use crate::system::{Gpu, SysInfo};
+        let r = builtin()
+            .into_iter()
+            .find(|r| r.id == "deepseek-v41-ista-dspark")
+            .unwrap();
+        let titan = SysInfo {
+            os: "linux".into(),
+            arch: "x64".into(),
+            cpu: String::new(),
+            cores: 32,
+            ram_bytes: 129_800_000_000, // 120.9 GiB
+            disk_free_bytes: 166_000_000_000,
+            avx2: true,
+            gpus: vec![Gpu {
+                vendor: "nvidia".into(),
+                name: "RTX PRO 4500".into(),
+                vram_bytes: Some(32 << 30),
+            }],
+            gpu_usable_bytes: 32 << 30,
+        };
+        let models = std::env::temp_dir().join(format!("fle-fit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&models);
+        // nothing there yet: 248 GB to download do not fit 166 GB of free disk
+        assert_eq!(r.fit(&models, &titan), Fit::TooBig);
+        for x in r.fetches() {
+            let p = models.join(&x.local);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, b"").unwrap();
+        }
+        assert_eq!(r.missing_bytes(&models), 0);
+        // all there: the measured 120 GB RAM and 32 GB VRAM decide, not the size of the files
+        assert_eq!(r.fit(&models, &titan), Fit::Fits);
+        let less = SysInfo {
+            ram_bytes: 100 << 30,
+            ..titan.clone()
+        };
+        assert_eq!(r.fit(&models, &less), Fit::Tight);
+        let mac = SysInfo {
+            ram_bytes: 8 << 30,
+            gpus: vec![],
+            gpu_usable_bytes: 5 << 30,
+            ..titan
+        };
+        assert_eq!(r.fit(&models, &mac), Fit::TooBig);
+        let _ = std::fs::remove_dir_all(&models);
     }
 
     #[test]

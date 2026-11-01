@@ -1255,7 +1255,7 @@ impl Studio {
                     "size": r.model.size, "source": r.source, "engine": r.engine.prefer, "strict": r.engine.strict,
                     "context": r.run.context, "chat": serde_json::to_value(&r.chat).unwrap_or(Value::Null),
                     "downloaded": have,
-                    "fit": if r.model.size > 0 { crate::catalog::fit(r.model.size as i64, &sys) } else { Value::Null }})
+                    "fit": recipe_fit(r, &self.models_dir(), &sys)})
             })
             .collect();
         json!({"recipes": list, "problems": problems})
@@ -2669,6 +2669,26 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             .map_err(chat_err),
         _ => return None,
     })
+}
+
+/// The fit of a recipe for the Studio: what it was measured with (`[requires]`) and what is still to download decide when it
+/// says so (flelink_core::recipe::Recipe::fit), the Studio's size rule otherwise.
+fn recipe_fit(r: &flelink_core::recipe::Recipe, models: &std::path::Path, sys: &Value) -> Value {
+    if r.requires.ram_gib.is_some() || r.requires.vram_gib.is_some() {
+        use flelink_core::catalog::Fit;
+        let verdict = match r.fit(models, &flelink_core::system::detect(models)) {
+            Fit::Fits => "good",
+            Fit::Tight => "tight",
+            Fit::TooBig => "too_big",
+        };
+        return json!({"verdict": verdict, "kind": "recipe", "detail": {"ram_gib": r.requires.ram_gib,
+            "vram_gib": r.requires.vram_gib, "missing": r.missing_bytes(models)}, "advice": ""});
+    }
+    if r.model.size > 0 {
+        crate::catalog::fit(r.model.size as i64, sys)
+    } else {
+        Value::Null
+    }
 }
 
 const STATIC_TYPES: [(&str, &str); 12] = [

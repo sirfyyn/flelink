@@ -557,7 +557,7 @@ fn run() -> Result<()> {
             let (all, problems) = flelink_core::recipe::load_all(&home);
             for r in &all {
                 let fit = if r.model.size > 0 {
-                    catalog::fit_size(r.model.size, r.needs_fle(), &s).label()
+                    r.fit(&home.join("models"), &s).label()
                 } else {
                     "?"
                 };
