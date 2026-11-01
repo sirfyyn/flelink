@@ -1,6 +1,6 @@
 name: release
 
-# Tag vX.Y.Z builds `flelink` for macOS (arm64, x64), Linux (x64) and Windows (x64) and attaches the files plus the installers.
+# Tag vX.Y.Z builds (a tag with a dash, vX.Y.Z-rc.N, is a pre-release: install.sh and the updater skip it) `flelink` for macOS (arm64, x64), Linux (x64) and Windows (x64) and attaches the files plus the installers.
 on:
   push: { tags: ["v*"] }
 
@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - { os: macos-latest,   target: aarch64-apple-darwin }
-          - { os: macos-13,       target: x86_64-apple-darwin }
+          - { os: macos-latest,   target: x86_64-apple-darwin }   # cross-compiled: the Intel macOS images are gone
           - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu }
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
     runs-on: ${{ matrix.os }}
@@ -42,7 +42,7 @@ jobs:
       matrix:
         include:
           - { os: macos-latest,   args: "--target aarch64-apple-darwin" }
-          - { os: macos-13,       args: "--target x86_64-apple-darwin" }
+          - { os: macos-latest,   args: "--target x86_64-apple-darwin" }
           - { os: ubuntu-latest,  args: "" }
           - { os: windows-latest, args: "" }
     runs-on: ${{ matrix.os }}
@@ -62,7 +62,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "FLE Link ${{ github.ref_name }}"
           releaseDraft: false
-          prerelease: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
   publish:
     needs: build
@@ -73,4 +73,4 @@ jobs:
         with: { path: dist, merge-multiple: true }
       - run: cp install.sh install.ps1 dist/
       - uses: softprops/action-gh-release@v2
-        with: { files: "dist/*", prerelease: true, name: "FLE Link ${{ github.ref_name }}" }
+        with: { files: "dist/*", prerelease: "${{ contains(github.ref_name, '-') }}", name: "FLE Link ${{ github.ref_name }}" }
