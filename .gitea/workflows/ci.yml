@@ -1,9 +1,12 @@
 name: ci (Gitea)
 
-# Daily checks on our own runner `titan` (Linux; the runner pod keeps builds off Rhea's cores). macOS and Windows run on GitHub for pull requests, tags and
-# releases only: private repositories pay for those minutes there.
+# The checks of every push, on FYOS's own runner `flelink` (truenas, only FLE Link jobs; Entscheidung 725). GitHub no longer
+# starts the Actions of the private repository (billing, 2026-11-01); until the release makes it public, branches are pushed
+# to the `gitea` remote too and checked here. Linux: fmt, clippy, tests with the Python comparison (ci/linux.sh). Windows: the
+# program cross-compiled with MinGW (the Windows tests need a Windows machine). macOS is checked on a Mac before a merge.
+# Not on titan: its cores 24-31 are the measurement frame of the engine work.
 on:
-  push: { branches: [main] }
+  push: { branches: ["**"] }
   pull_request:
   workflow_dispatch:
 
@@ -13,8 +16,15 @@ concurrency:
 
 jobs:
   linux:
-    runs-on: titan
+    runs-on: flelink
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - run: bash ci/linux.sh
+
+  windows-build:
+    runs-on: flelink
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/windows-cross.sh
