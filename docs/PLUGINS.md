@@ -35,14 +35,31 @@ binary = "llama-server"         # the server inside the archive
 "macos-arm64" = ["macos", "arm64"]
 ```
 
-Instead of `[engine.release]` an engine can name a server you built: `path = "/opt/ik/build/bin/llama-server"`
-(absolute). Exactly one of the two.
+Instead of `[engine.release]` an engine can name a server you built, `path = "/opt/ik/build/bin/llama-server"`
+(absolute), or a program on the PATH that its own installer put there, `program = "vllm"`. Exactly one of the three.
+
+### Engines that do not speak like llama-server
+
+An engine with its own command line brings a start template and the address that answers once it is ready:
+
+```toml
+[[engine]]
+id = "vllm"
+label = "vLLM"
+program = "vllm"
+command = ["vllm", "serve", "{model}", "--host", "{host}", "--port", "{port}",
+           "--max-model-len", "{ctx}", "--served-model-name", "{alias}"]
+health = "/health"
+```
+
+Placeholders: `{binary}` (the server from `path` or `release`), `{model}` (the first model file), `{host}`, `{port}`
+(a free one), `{ctx}` (the recipe's context, else 8192), `{alias}` (the recipe id). The first entry is the program;
+`{model}` must appear. The engine must serve an OpenAI-compatible `/v1`.
 
 ## Rules
 
-- **llama-server compatible.** An engine from a plugin must take `-m`, `-c`, `--host`, `--port`, answer `/health` and
-  serve `/v1`. That covers llama.cpp forks. An engine with its own front end needs a built-in adapter
-  (docs/ENGINE-ADAPTER.md).
+- **llama-server compatible, or a template.** Without `command`, an engine must take `-m`, `-c`, `--host`, `--port`, answer
+  `/health` and serve `/v1` (llama.cpp forks). With `command`, any engine that serves an OpenAI-compatible `/v1` works.
 - **Its own runtime.** The archive must contain what the server needs (for CUDA: the runtime libraries), or the system must
   have it. FLE Link adds the CUDA runtime only for its built-in engines.
 - **Checked when read.** Plain ids, absolute paths, `owner/name` repos, plain environment names, unknown keys refused. A

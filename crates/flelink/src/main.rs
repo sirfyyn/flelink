@@ -602,7 +602,7 @@ fn run() -> Result<()> {
                             r.repo,
                             if r.tag.is_empty() { "latest" } else { &r.tag }
                         ),
-                        _ => String::new(),
+                        _ => e.program.as_ref().map(|p| format!("{p} on the PATH")).unwrap_or_default(),
                     };
                     println!("  engine {:<16} {}  ({from})", e.id, e.label);
                 }

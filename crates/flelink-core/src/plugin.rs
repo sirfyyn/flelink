@@ -36,6 +36,16 @@ pub struct PluginEngine {
     /// Or a GitHub release FLE Link downloads (SHA-256 checked) and unpacks into `<data>/engines/<id>-<tag>/`.
     #[serde(default)]
     pub release: Option<ReleaseSpec>,
+    /// Or a program found on the PATH (installed by its own installer, e.g. `vllm`).
+    #[serde(default)]
+    pub program: Option<String>,
+    /// The start command for an engine that does not speak like llama-server. Placeholders: {binary} {model} {port}
+    /// {host} {ctx} {alias}. Empty: the llama-server arguments FLE Link builds itself (plus `args`).
+    #[serde(default)]
+    pub command: Vec<String>,
+    /// The address that answers once the model is loaded.
+    #[serde(default = "health_default")]
+    pub health: String,
     /// Arguments appended to the automatic ones, and environment for the server.
     #[serde(default)]
     pub args: Vec<String>,
@@ -57,6 +67,10 @@ pub struct ReleaseSpec {
     /// The server inside the archive.
     #[serde(default = "llama_server")]
     pub binary: String,
+}
+
+fn health_default() -> String {
+    "/health".into()
 }
 
 fn llama_server() -> String {
@@ -88,10 +102,32 @@ impl Manifest {
             if !slug(&e.id) || BUILTIN_ENGINES.contains(&e.id.as_str()) {
                 bail!("plugin {}: engine id '{}' is not allowed (plain name, not fle/upstream/custom)", m.id, e.id);
             }
-            match (&e.path, &e.release) {
-                (Some(p), None) if Path::new(p).is_absolute() => {}
-                (Some(_), None) => bail!("plugin {}: engine {} path must be absolute", m.id, e.id),
-                (None, Some(r)) => {
+            if !e.health.starts_with('/') {
+                bail!(
+                    "plugin {}: engine {} health must be a path like /health",
+                    m.id,
+                    e.id
+                );
+            }
+            if !e.command.is_empty() && !e.command.iter().any(|a| a.contains("{model}")) {
+                bail!(
+                    "plugin {}: engine {} command must pass {{model}}",
+                    m.id,
+                    e.id
+                );
+            }
+            match (&e.path, &e.release, &e.program) {
+                (None, None, Some(p)) if slug(p) => {}
+                (None, None, Some(_)) => bail!(
+                    "plugin {}: engine {} program must be a plain name",
+                    m.id,
+                    e.id
+                ),
+                (Some(p), None, None) if Path::new(p).is_absolute() => {}
+                (Some(_), None, None) => {
+                    bail!("plugin {}: engine {} path must be absolute", m.id, e.id)
+                }
+                (None, Some(r), None) => {
                     let ok = r
                         .repo
                         .split_once('/')
@@ -169,6 +205,30 @@ pub fn engine(home: &Path, id: &str) -> Option<(Manifest, PluginEngine)> {
     })
 }
 
+/// The start arguments of a template engine: its `command` with the placeholders filled in (the first entry is the
+/// program; `{binary}` stands for the server found by `server`).
+pub fn fill_command(
+    e: &PluginEngine,
+    binary: &Path,
+    model: &Path,
+    host: &str,
+    port: u16,
+    ctx: u32,
+    alias: &str,
+) -> Vec<String> {
+    e.command
+        .iter()
+        .map(|a| {
+            a.replace("{binary}", &binary.to_string_lossy())
+                .replace("{model}", &model.to_string_lossy())
+                .replace("{host}", host)
+                .replace("{port}", &port.to_string())
+                .replace("{ctx}", &ctx.to_string())
+                .replace("{alias}", alias)
+        })
+        .collect()
+}
+
 /// The server of a plugin engine: the user's path, or the release installed (downloading it the first time).
 pub fn server(
     home: &Path,
@@ -183,6 +243,14 @@ pub fn server(
             bail!("engine {}: {} does not exist", e.id, p.display());
         }
         return Ok(p);
+    }
+    if let Some(prog) = &e.program {
+        return crate::launch::which(prog).with_context(|| {
+            format!(
+                "engine {}: {prog} is not on the PATH (install it first)",
+                e.id
+            )
+        });
     }
     let r = e
         .release
@@ -241,6 +309,62 @@ assets = { "linux-x64" = ["ubuntu", "x64"] }
                 "path = \"relative/llama-server\"\n[engine.release]"
             ),
             "both path and release"
+        );
+        let _ = std::fs::remove_dir_all(d.parent().unwrap());
+    }
+
+    #[test]
+    fn template_engines() {
+        let d = dir("vl");
+        let ok = r#"
+id = "vl"
+title = "vLLM"
+[[engine]]
+id = "vllm"
+label = "vLLM"
+program = "vllm"
+command = ["vllm", "serve", "{model}", "--host", "{host}", "--port", "{port}", "--max-model-len", "{ctx}", "--served-model-name", "{alias}"]
+"#;
+        let m = Manifest::parse(ok, &d).unwrap();
+        let e = &m.engine[0];
+        let args = fill_command(
+            e,
+            Path::new("/x/bin"),
+            Path::new("/m/model.gguf"),
+            "127.0.0.1",
+            8123,
+            4096,
+            "r1",
+        );
+        assert_eq!(
+            args,
+            [
+                "vllm",
+                "serve",
+                "/m/model.gguf",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8123",
+                "--max-model-len",
+                "4096",
+                "--served-model-name",
+                "r1"
+            ]
+        );
+        assert_eq!(e.health, "/health");
+        let bad = |from: &str, to: &str| Manifest::parse(&ok.replace(from, to), &d).is_err();
+        assert!(bad("\"{model}\", ", ""), "a command without {{model}}");
+        assert!(
+            bad("program = \"vllm\"", "program = \"../vllm\""),
+            "program must be a plain name"
+        );
+        assert!(
+            bad(
+                "program = \"vllm\"",
+                "program = \"vllm\"\npath = \"/usr/bin/vllm\""
+            ),
+            "two sources"
         );
         let _ = std::fs::remove_dir_all(d.parent().unwrap());
     }

@@ -71,8 +71,7 @@ pub fn ensure_and_start_recipe(
             &server_bin,
             "custom",
             &e.label,
-            &e.args,
-            &e.env,
+            Some(&e),
             emit,
         );
     }
@@ -133,17 +132,7 @@ pub fn ensure_and_start_recipe(
             })?
         }
     };
-    start_with(
-        home,
-        r,
-        &sys,
-        &server_bin,
-        v.kind,
-        v.label,
-        &[],
-        &Default::default(),
-        emit,
-    )
+    start_with(home, r, &sys, &server_bin, v.kind, v.label, None, emit)
 }
 
 /// Download what is missing, plan, start and wait until the engine answers.
@@ -155,8 +144,7 @@ fn start_with(
     server_bin: &Path,
     engine_kind: &str,
     engine_label: &str,
-    extra_args: &[String],
-    extra_env: &std::collections::BTreeMap<String, String>,
+    plugin: Option<&crate::plugin::PluginEngine>,
     emit: &mut dyn FnMut(Event),
 ) -> Result<Server> {
     let parts = r.model.files.len();
@@ -210,18 +198,51 @@ fn start_with(
             })
             .sum()
     };
-    let mut pl = plan::auto_plan(sys, engine_kind, &path, size, &r.id);
-    pl.args.extend(extra_args.iter().cloned());
-    for (k, v) in extra_env {
-        pl.env.push((k.clone(), v.clone()));
-    }
+    // an engine with its own start command fills its template; every other engine gets the llama-server arguments
+    let (program, mut pl, health) = match plugin.filter(|e| !e.command.is_empty()) {
+        Some(e) => {
+            let port = plan::free_port(8080);
+            let ctx = r.run.context.unwrap_or(8192);
+            let filled =
+                crate::plugin::fill_command(e, server_bin, &path, "127.0.0.1", port, ctx, &r.id);
+            let first = std::path::PathBuf::from(&filled[0]);
+            let program = if first.is_absolute() {
+                first
+            } else {
+                crate::launch::which(&filled[0])
+                    .with_context(|| format!("{} is not on the PATH", filled[0]))?
+            };
+            let env = e.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let pl = plan::Plan {
+                env,
+                args: filled[1..].to_vec(),
+                port,
+                ctx,
+            };
+            (program, pl, e.health.clone())
+        }
+        None => {
+            let mut pl = plan::auto_plan(sys, engine_kind, &path, size, &r.id);
+            if let Some(e) = plugin {
+                pl.args.extend(e.args.iter().cloned());
+                for (k, v) in &e.env {
+                    pl.env.push((k.clone(), v.clone()));
+                }
+            }
+            let health = plugin
+                .map(|e| e.health.clone())
+                .unwrap_or_else(|| "/health".into());
+            (server_bin.to_path_buf(), pl, health)
+        }
+    };
     r.apply(&mut pl);
-    let command = pl.command_line(server_bin);
+    let command = pl.command_line(&program);
     emit(Event::Step(format!(
         "Starting the engine (context {} tokens)",
         pl.ctx
     )));
-    let mut srv = Server::start(server_bin, &pl, &home.join("logs"))?;
+    let mut srv = Server::start(&program, &pl, &home.join("logs"))?;
+    srv.health = health;
     srv.wait_ready(Duration::from_secs(900), &mut |l| {
         emit(Event::Log(l.to_string()))
     })?;

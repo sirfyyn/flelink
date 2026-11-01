@@ -9,6 +9,8 @@ pub struct Server {
     pub base: String,
     pub log: std::path::PathBuf,
     home: std::path::PathBuf,
+    /// The address that answers once the model is loaded (`/health` for llama-server; an engine may name another).
+    pub health: String,
 }
 
 impl Server {
@@ -45,6 +47,7 @@ impl Server {
             base: format!("http://127.0.0.1:{}", plan.port),
             log,
             home,
+            health: "/health".into(),
         })
     }
 
@@ -62,7 +65,7 @@ impl Server {
                     self.tail(6)
                 );
             }
-            if c.get(format!("{}/health", self.base))
+            if c.get(format!("{}{}", self.base, self.health))
                 .send()
                 .is_ok_and(|r| r.status().is_success())
             {
