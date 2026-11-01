@@ -722,11 +722,24 @@ fn run() -> Result<()> {
             std::process::exit(if ok { 0 } else { 1 });
         }
         Some(Cmd::Run { model }) => {
-            let srv = flow::ensure_and_start(&home, &model, &mut |e| print_event(&e))?;
+            let mut srv = flow::ensure_and_start(&home, &model, &mut |e| print_event(&e))?;
             eprintln!("\nServing. Press Ctrl+C to stop.");
-            let (tx, rx) = std::sync::mpsc::channel::<()>();
-            let _ = ctrlc_wait(tx);
-            let _ = rx.recv();
+            // Ctrl+C, SIGTERM, SIGHUP (or closing the console on Windows) stop the engine with the program; an engine that
+            // ends on its own ends the program
+            let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let flag = stop.clone();
+            let _ =
+                ctrlc::set_handler(move || flag.store(true, std::sync::atomic::Ordering::SeqCst));
+            while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+                if let Ok(Some(status)) = srv.child.try_wait() {
+                    anyhow::bail!(
+                        "the engine stopped by itself ({status}); its log: {}",
+                        srv.log.display()
+                    );
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            eprintln!("Stopping the engine");
             drop(srv);
             Ok(())
         }
@@ -760,16 +773,4 @@ fn run() -> Result<()> {
             Ok(())
         }
     }
-}
-
-// Wait for Ctrl+C without a dependency: block on a signal via a tiny thread reading stdin close is not enough; use libc-free approach.
-fn ctrlc_wait(tx: std::sync::mpsc::Sender<()>) -> std::io::Result<()> {
-    std::thread::spawn(move || {
-        // `flelink run` is meant to be stopped with Ctrl+C, which ends the process and its child (same process group).
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(3600));
-            let _ = tx.send(());
-        }
-    });
-    Ok(())
 }
