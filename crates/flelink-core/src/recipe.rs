@@ -139,8 +139,9 @@ impl Recipe {
     }
 
     fn check(&self) -> Result<()> {
+        // starts with a letter or digit, so never `.` or `..`
         let slug = |s: &str| {
-            !s.is_empty()
+            s.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
                 && s.chars()
                     .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
         };
@@ -392,6 +393,7 @@ temperature = 0.2
             "../../etc/passwd.gguf"
         ));
         assert!(bad("owner/Qwen-Coder-GGUF", "not a repo"));
+        assert!(bad("owner/Qwen-Coder-GGUF", "../x"));
         assert!(bad("FLE_MOE_CACHE_BIAS", "\"BAD NAME\""));
         assert!(bad("context = 65536", "context = 10"));
         assert!(bad("temperature = 0.2", "temperature = 0.2\nunknown = 1"));

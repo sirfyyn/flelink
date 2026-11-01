@@ -128,6 +128,71 @@ fn pick<'a>(assets: &'a [Asset], v: &Variant, os: &str, arch: &str) -> Option<&'
         .max_by_key(|a| a.name.clone())
 }
 
+/// Install a server from any GitHub release (an engine a plugin brings): the archive whose name contains every token goes
+/// to `engines/<id>-<tag>/`, checked against the SHA-256 GitHub publishes. Returns the path of `binary` inside it.
+pub fn install_from_release(
+    dir: &Path,
+    id: &str,
+    repo: &str,
+    tag: Option<&str>,
+    tokens: &[String],
+    binary: &str,
+    progress: &mut dyn FnMut(&str, u64, u64),
+) -> Result<PathBuf> {
+    let rel = release(repo, tag)?;
+    let asset = rel
+        .assets
+        .iter()
+        .filter(|a| a.name.ends_with(".tar.gz") || a.name.ends_with(".zip"))
+        .filter(|a| tokens.iter().all(|t| a.name.contains(t.as_str())))
+        .max_by_key(|a| a.name.clone())
+        .with_context(|| format!("no asset with {tokens:?} in {repo} {}", rel.tag_name))?;
+    let target = dir.join("engines").join(format!("{id}-{}", rel.tag_name));
+    if let Some(p) = find_file(&target, binary) {
+        return Ok(p);
+    }
+    let archive = dir.join("downloads").join(&asset.name);
+    let sha = asset
+        .digest
+        .as_deref()
+        .and_then(|d| d.strip_prefix("sha256:"));
+    let label = format!("engine {}", asset.name);
+    fetch(&asset.browser_download_url, &archive, sha, &mut |d, t| {
+        progress(&label, d, t)
+    })?;
+    std::fs::create_dir_all(&target)?;
+    extract(&archive, &target)?;
+    let _ = std::fs::remove_file(&archive);
+    let server = find_file(&target, binary)
+        .with_context(|| format!("{binary} not found in {}", asset.name))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&server, std::fs::Permissions::from_mode(0o755)).ok();
+    }
+    Ok(server)
+}
+
+/// The first file called `name` (or `name.exe` on Windows) below `root`.
+pub fn find_file(root: &Path, name: &str) -> Option<PathBuf> {
+    let exe = format!("{name}.exe");
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).ok()?.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p
+                .file_name()
+                .is_some_and(|n| n == name || (cfg!(windows) && n == exe.as_str()))
+            {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
 /// Where an installed engine's llama-server lives, if there is one.
 pub fn installed(dir: &Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();

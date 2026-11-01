@@ -40,6 +40,42 @@ pub fn ensure_and_start_recipe(
             system::gib(sys.disk_free_bytes)
         );
     }
+    // an engine a plugin brings, when the recipe prefers one and no built-in engine comes before it
+    let builtin_first = r
+        .engine
+        .prefer
+        .iter()
+        .position(|w| engines::variants(&sys).iter().any(|v| v.kind == w.as_str()));
+    let plugin_first = r
+        .engine
+        .prefer
+        .iter()
+        .position(|w| crate::plugin::engine(home, w).is_some());
+    if let Some(pi) = plugin_first.filter(|pi| builtin_first.is_none_or(|bi| *pi < bi)) {
+        let (m, e) = crate::plugin::engine(home, &r.engine.prefer[pi]).unwrap();
+        emit(Event::Step(format!(
+            "Engine: {} (plugin {})",
+            e.label, m.id
+        )));
+        let server_bin = crate::plugin::server(home, &e, &sys.os, &sys.arch, &mut |l, d, t| {
+            emit(Event::Progress {
+                label: l.into(),
+                done: d,
+                total: t,
+            })
+        })?;
+        return start_with(
+            home,
+            r,
+            &sys,
+            &server_bin,
+            "custom",
+            &e.label,
+            &e.args,
+            &e.env,
+            emit,
+        );
+    }
     let variants = engines::variants(&sys);
     // the recipe's preference first, in its order; otherwise (and unless strict) the best for this machine
     let preferred = r
@@ -78,6 +114,32 @@ pub fn ensure_and_start_recipe(
             })?
         }
     };
+    start_with(
+        home,
+        r,
+        &sys,
+        &server_bin,
+        v.kind,
+        v.label,
+        &[],
+        &Default::default(),
+        emit,
+    )
+}
+
+/// Download what is missing, plan, start and wait until the engine answers.
+#[allow(clippy::too_many_arguments)]
+fn start_with(
+    home: &Path,
+    r: &crate::recipe::Recipe,
+    sys: &system::SysInfo,
+    server_bin: &Path,
+    engine_kind: &str,
+    engine_label: &str,
+    extra_args: &[String],
+    extra_env: &std::collections::BTreeMap<String, String>,
+    emit: &mut dyn FnMut(Event),
+) -> Result<Server> {
     let parts = r.model.files.len();
     for (i, f) in r.model.files.iter().enumerate() {
         let path = r.file_path(home, f);
@@ -129,20 +191,24 @@ pub fn ensure_and_start_recipe(
             })
             .sum()
     };
-    let mut pl = plan::auto_plan(&sys, v.kind, &path, size, &r.id);
+    let mut pl = plan::auto_plan(sys, engine_kind, &path, size, &r.id);
+    pl.args.extend(extra_args.iter().cloned());
+    for (k, v) in extra_env {
+        pl.env.push((k.clone(), v.clone()));
+    }
     r.apply(&mut pl);
-    let command = pl.command_line(&server_bin);
+    let command = pl.command_line(server_bin);
     emit(Event::Step(format!(
         "Starting the engine (context {} tokens)",
         pl.ctx
     )));
-    let mut srv = Server::start(&server_bin, &pl, &home.join("logs"))?;
+    let mut srv = Server::start(server_bin, &pl, &home.join("logs"))?;
     srv.wait_ready(Duration::from_secs(900), &mut |l| {
         emit(Event::Log(l.to_string()))
     })?;
     emit(Event::Ready {
         base: srv.base.clone(),
-        engine: v.label.into(),
+        engine: engine_label.into(),
         model: r.id.clone(),
         command,
     });

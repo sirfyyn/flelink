@@ -54,6 +54,8 @@ enum Cmd {
     },
     /// The models FLE Link knows, and whether each fits this machine
     Models,
+    /// Plugins in <data>/plugins: the engines and recipes each one brings
+    Plugins,
     /// Recipes: a model with its engine and start settings (built in, in <data>/recipes, or from a plugin)
     Recipes,
     /// Print a recipe as TOML, to share it or to save a changed copy in <data>/recipes
@@ -575,6 +577,40 @@ fn run() -> Result<()> {
                 "\nRun one: flelink run ID · your own: put a .toml into {}",
                 home.join("recipes").display()
             );
+            Ok(())
+        }
+        Some(Cmd::Plugins) => {
+            let (plugins, problems) = flelink_core::plugin::load_all(&home);
+            let (recipes, _) = flelink_core::recipe::load_all(&home);
+            if plugins.is_empty() && problems.is_empty() {
+                println!(
+                    "No plugins. A plugin is a folder in {} (docs/PLUGINS.md).",
+                    home.join("plugins").display()
+                );
+            }
+            for m in &plugins {
+                let mine = recipes
+                    .iter()
+                    .filter(|r| r.source.starts_with(&format!("plugin {}:", m.id)))
+                    .count();
+                println!("{} {}  {}", m.id, m.version, m.title);
+                for e in &m.engine {
+                    let from = match (&e.path, &e.release) {
+                        (Some(p), _) => p.clone(),
+                        (_, Some(r)) => format!(
+                            "github.com/{} {}",
+                            r.repo,
+                            if r.tag.is_empty() { "latest" } else { &r.tag }
+                        ),
+                        _ => String::new(),
+                    };
+                    println!("  engine {:<16} {}  ({from})", e.id, e.label);
+                }
+                println!("  {mine} recipe(s)");
+            }
+            for p in problems {
+                eprintln!("skipped: {p}");
+            }
             Ok(())
         }
         Some(Cmd::Recipe { recipe }) => {

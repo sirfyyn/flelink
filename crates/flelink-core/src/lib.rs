@@ -14,6 +14,7 @@ pub mod gguf;
 pub mod launch;
 pub mod orphans;
 pub mod plan;
+pub mod plugin;
 pub mod policy;
 pub mod recipe;
 pub mod report;
