@@ -161,9 +161,10 @@ impl Api {
             }
             assert!(
                 t.elapsed() < Duration::from_secs(30) && s["state"] != "crashed",
-                "still {} ({})",
+                "still {} ({}); engine log:\n{}",
                 s["state"],
-                s["error"]
+                s["error"],
+                self.log()
             );
             std::thread::sleep(Duration::from_millis(100));
         }
