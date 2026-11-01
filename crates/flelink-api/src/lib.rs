@@ -27,3 +27,4 @@ pub mod system;
 pub mod tls;
 pub mod tools;
 pub mod tuner;
+pub mod updates;

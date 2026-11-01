@@ -108,7 +108,7 @@ pub fn run(o: RunOptions) -> i32 {
         home: home.clone(),
         web_dir: o.web_dir.clone(),
         version: STUDIO_VERSION.into(),
-        github_api: crate::engines::GITHUB_API.into(),
+        github_api: github_api(),
     });
     let cfg = |k: &str| st.config.lock().unwrap().get(k).cloned();
     let host = o.host.clone().unwrap_or_else(|| {
@@ -334,6 +334,14 @@ impl Drop for Embedded {
 }
 
 /// Start the server on `127.0.0.1:<free port>` and return when it accepts connections.
+/// GitHub's API (`FLE_GITHUB_API` points it at another server, for tests).
+fn github_api() -> String {
+    std::env::var("FLE_GITHUB_API")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| crate::engines::GITHUB_API.into())
+}
+
 pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result<Embedded, String> {
     let home = home.unwrap_or_else(data_dir);
     let _ = std::fs::create_dir_all(&home);
@@ -341,7 +349,7 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
         home: home.clone(),
         web_dir,
         version: STUDIO_VERSION.into(),
-        github_api: crate::engines::GITHUB_API.into(),
+        github_api: github_api(),
     });
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
     let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<u16, String>>();

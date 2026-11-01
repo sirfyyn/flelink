@@ -46,6 +46,7 @@ pub struct Studio {
     pub bench: crate::bench::Bench,
     pub tuner: crate::tuner::Tuner,
     pub quality: crate::quality::Quality,
+    pub updates: crate::updates::Updates,
     pub cache: Arc<crate::cachewatch::CacheWatch>,
     pub toolbox: crate::mcp::ToolBox,
     /// the port this server listens on (for the sign-in's loopback redirect); set when it starts serving
@@ -72,6 +73,7 @@ pub fn new_studio(opts: Options) -> Ctx {
 
 /// `lan`: the server listens beyond this machine (host mode); other machines need the access key.
 pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
+    let github_api = opts.github_api.clone();
     let config = Config::load(&opts.home.join("settings.json"));
     let home = opts.home.clone();
     let config = Arc::new(Mutex::new(config));
@@ -115,6 +117,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         bench: crate::bench::Bench::new(engine.clone(), &home),
         tuner: crate::tuner::Tuner::new(&home),
         quality: crate::quality::Quality::new(&home),
+        updates: crate::updates::Updates::new(&home, &github_api),
         cache,
         toolbox: crate::mcp::ToolBox::new(&home),
         port: std::sync::atomic::AtomicU16::new(0),
@@ -122,6 +125,23 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         profiles: Mutex::new(Profiles::new(&home)),
         downloads,
     });
+    if std::env::var_os("FLE_NO_UPDATE").is_none_or(|v| v.is_empty()) {
+        let weak = Arc::downgrade(&studio);
+        let _ = std::thread::Builder::new()
+            .name("update-check".into())
+            .spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(8));
+                loop {
+                    let Some(st) = weak.upgrade() else { return };
+                    let config = Value::Object(st.config.lock().unwrap().data.clone());
+                    if st.updates.due(&config) {
+                        let _ = st.updates.check(&config, &st.engines.installed(), false);
+                    }
+                    drop(st);
+                    std::thread::sleep(std::time::Duration::from_secs(1800));
+                }
+            });
+    }
     let weak = Arc::downgrade(&studio);
     studio
         .engine
@@ -1928,11 +1948,55 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             st.plan_view(&model, body.get("profile"))
         }),
         (_, _) if p.starts_with("/api/p/") => Err(plugin_off(p)),
-        ("GET", "/api/plugins") => Ok(json!({"api_version": 1, "plugins": [], "error": ""})),
-        ("POST", _) if plugin_toggle(p).is_some() => Err(ApiError(
-            404,
-            format!("No plugin named {} is installed", plugin_toggle(p).unwrap()),
-        )),
+        ("GET", "/api/plugins") => Ok(json!({"api_version": 1, "plugins": builtin_plugins(), "error": ""})),
+        ("POST", _) if plugin_toggle(p).is_some() => {
+            let id = plugin_toggle(p).unwrap();
+            if BUILTIN_PLUGINS.iter().any(|(i, _, _)| *i == id) {
+                Err(ApiError(400, format!("{id} is part of FLE Link and always on")))
+            } else {
+                Err(ApiError(404, format!("No plugin named {id} is installed")))
+            }
+        }
+        ("GET", "/api/update") => Ok(st.updates.view(&Value::Object(st.config.lock().unwrap().data.clone()))),
+        ("POST", "/api/update/check") => {
+            let config = Value::Object(st.config.lock().unwrap().data.clone());
+            st.updates
+                .check(&config, &st.engines.installed(), true)
+                .map(|_| st.updates.view(&config))
+                .map_err(|e| ApiError(409, e))
+        }
+        ("POST", "/api/update/dismiss") => r.json(MAX_JSON).and_then(|body| {
+            let version = body.get("version").filter(|v| py_truthy(v)).map(py_str).unwrap_or_default();
+            let patch = st.updates.dismiss_patch(&version, body.get("engines") == Some(&json!(true)));
+            if !patch.is_empty() {
+                st.config
+                    .lock()
+                    .unwrap()
+                    .update(json!({"updates": patch}).as_object().unwrap())
+                    .map_err(|e| ApiError(400, e))?;
+            }
+            Ok(st.updates.view(&Value::Object(st.config.lock().unwrap().data.clone())))
+        }),
+        ("POST", "/api/update/apply") => r.json(MAX_JSON).and_then(|body| {
+            let tag = body.get("tag").map(py_str).unwrap_or_default();
+            let config = Value::Object(st.config.lock().unwrap().data.clone());
+            let base = st.updates.prepare(&config, &tag).map_err(|e| ApiError(409, e))?;
+            let st2 = st.clone();
+            std::thread::spawn(move || {
+                if st2.updates.install(&base, &tag).is_ok() {
+                    // the page sees "restarting" first, then the engine and the MCP servers stop and the new version starts
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    st2.engine.shutdown();
+                    st2.toolbox.mcp.close_all();
+                    crate::updates::restart();
+                }
+            });
+            Ok(st.updates.view(&config))
+        }),
+        ("POST", "/api/update/ack") => {
+            st.updates.ack();
+            Ok(st.updates.view(&Value::Object(st.config.lock().unwrap().data.clone())))
+        }
         ("POST", "/api/engine/preview") => r.json(MAX_JSON).and_then(|body| {
             let model = body
                 .get("model")
@@ -2223,6 +2287,28 @@ const STATIC_TYPES: [(&str, &str); 12] = [
 ];
 
 /// The built web page: a folder when one is given (tests, development), else the copy inside the binary.
+/// The plugins that are part of FLE Link (their pages live in web/plugins/<id>/): (id, title, summary).
+const BUILTIN_PLUGINS: [(&str, &str, &str); 1] = [(
+    "updater",
+    "Updates",
+    "Tells you when a new FLE Link or FLE engine is out, and updates in one click.",
+)];
+
+static PLUGIN_WEB: include_dir::Dir<'static> =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../web/plugins");
+
+/// `/api/plugins`: the built-in plugins, in the form the page knows from FLE Studio's plugin list.
+fn builtin_plugins() -> Vec<Value> {
+    BUILTIN_PLUGINS
+        .iter()
+        .map(|(id, title, summary)| {
+            json!({"id": id, "package": "flelink", "version": env!("CARGO_PKG_VERSION"), "bundled": true, "enabled": true,
+                "loaded": true, "error": "", "page": null, "boot": "boot.js", "boot_early": false, "title": title,
+                "summary": summary})
+        })
+        .collect()
+}
+
 static WEB: include_dir::Dir<'static> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../web/studio");
 
@@ -2252,7 +2338,22 @@ fn static_file(st: &Studio, path: &str, head: bool) -> Response<Body> {
         return not_found();
     }
     if let Some(rest) = name.strip_prefix("plugins/") {
-        // a plugin's own files: none is installed in this program
+        // the files of a plugin that is part of FLE Link
+        if let Some(f) = PLUGIN_WEB.get_file(rest) {
+            let ctype = match rest.rsplit('.').next() {
+                Some("js") => "text/javascript; charset=utf-8",
+                Some("css") => "text/css; charset=utf-8",
+                Some("svg") => "image/svg+xml",
+                _ => "application/octet-stream",
+            };
+            return send(
+                200,
+                f.contents().to_vec(),
+                ctype,
+                &[("Cache-Control", "no-cache")],
+                head,
+            );
+        }
         let id = rest.split('/').next().unwrap_or("");
         let valid = !id.is_empty()
             && id.len() <= 32
@@ -2529,8 +2630,6 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
         "The model forge"
     } else if is("/api/remote") || is("/h") || is("/api/hosts") {
         "Remote access"
-    } else if is("/api/update") {
-        "Updating from inside the program"
     } else {
         return None;
     })
