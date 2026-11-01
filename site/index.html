@@ -120,7 +120,7 @@
         <ul class="flag-list">
           <li><b>One 32 GB GPU</b> RTX PRO 4500, 18 GB expert cache, RAM capped at 102 GB, the rest read from NVMe; decode after warm-up, 16k context, loads in 30 s</li>
           <li><b>FLE engine v1.2.0</b> FLE Link installs it on NVIDIA machines: <code>flelink run</code> with the model file</li>
-          <li><b>With DSpark, 25.0 tok/s</b> against 23.2 without on the same box (120 GB RAM, 15 GB expert cache, two runs each, +7.8 %, 74–83 % of the drafts accepted): our own <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">5.2 GB draft model</a>; needs the FLE engine after v1.2.0, so it comes with the next engine release</li>
+          <li><b>With DSpark, 23.2 tok/s</b> through FLE Link on the same box (120 GB RAM, 15 GB expert cache, after a warm-up, no CPU pinning, two rounds of three prompts: 22.9 and 23.6, 72–89 % of the drafts accepted): our own <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">5.2 GB draft model</a> with FLE engine v1.2.1; <code>flelink run deepseek-v41-ista-dspark</code> sets it up and uses copies already on your disk</li>
           <li><b>Today</b> it also runs through FLE Link on llama.cpp b11870 or newer</li>
         </ul>
       </article>
