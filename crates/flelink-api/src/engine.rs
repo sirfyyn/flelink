@@ -14,50 +14,6 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-/// Log lines that mark a loading phase (checked in order, first match wins).
-const PHASES: [(&str, &str); 9] = [
-    ("listening on", "Ready"),
-    ("model loaded", "Starting the server"),
-    ("warming up", "Warming up"),
-    (
-        "moe expert cache enabled",
-        "Setting up the GPU expert cache",
-    ),
-    ("llama_kv_cache", "Allocating the KV cache"),
-    ("llama_context:", "Creating the context"),
-    ("load_tensors:", "Loading weights"),
-    ("llama_params_fit", "Fitting the model into GPU memory"),
-    ("llama_model_loader: loaded meta data", "Reading the model"),
-];
-
-/// Error lines and what to tell the user about them.
-const HINTS: [(&str, &str); 6] = [
-    (
-        r"(?i)out of memory|cudaMalloc failed|failed to allocate .*buffer|ErrorOutOfDeviceMemory",
-        "The GPU ran out of memory. Lower the context or the GPU expert cache on the Engine page.",
-    ),
-    (
-        r"(?i)error while loading shared libraries|cannot open shared object|\.dll was not found|Library not loaded|image not found",
-        "The engine misses a library. Reinstall the engine on the Engine page.",
-    ),
-    (
-        r"(?i)CUDA driver version is insufficient|no CUDA-capable device|cudaGetDeviceCount",
-        "CUDA could not start. Update the NVIDIA driver, or use the Vulkan or CPU engine.",
-    ),
-    (
-        r"(?i)failed to load model|error loading model|unable to load model",
-        "The engine could not load the model. Check that the download finished (Models page).",
-    ),
-    (
-        r"(?i)couldn't bind|address already in use|bind failed|only one usage of each socket address",
-        "The engine port is taken. Set the port to 0 (automatic) on the Engine page.",
-    ),
-    (
-        r"(?i)error: (invalid|unknown) argument|unknown option|invalid value",
-        "The engine does not know one of the arguments. Is this profile meant for another engine?",
-    ),
-];
-
 struct Rx {
     phases: Vec<(&'static str, &'static str)>,
     hints: Vec<(Regex, &'static str)>,
@@ -66,11 +22,19 @@ struct Rx {
     accept: Regex,
 }
 
-fn rx() -> &'static Rx {
-    static R: OnceLock<Rx> = OnceLock::new();
-    R.get_or_init(|| Rx {
-        phases: PHASES.to_vec(),
-        hints: HINTS
+/// The log rules of the engine with this adapter id (the custom adapter's for anything else), compiled once.
+fn rx(engine: &str) -> &'static Rx {
+    use flelink_core::adapter;
+    static R: OnceLock<Mutex<Vec<(&'static str, &'static Rx)>>> = OnceLock::new();
+    let a = adapter::get(engine).unwrap_or(&adapter::Custom);
+    let mut all = R.get_or_init(|| Mutex::new(vec![])).lock().unwrap();
+    if let Some((_, r)) = all.iter().find(|(id, _)| *id == a.id()) {
+        return r;
+    }
+    let r: &'static Rx = Box::leak(Box::new(Rx {
+        phases: a.log_phases().to_vec(),
+        hints: a
+            .log_hints()
             .iter()
             .map(|(r, h)| (Regex::new(r).unwrap(), *h))
             .collect(),
@@ -80,7 +44,9 @@ fn rx() -> &'static Rx {
         .unwrap(),
         cache_on: Regex::new(r"(?i)MoE expert cache enabled[:,]?\s*(.*)").unwrap(),
         accept: Regex::new(r"draft acceptance(?: rate)?\s*=\s*([\d.]+)").unwrap(),
-    })
+    }));
+    all.push((a.id(), r));
+    r
 }
 
 /// What the page is told for an engine problem: `Busy` is a 409, `Invalid` (a `ValueError`) a 400.
@@ -767,8 +733,8 @@ impl Engine {
             l(line);
         }
         let low = line.to_lowercase();
-        let rx = rx();
         let mut s = self.st.lock().unwrap();
+        let rx = rx(s.plan.as_ref().map_or("", |(_, p)| p.engine.as_str()));
         if s.state == "starting" {
             if let Some((_, phase)) = rx.phases.iter().find(|(n, _)| low.contains(n)) {
                 s.phase = phase.to_string();

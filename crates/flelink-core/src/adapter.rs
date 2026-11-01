@@ -33,6 +33,50 @@ pub const UPSTREAM_REPO: &str = "ggml-org/llama.cpp";
 /// The llama.cpp build the upstream engine is pinned to (tested with it).
 pub const LLAMA_TAG: &str = "b11540";
 
+/// Log lines of llama-server (and its forks) that mark a loading phase (checked in order, first match wins).
+pub const LLAMA_PHASES: [(&str, &str); 9] = [
+    ("listening on", "Ready"),
+    ("model loaded", "Starting the server"),
+    ("warming up", "Warming up"),
+    (
+        "moe expert cache enabled",
+        "Setting up the GPU expert cache",
+    ),
+    ("llama_kv_cache", "Allocating the KV cache"),
+    ("llama_context:", "Creating the context"),
+    ("load_tensors:", "Loading weights"),
+    ("llama_params_fit", "Fitting the model into GPU memory"),
+    ("llama_model_loader: loaded meta data", "Reading the model"),
+];
+
+/// Error lines of llama-server and what to tell the user about them (regular expressions).
+pub const LLAMA_HINTS: [(&str, &str); 6] = [
+    (
+        r"(?i)out of memory|cudaMalloc failed|failed to allocate .*buffer|ErrorOutOfDeviceMemory",
+        "The GPU ran out of memory. Lower the context or the GPU expert cache on the Engine page.",
+    ),
+    (
+        r"(?i)error while loading shared libraries|cannot open shared object|\.dll was not found|Library not loaded|image not found",
+        "The engine misses a library. Reinstall the engine on the Engine page.",
+    ),
+    (
+        r"(?i)CUDA driver version is insufficient|no CUDA-capable device|cudaGetDeviceCount",
+        "CUDA could not start. Update the NVIDIA driver, or use the Vulkan or CPU engine.",
+    ),
+    (
+        r"(?i)failed to load model|error loading model|unable to load model",
+        "The engine could not load the model. Check that the download finished (Models page).",
+    ),
+    (
+        r"(?i)couldn't bind|address already in use|bind failed|only one usage of each socket address",
+        "The engine port is taken. Set the port to 0 (automatic) on the Engine page.",
+    ),
+    (
+        r"(?i)error: (invalid|unknown) argument|unknown option|invalid value",
+        "The engine does not know one of the arguments. Is this profile meant for another engine?",
+    ),
+];
+
 pub trait EngineAdapter: Sync {
     /// Stable id: stored in profiles and settings, shown in the plan.
     fn id(&self) -> &'static str;
@@ -51,6 +95,14 @@ pub trait EngineAdapter: Sync {
         "/health"
     }
     fn capabilities(&self) -> Capabilities;
+    /// Log lines that mark a loading phase: (text in the lower-cased line, phase shown). First match wins.
+    fn log_phases(&self) -> &'static [(&'static str, &'static str)] {
+        &LLAMA_PHASES
+    }
+    /// Error lines (regular expressions) and the hint for the user. First match wins.
+    fn log_hints(&self) -> &'static [(&'static str, &'static str)] {
+        &LLAMA_HINTS
+    }
 }
 
 pub struct Fle;
