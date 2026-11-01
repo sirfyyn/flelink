@@ -71,7 +71,9 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream" if sse else "application/json")
         self.send_header("Mcp-Session-Id", "s1")
         self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
-ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+S = ThreadingHTTPServer(("127.0.0.1", 0), H)
+print(S.server_address[1], flush=True)
+S.serve_forever()
 "#;
 
 /// A server of the 2024-11-05 revision: GET /sse opens the event stream and names the message address; a POST to /sse
@@ -101,8 +103,38 @@ class H(BaseHTTPRequestHandler):
         elif meth == "tools/list": r = {"tools": [{"name": "hello", "inputSchema": {"type": "object"}}]}
         else: r = {"content": [{"type": "text", "text": "hello from the old transport"}]}
         Q.put({"jsonrpc": "2.0", "id": m["id"], "result": r})
-ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+S = ThreadingHTTPServer(("127.0.0.1", 0), H)
+print(S.server_address[1], flush=True)
+S.serve_forever()
 "#;
+
+/// Start a fake server; its first line is the port it listens on.
+fn serve(code: &str, err: &std::path::Path) -> (Kill, u16) {
+    use std::io::BufRead;
+    let mut child = Command::new("python3")
+        .args(["-c", code])
+        .stdout(Stdio::piped())
+        .stderr(std::fs::File::create(err).unwrap())
+        .spawn()
+        .unwrap();
+    let out = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        let _ = std::io::BufReader::new(out).read_line(&mut line);
+        let _ = tx.send(line);
+    });
+    let line = rx.recv_timeout(Duration::from_secs(60)).unwrap_or_default();
+    let port = line.trim().parse().unwrap_or_else(|_| {
+        panic!(
+            "a fake server did not start ({:?}, exit {:?}): {}",
+            line,
+            child.try_wait().ok().flatten(),
+            std::fs::read_to_string(err).unwrap_or_default()
+        )
+    });
+    (Kill(child), port)
+}
 
 struct Kill(Child);
 impl Drop for Kill {
@@ -125,44 +157,9 @@ fn mcp_servers_become_tools() {
     std::fs::create_dir_all(&home.0).unwrap();
     let script = home.0.join("calc_server.py");
     std::fs::write(&script, STDIO).unwrap();
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
-    let _http = Kill(
-        Command::new("python3")
-            .args(["-c", HTTP, &port.to_string()])
-            .stdout(Stdio::null())
-            .stderr(std::fs::File::create(home.0.join("http.err")).unwrap())
-            .spawn()
-            .unwrap(),
-    );
-    let old_port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
-    let _old = Kill(
-        Command::new("python3")
-            .args(["-c", OLD_SSE, &old_port.to_string()])
-            .stdout(Stdio::null())
-            .stderr(std::fs::File::create(home.0.join("sse.err")).unwrap())
-            .spawn()
-            .unwrap(),
-    );
-    let t = Instant::now();
-    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err()
-        || std::net::TcpStream::connect(("127.0.0.1", old_port)).is_err()
-    {
-        assert!(
-            t.elapsed() < Duration::from_secs(30),
-            "the fake servers did not start: http {:?}, sse {:?}",
-            std::fs::read_to_string(home.0.join("http.err")).unwrap_or_default(),
-            std::fs::read_to_string(home.0.join("sse.err")).unwrap_or_default()
-        );
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    // each fake server takes a free port itself and prints it (no race for a port picked here)
+    let (_http, port) = serve(HTTP, &home.0.join("http.err"));
+    let (_old, old_port) = serve(OLD_SSE, &home.0.join("sse.err"));
     let mut s = start_embedded(Some(home.0.clone()), None).expect("start");
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(30))
