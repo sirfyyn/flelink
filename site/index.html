@@ -116,11 +116,11 @@
           <h3>DeepSeek-V4.1-Flash-1017</h3>
           <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO IQ2_XXS by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 232 GiB</p>
         </header>
-        <div class="big-num">23.3–23.5 <span>tok/s, two runs</span></div>
+        <div class="big-num">23.2 <span>tok/s through FLE Link, with DSpark</span></div>
         <ul class="flag-list">
-          <li><b>One 32 GB GPU</b> RTX PRO 4500, 18 GB expert cache, RAM capped at 102 GB, the rest read from NVMe; decode after warm-up, 16k context, loads in 30 s</li>
-          <li><b>FLE engine v1.2.0</b> FLE Link installs it on NVIDIA machines: <code>flelink run</code> with the model file</li>
-          <li><b>With DSpark, 23.2 tok/s</b> through FLE Link on the same box (120 GB RAM, 15 GB expert cache, after a warm-up, no CPU pinning, two rounds of three prompts: 22.9 and 23.6, 72–89 % of the drafts accepted): our own <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">5.2 GB draft model</a> with FLE engine v1.2.1; <code>flelink run deepseek-v41-ista-dspark</code> sets it up and uses copies already on your disk</li>
+          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 15 GB expert cache, the rest read from NVMe; decode after a warm-up, no CPU pinning, two rounds of three prompts (22.9 and 23.6), 72–89 % of the drafts accepted (1 Nov 2026)</li>
+          <li><b>One command</b> <code>flelink run deepseek-v41-ista-dspark</code> installs FLE engine v1.2.1 and our <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">5.2 GB draft model</a>, and uses copies of the model already on your disk</li>
+          <li><b>Without the draft model</b> 23.3–23.5 tok/s in two runs on FLE engine v1.2.0 (18 GB expert cache, RAM capped at 102 GB, 16k context)</li>
           <li><b>Today</b> it also runs through FLE Link on llama.cpp b11870 or newer</li>
         </ul>
       </article>
@@ -179,7 +179,7 @@ Engines that fit (best first):
       </li>
       <li>
         <h3>It checks fit before downloading</h3>
-        <p>No 80 GB download that ends in an out-of-memory error.</p>
+        <p>No 80 GB download that ends in an out-of-memory error. And a model you already have, in the Hugging Face cache, LM Studio or Ollama, is found, checked by its SHA-256 and used instead of downloaded again.</p>
 <pre class="out"><span class="p">$</span> flelink models
 llama-3.2-1b      0.8 GiB  <span class="ok">fits</span>
 llama-3.2-1b-q8   1.2 GiB  <span class="ok">fits</span>
@@ -210,7 +210,7 @@ fle-iq3-m        82.8 GiB  <span class="bad">too big</span></pre>
       </article>
       <article>
         <h3>Studio in the browser</h3>
-        <p><code>flelink studio</code> on 127.0.0.1:8642: chat with live speed numbers, models, the engine log, launch profiles.</p>
+        <p><code>flelink studio</code> on 127.0.0.1:8642: chat with live speed numbers, models, the engine log, launch profiles, MCP servers as chat tools.</p>
         <figure class="shot" data-shot="studio"><video src="media/studio.mp4" poster="media/studio-chat.png" autoplay muted loop playsinline preload="metadata" aria-label="The Studio loads Llama 3.2 1B and answers a question at 556 tokens per second"></video></figure>
       </article>
       <article>
@@ -229,12 +229,30 @@ fle-iq3-m        82.8 GiB  <span class="bad">too big</span></pre>
   </div>
 </section>
 
+<section id="studio-more">
+  <div class="wrap">
+    <p class="eyebrow">In the Studio</p>
+    <h2>Measure it, tune it, build your own</h2>
+    <ul class="faults">
+      <li><b>Speed test</b> The same requests every time, compared with your last run of the same setting.</li>
+      <li><b>Best for my machine</b> A tuner that keeps a change only when it is faster with a 95 % interval that excludes zero.</li>
+      <li><b>A/B/A</b> Two settings compared with a drift check, so a machine that warms up does not decide.</li>
+      <li><b>Quality next to speed</b> KL divergence against the reference and a knowledge probe, right after a speed test.</li>
+      <li><b>Expert cache</b> Hit rate over time and per layer, read from the FLE engine.</li>
+      <li><b>Forge</b> Build your own quant: whole expert layers from other quants, the best mix for your size budget, expert pruning, a KL check, and a recipe others can rebuild.</li>
+      <li><b>Tools</b> MCP servers, local or remote with sign-in, as chat tools that ask before each call.</li>
+      <li><b>Recipes</b> Model, engine and settings in one small file to share; plugins add engines and recipes as files.</li>
+    </ul>
+  </div>
+</section>
+
 <section id="host">
   <div class="wrap two">
     <div>
       <p class="eyebrow">Host mode</p>
       <h2>Run it on the GPU box, use it from the laptop</h2>
       <p><code>flelink studio --host 0.0.0.0</code> opens the Studio to your network. Other machines sign in with an access key, over https with a certificate of its own whose fingerprint is printed at start.</p>
+      <p>Or pair two FLE Links: the GPU box shows a code (<code>flelink pair-code</code>), the laptop enters it and works with the big machine's models. Rights per device, revocable any time, by address or through an SSH tunnel.</p>
     </div>
 <pre class="out"><span class="p">$</span> flelink studio --host 0.0.0.0
 FLE Link is open to the network. Access key:
@@ -249,13 +267,13 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
   <div class="wrap">
     <p class="eyebrow">Tested by breaking it</p>
     <h2>What happens when things go wrong</h2>
-    <p class="intro">Every command runs in the test suite twice: once as intended, once with something broken on purpose. On macOS and on Linux.</p>
+    <p class="intro">Every command runs in the test suite twice: once as intended, once with something broken on purpose. The tests run on macOS, Linux and Windows.</p>
     <ul class="faults">
       <li><b>Download killed halfway</b> The next start resumes where it stopped and checks the hash.</li>
       <li><b>No network</b> A clear message in under a second, no hang.</li>
       <li><b>Broken model file</b> Cut off, empty or random bytes: refused with a reason.</li>
       <li><b>Engine crashes</b> The status says so, the API answers 503, a restart works.</li>
-      <li><b>Program killed</b> The engine it left behind is stopped before a second one loads.</li>
+      <li><b>Program stopped</b> Ctrl+C or a signal ends the engine with it; after a crash the engine left behind is stopped before a second one loads.</li>
       <li><b>Port taken</b> The next free port, and it tells you which.</li>
       <li><b>Wrong key on the network</b> Refused, and every wrong guess waits a second.</li>
       <li><b>Bad requests</b> Broken JSON, huge bodies, path tricks: all refused, the server keeps running.</li>
@@ -269,9 +287,8 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
     <h2>Open, and built to be changed</h2>
     <p class="intro">MIT licensed. The engine sits behind an adapter, so a new engine is a new adapter, not a fork.</p>
     <ol class="road">
-      <li class="now"><span>0.1</span><div><b>Now</b> one command from nothing to an answer, any GGUF from Hugging Face with a fit check, Studio, desktop app, host mode, engine adapters for FLE, llama.cpp and your own build</div></li>
-      <li><span>next</span><div><b>Plugins</b> recipes and engine adapters as files you drop in</div></li>
-      <li><span>later</span><div><b>Quantization</b> make a quant that fits your machine</div></li>
+      <li class="now"><span>0.1</span><div><b>Now</b> one command from nothing to an answer, any GGUF from Hugging Face with a fit check, models you already have, Studio, desktop app, host mode and remote access, engine adapters for FLE, llama.cpp and your own build, recipes and plugins as files, the Forge for your own quants</div></li>
+      <li><span>next</span><div><b>More engines</b> adapters for vLLM and ik_llama.cpp</div></li>
       <li><span>later</span><div><b>Training</b> LoRA adapters on your own data</div></li>
     </ol>
   </div>
