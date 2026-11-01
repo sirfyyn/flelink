@@ -33,6 +33,15 @@ size = 88872241728                                  # bytes of all files: the fi
 [model.sha256]                                      # optional, per file
 "IQ3_M/Qwen3.8-Flash-Next-FLE-IQ3_M-00001-of-00002.gguf" = "…"
 
+[model.save_as]                                     # optional: store a file under another name (same folder)
+"Other-Name.gguf" = "Model-00003-of-00003.gguf"     # for a last part the publisher uploaded under its own name
+
+[draft]                                # optional: a draft model for speculative decoding, downloaded with the model
+repo = "owner/drafter-GGUF"            # empty: the model's repo
+file = "drafter.gguf"
+sha256 = "…"                           # optional
+size = 5216519072                      # optional, shown before the download
+
 [engine]
 prefer = ["fle"]       # engine ids in order; empty: the best for this machine
 strict = true          # only these may run it (the model needs FLE's expert offloading)
@@ -40,6 +49,7 @@ strict = true          # only these may run it (the model needs FLE's expert off
 [run]
 context = 65536                            # tokens; default: sized from free memory
 args = ["--cache-reuse", "256"]            # appended after the automatic arguments; the last value of a flag wins
+                                           # {draft}: path of the draft model; {physical_cores}: cores without SMT
 env = { FLE_MOE_CACHE_BIAS = "0.002" }     # overrides the automatic environment
 
 [requires]             # shown to people; the fit check uses model.size
@@ -53,6 +63,9 @@ tools = false
 temperature = 0.6
 top_p = 0.95
 ```
+
+Built-in recipes with a draft model or engine flags of their own are TOML files in `crates/flelink-core/recipes/`
+(`deepseek-v41-ista-dspark`: DeepSeek-V4.1-Flash with FLE's DSpark draft model).
 
 Checks when a recipe is read: the id and the repo are plain names, every file is a `.gguf` path inside the repo (no `..`,
 no absolute path), environment names are letters, digits and `_`, the context is between 512 and 1,048,576, and unknown

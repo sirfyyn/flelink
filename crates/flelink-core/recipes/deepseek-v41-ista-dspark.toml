@@ -1,0 +1,63 @@
+id = "deepseek-v41-ista-dspark"
+title = "DeepSeek-V4.1-Flash ISTA IQ2_XXS + DSpark (FLE)"
+note = "ISTA's GSQ-RCO quant with FLE's DSpark draft model. Measured on one 32 GB GPU with 120 GB RAM: 25.0 tok/s, 23.2 without the draft model. Needs the FLE engine v1.2.1 or newer and about 255 GB on a fast NVMe. Less VRAM: lower FLE_MOE_CACHE_BUDGET_MIB (under 24 GB not tested)."
+
+[model]
+repo = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"
+files = [
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00001-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00002-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00003-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00004-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00005-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
+]
+size = 248834257920
+
+# the loader expects the sixth part under the split name; ISTA publishes it as the Engram file
+[model.save_as]
+"DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf" = "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00006-of-00006.gguf"
+
+[model.sha256]
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00001-of-00006.gguf" = "f356f198561f56df36f7ab92d7238a926646d76de992c34f15bcb939a5f529b9"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00002-of-00006.gguf" = "25af3785ccf925f54137e1ead4c481a8952315dc0b1af6519a99407f67bce8f3"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00003-of-00006.gguf" = "8168d0998fc494def2e1952d83c131425a108660aae9d29190f5a8670ab62b48"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00004-of-00006.gguf" = "9eb9b4de1968f150dfc207eb31c27be9cd9b5666a9a6246bde8a22b184b4bee0"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00005-of-00006.gguf" = "7e35f6b4e6fc46f6c4b152b593d84d683c5ece695ae6ad734f556198c041bec1"
+"DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf" = "3dac4c54893ad7aa89103c0028500eadc78e74112cef3a2930a97e67dc9fb4f3"
+
+[draft]
+repo = "sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF"
+file = "FLE-DSpark-V4.1-1017-Q2K-Q8.gguf"
+sha256 = "c223adafb9aa0e125557907165f54c555f3fa576918f9561979136bca8822482"
+size = 5216519072
+
+[engine]
+prefer = ["fle"]
+strict = true
+
+[run]
+context = 16384
+# -t: physical cores only; with SMT threads (32 on 16 cores) the measured run fell to 4.9 tok/s
+args = [
+  "--jinja", "-ngl", "99", "-cmoe", "-t", "{physical_cores}", "-ctk", "q8_0", "-ctv", "q8_0",
+  "-fit", "on", "--fit-target", "1115", "--moe-expert-cache-inserts", "1",
+  "-md", "{draft}", "-ngld", "99", "--spec-type", "draft-dspark", "--spec-draft-p-min", "0.5",
+]
+
+[run.env]
+FLE_MOE_CACHE_BUDGET_MIB = "15000"
+FLE_MOE_CACHE_BUDGET_FIT = "1"
+FLE_PREFILL_LEAN = "1"
+FLE_HC_FUSED = "1"
+FLE_SLOT_EARLY_SAVE = "1"
+FLE_MC_OVERLAP = "2"
+FLE_MOE_CACHE_BIAS = "0.001"
+
+# where it was measured, not a determined minimum
+[requires]
+ram_gib = 120
+vram_gib = 32
+
+[chat]
+thinking = false

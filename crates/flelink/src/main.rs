@@ -561,7 +561,10 @@ fn run() -> Result<()> {
                 } else {
                     "?"
                 };
-                let have = r.model.files.iter().all(|f| r.file_path(&home, f).exists());
+                let have = r
+                    .fetches()
+                    .iter()
+                    .all(|x| home.join("models").join(&x.local).exists());
                 let from = if r.source == "builtin" {
                     String::new()
                 } else {

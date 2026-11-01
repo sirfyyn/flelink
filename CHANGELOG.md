@@ -44,6 +44,10 @@ First version of FLE Link: the layer between an inference engine and the tools t
   server and the model. On Windows the engine ends with the app, also after a crash.
 - **Host mode:** `flelink studio --host 0.0.0.0` for another machine to look at: access key, https with a certificate of its
   own (fingerprint printed), `--no-tls` for a trusted network.
+- **Recipes with a draft model:** `[draft]` downloads a draft model with the model and puts its path where `run.args`
+  says `{draft}`; `{physical_cores}` is the core count without SMT; `model.save_as` stores a part under the name the
+  loader expects. Built in: `deepseek-v41-ista-dspark`, DeepSeek-V4.1-Flash (ISTA IQ2_XXS) with FLE's DSpark draft model
+  and the measured start command (FLE engine v1.2.1 or newer).
 - **Engine adapters:** `fle`, `upstream` and `custom` (any llama-server-compatible binary) behind one interface.
 - **One data folder** for the terminal, the Studio and the app (`FLE Link` in the user's app data, `flelink` on Linux). A model
   `flelink ask` downloaded shows up in the Studio, and an engine is installed once. Until that folder exists, an older `FLE

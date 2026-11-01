@@ -1233,9 +1233,13 @@ impl Studio {
 
     /// Where a recipe's file goes in the Studio's models folder (the same layout as the terminal's).
     fn recipe_file(&self, r: &flelink_core::recipe::Recipe, file: &str) -> std::path::PathBuf {
-        self.models_dir()
-            .join(r.model.repo.replace('/', "__"))
-            .join(file)
+        self.models_dir().join(r.local_path(file))
+    }
+
+    /// Every file of a recipe (the model's parts and a draft model) is on disk.
+    fn recipe_on_disk(&self, r: &flelink_core::recipe::Recipe) -> bool {
+        let models = self.models_dir();
+        r.fetches().iter().all(|x| models.join(&x.local).exists())
     }
 
     /// `/api/recipes`: every recipe (built in, the recipes folder, plugins) with fit and whether it is on disk.
@@ -1245,8 +1249,9 @@ impl Studio {
         let list: Vec<Value> = all
             .iter()
             .map(|r| {
-                let have = r.model.files.iter().all(|f| self.recipe_file(r, f).exists());
+                let have = self.recipe_on_disk(r);
                 json!({"id": r.id, "title": r.title, "note": r.note, "repo": r.model.repo, "files": r.model.files,
+                    "draft": r.draft.as_ref().map(|d| json!({"file": d.file, "size": d.size})),
                     "size": r.model.size, "source": r.source, "engine": r.engine.prefer, "strict": r.engine.strict,
                     "context": r.run.context, "chat": serde_json::to_value(&r.chat).unwrap_or(Value::Null),
                     "downloaded": have,
@@ -1261,25 +1266,29 @@ impl Studio {
         let r = flelink_core::recipe::find(&self.opts.home, id)
             .map_err(|e| ApiError(404, e.to_string()))?;
         // sizes and checksums from the repo where the recipe does not give them (the recipe's own values win)
-        let tree =
-            crate::hf::tree(&r.model.repo, &r.model.revision, &self.hf_token()).unwrap_or_default();
-        let entry = |f: &str| tree.iter().find(|t| t["path"].as_str() == Some(f));
+        let mut trees: std::collections::HashMap<(String, String), Vec<Value>> = Default::default();
         let mut files = vec![];
-        for f in &r.model.files {
-            let t = entry(f);
+        let models = self.models_dir();
+        for x in r.fetches() {
+            let tree = trees
+                .entry((x.repo.clone(), x.revision.clone()))
+                .or_insert_with(|| {
+                    crate::hf::tree(&x.repo, &x.revision, &self.hf_token()).unwrap_or_default()
+                });
+            let t = tree
+                .iter()
+                .find(|t| t["path"].as_str() == Some(x.file.as_str()));
             if !tree.is_empty() && t.is_none() {
-                return Err(ApiError(404, format!("{} has no file {f}", r.model.repo)));
+                return Err(ApiError(404, format!("{} has no file {}", x.repo, x.file)));
             }
-            let size = t.and_then(|t| t["size"].as_i64()).unwrap_or(0);
-            let sha = r
-                .model
+            let size = t.and_then(|t| t["size"].as_i64()).unwrap_or(x.size as i64);
+            let sha = x
                 .sha256
-                .get(f)
-                .cloned()
+                .clone()
                 .or_else(|| t.and_then(|t| t["lfs"]["oid"].as_str().map(String::from)));
             files.push(
-                json!({"url": crate::hf::resolve_url(&r.model.repo, f, &r.model.revision),
-                "dest": self.recipe_file(&r, f).to_string_lossy(), "size": size,
+                json!({"url": crate::hf::resolve_url(&x.repo, &x.file, &x.revision),
+                "dest": models.join(&x.local).to_string_lossy(), "size": size,
                 "sha256": sha.map(Value::from).unwrap_or(Value::Null)}),
             );
         }
@@ -1677,12 +1686,7 @@ impl Studio {
     pub fn recipe_start(&self, id: &str) -> Result<Value, ApiError> {
         let r = flelink_core::recipe::find(&self.opts.home, id)
             .map_err(|e| ApiError(404, e.to_string()))?;
-        if !r
-            .model
-            .files
-            .iter()
-            .all(|f| self.recipe_file(&r, f).exists())
-        {
+        if !self.recipe_on_disk(&r) {
             return Err(ApiError(409, format!("Download {} first", r.title)));
         }
         let main = self
@@ -1744,7 +1748,7 @@ impl Studio {
                 _ => plan.args.extend(["-c".to_string(), c.to_string()]),
             }
         }
-        plan.args.extend(r.run.args.iter().cloned());
+        plan.args.extend(r.run_args(&self.models_dir()));
         for (k, v) in &r.run.env {
             match plan.env.iter_mut().find(|(a, _)| a == k) {
                 Some(e) => e.1 = v.clone(),

@@ -18,6 +18,10 @@ pub struct Recipe {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
     pub model: ModelSpec,
+    /// A small model the engine drafts tokens with (speculative decoding); downloaded with the model, its path is
+    /// `{draft}` in `run.args` (`args = ["-md", "{draft}", ...]`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft: Option<DraftSpec>,
     #[serde(default, skip_serializing_if = "EngineSpec::is_default")]
     pub engine: EngineSpec,
     #[serde(default, skip_serializing_if = "RunSpec::is_default")]
@@ -45,6 +49,39 @@ pub struct ModelSpec {
     pub sha256: BTreeMap<String, String>,
     /// Total bytes of all files, for the fit check before anything is downloaded.
     #[serde(default)]
+    pub size: u64,
+    /// A file stored under another name than in the repo (path in the repo -> file name next to the other parts), for
+    /// a split model whose last part the publisher uploaded under a name of its own.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub save_as: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DraftSpec {
+    /// Hugging Face repo, `owner/name`; empty: the model's repo.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub repo: String,
+    #[serde(default = "main_rev", skip_serializing_if = "is_main")]
+    pub revision: String,
+    /// The `.gguf` path inside the repo.
+    pub file: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sha256: String,
+    #[serde(default)]
+    pub size: u64,
+}
+
+/// One file to download: from where, to which path under the models folder, checked against what.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Fetch {
+    pub repo: String,
+    pub revision: String,
+    /// path inside the repo
+    pub file: String,
+    /// path under the models folder
+    pub local: PathBuf,
+    pub sha256: Option<String>,
     pub size: u64,
 }
 
@@ -162,17 +199,56 @@ impl Recipe {
         if self.model.files.is_empty() {
             bail!("recipe {}: model.files lists no file", self.id);
         }
-        for f in &self.model.files {
-            let p = Path::new(f);
-            let normal = p
+        let gguf_path = |f: &str| {
+            Path::new(f)
                 .components()
-                .all(|c| matches!(c, std::path::Component::Normal(_)));
-            if !normal || !f.to_lowercase().ends_with(".gguf") {
+                .all(|c| matches!(c, std::path::Component::Normal(_)))
+                && f.to_lowercase().ends_with(".gguf")
+        };
+        for f in &self.model.files {
+            if !gguf_path(f) {
                 bail!(
                     "recipe {}: '{f}' is not a .gguf path inside the repo",
                     self.id
                 );
             }
+        }
+        for (from, to) in &self.model.save_as {
+            if !self.model.files.contains(from) {
+                bail!(
+                    "recipe {}: model.save_as names '{from}', which is not in model.files",
+                    self.id
+                );
+            }
+            if !gguf_path(to) || to.contains('/') || to.contains('\\') {
+                bail!(
+                    "recipe {}: model.save_as '{to}' must be a plain .gguf file name",
+                    self.id
+                );
+            }
+        }
+        if let Some(d) = &self.draft {
+            if !d.repo.is_empty()
+                && !d
+                    .repo
+                    .split_once('/')
+                    .is_some_and(|(a, b)| slug(a) && slug(b))
+            {
+                bail!("recipe {}: draft.repo must look like owner/name", self.id);
+            }
+            if !gguf_path(&d.file) {
+                bail!(
+                    "recipe {}: '{}' is not a .gguf path inside the repo",
+                    self.id,
+                    d.file
+                );
+            }
+        }
+        if self.draft.is_none() && self.run.args.iter().any(|a| a.contains("{draft}")) {
+            bail!(
+                "recipe {}: run.args uses {{draft}}, but the recipe has no [draft]",
+                self.id
+            );
         }
         for k in self.run.env.keys() {
             if k.is_empty() || !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
@@ -192,9 +268,75 @@ impl Recipe {
 
     /// Where the files go: `<data>/models/<owner>__<name>/<path>`, like the catalog.
     pub fn file_path(&self, home: &Path, file: &str) -> PathBuf {
-        home.join("models")
-            .join(self.model.repo.replace('/', "__"))
-            .join(file)
+        home.join("models").join(self.local_path(file))
+    }
+
+    /// The path of a model file under the models folder (`model.save_as` applied).
+    pub fn local_path(&self, file: &str) -> PathBuf {
+        let dir = PathBuf::from(self.model.repo.replace('/', "__"));
+        match self.model.save_as.get(file) {
+            Some(name) => dir
+                .join(Path::new(file).parent().unwrap_or(Path::new("")))
+                .join(name),
+            None => dir.join(file),
+        }
+    }
+
+    /// Every file to download, the model's parts first, then the draft model.
+    pub fn fetches(&self) -> Vec<Fetch> {
+        let mut out: Vec<Fetch> = self
+            .model
+            .files
+            .iter()
+            .map(|f| Fetch {
+                repo: self.model.repo.clone(),
+                revision: self.model.revision.clone(),
+                file: f.clone(),
+                local: self.local_path(f),
+                sha256: self.model.sha256.get(f).cloned(),
+                size: 0,
+            })
+            .collect();
+        if let Some(d) = &self.draft {
+            let repo = if d.repo.is_empty() {
+                self.model.repo.clone()
+            } else {
+                d.repo.clone()
+            };
+            out.push(Fetch {
+                local: PathBuf::from(repo.replace('/', "__")).join(&d.file),
+                repo,
+                revision: d.revision.clone(),
+                file: d.file.clone(),
+                sha256: (!d.sha256.is_empty()).then(|| d.sha256.clone()),
+                size: d.size,
+            });
+        }
+        out
+    }
+
+    /// The draft model's path under `models`, when the recipe has one.
+    pub fn draft_path(&self, models: &Path) -> Option<PathBuf> {
+        self.draft
+            .as_ref()
+            .map(|_| models.join(&self.fetches().last().unwrap().local))
+    }
+
+    /// `run.args` with `{draft}` (the draft model's path) and `{physical_cores}` filled in.
+    pub fn run_args(&self, models: &Path) -> Vec<String> {
+        let draft = self
+            .draft_path(models)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let cores = crate::system::physical_cores().to_string();
+        self.run
+            .args
+            .iter()
+            .map(|a| {
+                a.replace("{draft}", &draft)
+                    .replace("{physical_cores}", &cores)
+            })
+            .collect()
     }
 
     /// The file passed to the engine (the first part of a split model).
@@ -206,8 +348,8 @@ impl Recipe {
         self.engine.strict && self.engine.prefer.iter().all(|e| e == "fle")
     }
 
-    /// Put the recipe's start values over an automatic plan.
-    pub fn apply(&self, plan: &mut crate::plan::Plan) {
+    /// Put the recipe's start values over an automatic plan; `models` is the models folder (for `{draft}`).
+    pub fn apply(&self, plan: &mut crate::plan::Plan, models: &Path) {
         if let Some(c) = self.run.context {
             plan.ctx = c;
             if let Some(i) = plan.args.iter().position(|a| a == "-c") {
@@ -216,7 +358,7 @@ impl Recipe {
                 }
             }
         }
-        plan.args.extend(self.run.args.iter().cloned());
+        plan.args.extend(self.run_args(models));
         for (k, v) in &self.run.env {
             match plan.env.iter_mut().find(|(a, _)| a == k) {
                 Some(e) => e.1 = v.clone(),
@@ -226,8 +368,21 @@ impl Recipe {
     }
 }
 
-/// The built-in catalog as recipes.
+/// Recipes that ship as TOML because the catalog's fields do not cover them (a draft model, engine flags).
+const BUILTIN_TOML: [&str; 1] = [include_str!("../recipes/deepseek-v41-ista-dspark.toml")];
+
+/// The built-in catalog as recipes, then the built-in TOML recipes.
 pub fn builtin() -> Vec<Recipe> {
+    let mut out = builtin_catalog();
+    out.extend(
+        BUILTIN_TOML
+            .iter()
+            .map(|t| Recipe::parse(t, "builtin").expect("a built-in recipe is valid")),
+    );
+    out
+}
+
+fn builtin_catalog() -> Vec<Recipe> {
     catalog::builtin()
         .into_iter()
         .map(|m| {
@@ -245,7 +400,9 @@ pub fn builtin() -> Vec<Recipe> {
                     files: m.files.iter().map(|f| f.to_string()).collect(),
                     sha256: sha,
                     size: m.size,
+                    save_as: BTreeMap::new(),
                 },
+                draft: None,
                 engine: EngineSpec {
                     prefer: if m.fle_only {
                         vec!["fle".into()]
@@ -408,7 +565,7 @@ temperature = 0.2
             port: 8080,
             ctx: 8192,
         };
-        r.apply(&mut p);
+        r.apply(&mut p, Path::new("/m"));
         assert_eq!(p.ctx, 65536);
         assert_eq!(p.args, ["-c", "65536", "--jinja", "--cache-reuse", "256"]);
         assert_eq!(
@@ -422,6 +579,64 @@ temperature = 0.2
         let fle = builtin().into_iter().find(|r| r.id == "fle-iq3-m").unwrap();
         assert!(fle.model.files.len() > 1, "{:?}", fle.model.files);
         assert!(fle.needs_fle());
+    }
+
+    #[test]
+    fn a_draft_model_is_fetched_and_named_in_the_arguments() {
+        let r = builtin()
+            .into_iter()
+            .find(|r| r.id == "deepseek-v41-ista-dspark")
+            .unwrap();
+        assert!(r.needs_fle());
+        let f = r.fetches();
+        assert_eq!(f.len(), 7);
+        // the Engram file is stored as the sixth part of the split
+        assert_eq!(
+            f[5].local,
+            PathBuf::from("ISTA-DASLab__DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF/DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00006-of-00006.gguf")
+        );
+        assert_eq!(f[5].file, "DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf");
+        assert_eq!(
+            f[6].repo,
+            "sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF"
+        );
+        assert_eq!(f[6].size, 5_216_519_072);
+        let models = Path::new("/m");
+        let args = r.run_args(models);
+        let md = args.iter().position(|a| a == "-md").unwrap();
+        assert_eq!(
+            Path::new(&args[md + 1]),
+            models.join("sirfyyn__DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF/FLE-DSpark-V4.1-1017-Q2K-Q8.gguf")
+        );
+        let t = args.iter().position(|a| a == "-t").unwrap();
+        assert_eq!(args[t + 1], crate::system::physical_cores().to_string());
+        // the TOML that `flelink recipe` prints reads back the same
+        assert_eq!(Recipe::parse(&r.to_toml(), "builtin").unwrap(), r);
+    }
+
+    #[test]
+    fn draft_and_save_as_are_checked() {
+        let base = "id = \"x\"\ntitle = \"x\"\n[model]\nrepo = \"a/b\"\nfiles = [\"m.gguf\"]\n";
+        let e = Recipe::parse(
+            &format!("{base}[run]\nargs = [\"-md\", \"{{draft}}\"]\n"),
+            "t",
+        )
+        .unwrap_err();
+        assert!(format!("{e:#}").contains("no [draft]"), "{e:#}");
+        let e = Recipe::parse(
+            &format!("{base}[model.save_as]\n\"m.gguf\" = \"../n.gguf\"\n"),
+            "t",
+        )
+        .unwrap_err();
+        assert!(format!("{e:#}").contains("plain .gguf file name"), "{e:#}");
+        let e = Recipe::parse(
+            &format!("{base}[model.save_as]\n\"o.gguf\" = \"n.gguf\"\n"),
+            "t",
+        )
+        .unwrap_err();
+        assert!(format!("{e:#}").contains("not in model.files"), "{e:#}");
+        let ok = Recipe::parse(&format!("{base}[draft]\nfile = \"d/x.gguf\"\n"), "t").unwrap();
+        assert_eq!(ok.fetches()[1].local, PathBuf::from("a__b/d/x.gguf"));
     }
 
     #[test]

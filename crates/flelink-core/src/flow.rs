@@ -148,17 +148,22 @@ fn start_with(
     emit: &mut dyn FnMut(Event),
 ) -> Result<Server> {
     let parts = r.model.files.len();
-    for (i, f) in r.model.files.iter().enumerate() {
-        let path = r.file_path(home, f);
+    for (i, x) in r.fetches().iter().enumerate() {
+        let path = home.join("models").join(&x.local);
+        let f = &x.file;
         if path.exists() {
             continue;
         }
-        let what = if parts > 1 {
+        let what = if i >= parts {
+            format!("{} (draft model)", r.title)
+        } else if parts > 1 {
             format!("{} (part {} of {parts})", r.title, i + 1)
         } else {
             r.title.clone()
         };
-        let size = if parts == 1 && r.model.size > 0 {
+        let size = if i >= parts && x.size > 0 {
+            format!(" ({})", system::gib(x.size))
+        } else if parts == 1 && i == 0 && r.model.size > 0 {
             format!(" ({})", system::gib(r.model.size))
         } else {
             String::new()
@@ -166,9 +171,9 @@ fn start_with(
         emit(Event::Step(format!("Downloading {what}{size}")));
         let url = format!(
             "https://huggingface.co/{}/resolve/{}/{}",
-            r.model.repo, r.model.revision, f
+            x.repo, x.revision, f
         );
-        let sha = r.model.sha256.get(f).map(|s| s.as_str());
+        let sha = x.sha256.as_deref();
         crate::download::fetch(&url, &path, sha, &mut |d, t| {
             emit(Event::Progress {
                 label: format!(
@@ -235,7 +240,7 @@ fn start_with(
             (server_bin.to_path_buf(), pl, health)
         }
     };
-    r.apply(&mut pl);
+    r.apply(&mut pl, &home.join("models"));
     let command = pl.command_line(&program);
     emit(Event::Step(format!(
         "Starting the engine (context {} tokens)",
