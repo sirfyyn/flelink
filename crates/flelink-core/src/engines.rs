@@ -4,10 +4,8 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-/// The llama.cpp release FLE is tested with (same pin as FLE Studio).
-pub const LLAMA_TAG: &str = "b11540";
-const UPSTREAM: &str = "ggml-org/llama.cpp";
-const FLE_REPO: &str = "sirfyyn/FastLocalExperts";
+/// The llama.cpp release FLE is tested with (same pin as FLE Studio); where each engine comes from is its adapter's.
+pub use crate::adapter::LLAMA_TAG;
 
 #[derive(Debug, Clone)]
 pub struct Variant {
@@ -148,9 +146,10 @@ pub fn newest_installed(dir: &Path, variant_id: &str) -> Option<(String, PathBuf
 
 /// A newer FLE release than `installed_name`, if there is one. Asks GitHub at most once a day (the answer is kept in
 /// `<data>/engines/.latest-<variant>`); offline, on any error and with FLE_NO_UPDATE set it says nothing. Only the FLE
-/// engine follows its releases: upstream llama.cpp is pinned (LLAMA_TAG).
+/// engine follows its releases (its adapter says so): upstream llama.cpp is pinned (LLAMA_TAG).
 pub fn update_available(dir: &Path, v: &Variant, installed_name: &str) -> Option<String> {
-    if v.kind != "fle" || std::env::var_os("FLE_NO_UPDATE").is_some_and(|x| !x.is_empty()) {
+    let rel = crate::adapter::release_of(v.kind).filter(|r| r.self_updates)?;
+    if std::env::var_os("FLE_NO_UPDATE").is_some_and(|x| !x.is_empty()) {
         return None;
     }
     let memo = dir.join("engines").join(format!(".latest-{}", v.id));
@@ -166,7 +165,7 @@ pub fn update_available(dir: &Path, v: &Variant, installed_name: &str) -> Option
     let tag = match cached {
         Some(t) => t,
         None => {
-            let t = release(FLE_REPO, None).ok()?.tag_name;
+            let t = release(rel.repo, rel.default_tag).ok()?.tag_name;
             let _ = std::fs::write(&memo, format!("{now} {t}"));
             t
         }
@@ -281,11 +280,9 @@ pub fn install(
     s: &SysInfo,
     progress: &mut dyn FnMut(&str, u64, u64),
 ) -> Result<PathBuf> {
-    let (repo, tag) = if v.kind == "fle" {
-        (FLE_REPO, None)
-    } else {
-        (UPSTREAM, Some(LLAMA_TAG))
-    };
+    let r = crate::adapter::release_of(v.kind)
+        .with_context(|| format!("FLE Link does not install the {} engine", v.kind))?;
+    let (repo, tag) = (r.repo, r.default_tag);
     let rel = release(repo, tag)?;
     let asset = pick(&rel.assets, v, &s.os, &s.arch).with_context(|| {
         format!(

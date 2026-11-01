@@ -62,14 +62,10 @@ pub fn summary(
     };
     let fallback = plan.get("fallback").is_some_and(crate::settings::py_truthy);
     let engine = plan["engine"].as_str().unwrap_or("");
-    if engine == "fle" {
-        add("Engine", "FLE", "info");
-    } else if engine == "upstream" {
-        add(
-            "Engine",
-            "Upstream llama.cpp",
-            if fallback { "warn" } else { "info" },
-        );
+    if let Some(a) = flelink_core::adapter::get(engine).filter(|a| a.installable()) {
+        // an upstream engine that stands in for a failed FLE plan is a warning
+        let warn = fallback && !a.capabilities().fle_policy;
+        add("Engine", a.label(), if warn { "warn" } else { "info" });
     } else {
         // a build of your own: what it is shows in the command (the FLE engine's flags and settings)
         let fle = plan["env"]

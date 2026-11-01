@@ -475,7 +475,10 @@ impl Studio {
             });
         }
         if let Some(c) = &custom {
-            if (want == "fle" || want == "upstream") && c["flavor"] == want && choice == "custom" {
+            if flelink_core::adapter::is_installable(want)
+                && c["flavor"] == want
+                && choice == "custom"
+            {
                 return Ok(c.clone());
             }
         }
@@ -765,7 +768,7 @@ impl Studio {
             return json!({"applies": false, "reason": p.fallback});
         }
         let flavor: Option<String> = match plan {
-            Some(p) if p.profile == "auto" && (p.engine == "fle" || p.engine == "upstream") => {
+            Some(p) if p.profile == "auto" && flelink_core::adapter::is_installable(&p.engine) => {
                 Some(p.engine.clone())
             }
             _ => self
@@ -1143,7 +1146,7 @@ impl Studio {
             .to_string_lossy()
             .to_string();
         // an engine a plugin brings, when the recipe prefers one and no built-in engine comes before it (as `flelink run`)
-        let builtin = ["fle", "upstream"];
+        let builtin = flelink_core::adapter::installable_ids();
         let builtin_first = r
             .engine
             .prefer

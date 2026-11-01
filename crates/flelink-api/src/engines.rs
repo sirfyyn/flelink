@@ -15,8 +15,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-pub const UPSTREAM_REPO: &str = "ggml-org/llama.cpp";
-pub const FLE_REPO: &str = "sirfyyn/FastLocalExperts";
+pub use flelink_core::adapter::{FLE_REPO, UPSTREAM_REPO};
 pub const GITHUB_API: &str = "https://api.github.com/repos";
 
 /// An error with the HTTP status the page gets for it.
@@ -466,27 +465,19 @@ impl Engines {
     /// Which release assets an install would download (a readable reason if none fits).
     pub fn plan_install(&self, variant: &str, sys: &Value) -> Result<Value, EngineError> {
         let (os, arch) = os_arch();
-        let fle_tag = {
-            let t = self.setting("fle_tag");
-            if t.is_empty() {
-                "latest".to_string()
-            } else {
-                t
-            }
-        };
-        let up_tag = {
-            let t = self.setting("upstream_tag");
-            if t.is_empty() {
-                "b11540".to_string()
-            } else {
-                t
-            }
-        };
-        let (rel, source) = if variant.starts_with("fle") {
-            (self.release(FLE_REPO, &fle_tag)?, FLE_REPO)
+        // where the variant's engine comes from is its adapter's; the settings can name another tag (`<kind>_tag`)
+        let kind = if variant.starts_with("fle") {
+            "fle"
         } else {
-            (self.release(UPSTREAM_REPO, &up_tag)?, UPSTREAM_REPO)
+            "upstream"
         };
+        let r = flelink_core::adapter::release_of(kind)
+            .ok_or_else(|| Runtime(format!("FLE Link does not install the {kind} engine")))?;
+        let tag = match self.setting(&format!("{kind}_tag")) {
+            t if t.is_empty() => r.default_tag.unwrap_or("latest").to_string(),
+            t => t,
+        };
+        let (rel, source) = (self.release(r.repo, &tag)?, r.repo);
         let assets = rel["assets"].as_array().cloned().unwrap_or_default();
         let pattern = asset_patterns(variant, os, &arch)
             .map_err(Runtime)?
@@ -531,6 +522,10 @@ impl Engines {
                 .cloned();
             if runtime.is_none() && source == FLE_REPO {
                 // FLE builds use upstream's CUDA runtime package
+                let up_tag = match self.setting("upstream_tag") {
+                    t if t.is_empty() => flelink_core::adapter::LLAMA_TAG.to_string(),
+                    t => t,
+                };
                 let up = self.release(UPSTREAM_REPO, &up_tag)?;
                 runtime = up["assets"].as_array().and_then(|a| {
                     a.iter()
@@ -804,7 +799,7 @@ impl Engines {
                     .unwrap_or(std::cmp::Ordering::Equal),
             )
         });
-        if want == "fle" || want == "upstream" {
+        if flelink_core::adapter::is_installable(&want) {
             have.retain(|e| e["kind"] == want.as_str());
         }
         let Some(e) = have.first() else {
