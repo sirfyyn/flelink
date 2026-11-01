@@ -17,10 +17,13 @@ export function mount(main) {
   const dlBox = h("div");
   const libBox = h("div");
   const hfBox = h("div", { class: "card" });
+  const recipeGrid = h("div", { class: "cat-grid" });
+  const recipeBox = section("Recipes", "A model with the engine and start settings it wants. Built in, from your recipes folder or from a plugin; fitting ones first.", recipeGrid);
   const page = h("div", { class: "page-inner" },
     h("div", { class: "page-head" }, h("div", null, h("h2", null, "Models"),
       h("p", null, "Pick a model that fits this computer. Downloads resume after an interruption and every file is checked against its SHA-256 before use."))),
     hw,
+    recipeBox,
     section("FLE quants of Qwen3.8-Flash-Next", "Made for the FLE engine: experts in RAM, the busy ones cached on the GPU, MTP drafting for faster answers.", catGrid),
     dlBox,
     libBox,
@@ -31,9 +34,10 @@ export function mount(main) {
   let hfState = { q: "", results: [], repo: null, loading: false };
 
   unsub.push(on("state", renderAll));
-  unsub.push(on("downloads", () => { renderCatalog(); renderDownloads(); }));
+  unsub.push(on("downloads", () => { renderCatalog(); renderDownloads(); renderRecipes(); }));
   renderAll();
   renderHF();
+  renderRecipes();
   refreshState().catch(() => {});
 
   function renderAll() {
@@ -63,6 +67,45 @@ export function mount(main) {
 
   function tile(k, v, sub) {
     return h("div", { class: "tile" }, h("div", { class: "k" }, k), h("div", { class: "v" }, v), h("div", { class: "sub" }, sub));
+  }
+
+  // ------------------------------------------------------------------------------------------- recipes
+
+  const FIT_ORDER = { good: 0, tight: 1, too_big: 2 };
+  let recipeBusy = false;
+  async function renderRecipes() {
+    if (recipeBusy) return;
+    recipeBusy = true;
+    let data;
+    try { data = await get("/api/recipes"); } catch (e) { recipeBox.hidden = e.status === 404 || e.status === 501; recipeBusy = false; return; }
+    recipeBusy = false;
+    const list = [...(data.recipes || [])].sort((a, b) =>
+      (FIT_ORDER[a.fit?.verdict] ?? 1) - (FIT_ORDER[b.fit?.verdict] ?? 1) || (a.size || 0) - (b.size || 0));
+    clear(recipeGrid, list.map(recipeCard),
+      (data.problems || []).length ? h("div", { class: "callout warn" }, icon("alert", "sm"),
+        h("div", { class: "small" }, "Skipped: ", data.problems.join(" · "))) : null);
+  }
+
+  function recipeCard(r) {
+    const [cls, label] = FIT[r.fit?.verdict] || ["", ""];
+    const job = store.downloads.find((d) => d.meta?.recipe === r.id && !["done", "cancelled"].includes(d.state));
+    const runCmd = `flelink run ${r.id}`;
+    const action = r.downloaded ? h("span", { class: "pill good" }, "Downloaded")
+      : job ? h("span", { class: "pill" }, `Downloading ${Math.round((job.progress || 0) * 100)} %`)
+      : h("button", { class: "btn sm", onclick: async () => {
+          try { await post(`/api/recipes/${encodeURIComponent(r.id)}/download`, {}); emit("downloads"); toast(`Downloading ${r.title}`); }
+          catch (e) { toast(e.message, "bad"); }
+        } }, icon("download", "sm"), r.size ? `Download ${fmt.bytes(r.size)}` : "Download");
+    return h("div", { class: "card cat" },
+      h("div", { class: "row wrap" }, h("b", null, r.title),
+        r.source && r.source !== "builtin" ? h("span", { class: "tag", title: r.source }, r.source.startsWith("plugin") ? r.source.split(":")[0] : "yours") : null,
+        label ? h("span", { class: `pill ${cls}` }, label) : null),
+      r.note ? h("p", { class: "small muted" }, r.note) : null,
+      h("div", { class: "small faint mono" }, r.repo, r.engine?.length ? ` · ${r.engine.join(", ")}${r.strict ? " only" : ""}` : "", r.context ? ` · ${fmt.tokens(r.context)} context` : ""),
+      h("div", { class: "row wrap" }, action,
+        h("button", { class: "btn ghost sm", title: "Run it from a terminal with these settings",
+          onclick: (e) => navigator.clipboard.writeText(runCmd).then(() => toast(`Copied: ${runCmd}`)).catch(() => toast(runCmd)) },
+          icon("copy", "sm"), "Copy run command")));
   }
 
   // ------------------------------------------------------------------------------------------- catalog

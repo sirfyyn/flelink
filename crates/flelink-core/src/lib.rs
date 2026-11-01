@@ -15,6 +15,7 @@ pub mod launch;
 pub mod orphans;
 pub mod plan;
 pub mod policy;
+pub mod recipe;
 pub mod report;
 pub mod serve;
 pub mod server;

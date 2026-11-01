@@ -54,7 +54,14 @@ enum Cmd {
     },
     /// The models FLE Link knows, and whether each fits this machine
     Models,
-    /// Load a model and keep serving it (OpenAI-compatible API) until Ctrl+C
+    /// Recipes: a model with its engine and start settings (built in, in <data>/recipes, or from a plugin)
+    Recipes,
+    /// Print a recipe as TOML, to share it or to save a changed copy in <data>/recipes
+    Recipe {
+        /// recipe id, a .toml file or an https:// URL
+        recipe: String,
+    },
+    /// Load a model (a recipe id, a .toml recipe or an https:// URL to one) and serve it (OpenAI-compatible API) until Ctrl+C
     Run { model: String },
     /// Read a model's header: architecture, parts, expert bytes, KV cache (no weights are loaded)
     Inspect {
@@ -532,6 +539,49 @@ fn run() -> Result<()> {
             exit(plancmd::run_report(common, out, zip, &home)?)
         }
         Some(Cmd::Bench(a)) => exit(run_bench(*a)?),
+        Some(Cmd::Recipes) => {
+            let s = system::detect(&home);
+            let (all, problems) = flelink_core::recipe::load_all(&home);
+            for r in &all {
+                let fit = if r.model.size > 0 {
+                    catalog::fit_size(r.model.size, r.needs_fle(), &s).label()
+                } else {
+                    "?"
+                };
+                let have = r.model.files.iter().all(|f| r.file_path(&home, f).exists());
+                let from = if r.source == "builtin" {
+                    String::new()
+                } else {
+                    format!("  ({})", r.source)
+                };
+                println!(
+                    "{:<22} {:>9}  {:<8} {}{}{}",
+                    r.id,
+                    if r.model.size > 0 {
+                        system::gib(r.model.size)
+                    } else {
+                        "-".into()
+                    },
+                    fit,
+                    r.title,
+                    if have { "  [downloaded]" } else { "" },
+                    from
+                );
+            }
+            for p in problems {
+                eprintln!("skipped: {p}");
+            }
+            println!(
+                "\nRun one: flelink run ID · your own: put a .toml into {}",
+                home.join("recipes").display()
+            );
+            Ok(())
+        }
+        Some(Cmd::Recipe { recipe }) => {
+            let r = flelink_core::recipe::find(&home, &recipe)?;
+            print!("{}", r.to_toml());
+            Ok(())
+        }
         Some(Cmd::Models) => {
             let s = system::detect(&home);
             for m in catalog::builtin() {

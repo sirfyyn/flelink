@@ -6,7 +6,10 @@ pub struct Model {
     pub title: &'static str,
     pub note: &'static str,
     pub repo: &'static str,
+    /// The file passed to the engine (the first part of a split model).
     pub file: &'static str,
+    /// Every file of the model; for a single file the same as `file`.
+    pub files: &'static [&'static str],
     pub size: u64,
     pub sha256: Option<&'static str>,
     /// Needs the FLE engine (experts in RAM, hot ones cached on the GPU).
@@ -21,6 +24,7 @@ pub fn builtin() -> Vec<Model> {
             note: "Tiny, runs on any laptop. Good for trying FLE Link out.",
             repo: "bartowski/Llama-3.2-1B-Instruct-GGUF",
             file: "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+            files: &["Llama-3.2-1B-Instruct-Q4_K_M.gguf"],
             size: 807_694_464,
             sha256: Some("6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83"),
             fle_only: false,
@@ -31,6 +35,7 @@ pub fn builtin() -> Vec<Model> {
             note: "Same model, higher precision.",
             repo: "bartowski/Llama-3.2-1B-Instruct-GGUF",
             file: "Llama-3.2-1B-Instruct-Q8_0.gguf",
+            files: &["Llama-3.2-1B-Instruct-Q8_0.gguf"],
             size: 1_321_083_008,
             sha256: Some("432f310a77f4650a88d0fd59ecdd7cebed8d684bafea53cbff0473542964f0c3"),
             fle_only: false,
@@ -41,7 +46,11 @@ pub fn builtin() -> Vec<Model> {
             note: "The FLE showcase: ~90 tok/s on one 32 GB GPU. Needs ~120 GB RAM.",
             repo: "sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF",
             file: "IQ3_M/Qwen3.8-Flash-Next-FLE-IQ3_M-00001-of-00002.gguf",
-            size: 88_870_000_000,
+            files: &[
+                "IQ3_M/Qwen3.8-Flash-Next-FLE-IQ3_M-00001-of-00002.gguf",
+                "IQ3_M/Qwen3.8-Flash-Next-FLE-IQ3_M-00002-of-00002.gguf",
+            ],
+            size: 88_872_241_728,
             sha256: None,
             fle_only: true,
         },
@@ -68,13 +77,18 @@ impl Fit {
 /// Fit of a model on this machine, before anything is downloaded. Dense models must fit the memory the GPU may use
 /// (unified memory on a Mac) with room for the KV cache; FLE-only models keep their experts in RAM.
 pub fn fit(m: &Model, s: &SysInfo) -> Fit {
-    let need = (m.size as f64 * 1.25) as u64; // weights plus KV cache and compute buffers
-    let have = if m.fle_only {
+    fit_size(m.size, m.fle_only, s)
+}
+
+/// Will `size` bytes of model fit? `experts_in_ram`: the FLE engine keeps the experts in RAM, so RAM is what counts.
+pub fn fit_size(size: u64, experts_in_ram: bool, s: &SysInfo) -> Fit {
+    let need = (size as f64 * 1.25) as u64; // weights plus KV cache and compute buffers
+    let have = if experts_in_ram {
         s.ram_bytes
     } else {
         s.gpu_usable_bytes.max(s.ram_bytes / 2)
     };
-    if m.size + 512 * 1024 * 1024 > s.disk_free_bytes && s.disk_free_bytes > 0 {
+    if size + 512 * 1024 * 1024 > s.disk_free_bytes && s.disk_free_bytes > 0 {
         return Fit::TooBig;
     }
     if need <= have * 8 / 10 {

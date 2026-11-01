@@ -969,6 +969,67 @@ impl Studio {
         ))
     }
 
+    /// Where a recipe's file goes in the Studio's models folder (the same layout as the terminal's).
+    fn recipe_file(&self, r: &flelink_core::recipe::Recipe, file: &str) -> std::path::PathBuf {
+        self.models_dir()
+            .join(r.model.repo.replace('/', "__"))
+            .join(file)
+    }
+
+    /// `/api/recipes`: every recipe (built in, the recipes folder, plugins) with fit and whether it is on disk.
+    pub fn recipes(&self) -> Value {
+        let (all, problems) = flelink_core::recipe::load_all(&self.opts.home);
+        let sys = self.sysinfo();
+        let list: Vec<Value> = all
+            .iter()
+            .map(|r| {
+                let have = r.model.files.iter().all(|f| self.recipe_file(r, f).exists());
+                json!({"id": r.id, "title": r.title, "note": r.note, "repo": r.model.repo, "files": r.model.files,
+                    "size": r.model.size, "source": r.source, "engine": r.engine.prefer, "strict": r.engine.strict,
+                    "context": r.run.context, "chat": serde_json::to_value(&r.chat).unwrap_or(Value::Null),
+                    "downloaded": have,
+                    "fit": if r.model.size > 0 { crate::catalog::fit(r.model.size as i64, &sys) } else { Value::Null }})
+            })
+            .collect();
+        json!({"recipes": list, "problems": problems})
+    }
+
+    /// `POST /api/recipes/<id>/download`: one job for every file of the recipe that is not on disk yet.
+    pub fn recipe_download(&self, id: &str) -> Result<Value, ApiError> {
+        let r = flelink_core::recipe::find(&self.opts.home, id)
+            .map_err(|e| ApiError(404, e.to_string()))?;
+        // sizes and checksums from the repo where the recipe does not give them (the recipe's own values win)
+        let tree =
+            crate::hf::tree(&r.model.repo, &r.model.revision, &self.hf_token()).unwrap_or_default();
+        let entry = |f: &str| tree.iter().find(|t| t["path"].as_str() == Some(f));
+        let mut files = vec![];
+        for f in &r.model.files {
+            let t = entry(f);
+            if !tree.is_empty() && t.is_none() {
+                return Err(ApiError(404, format!("{} has no file {f}", r.model.repo)));
+            }
+            let size = t.and_then(|t| t["size"].as_i64()).unwrap_or(0);
+            let sha = r
+                .model
+                .sha256
+                .get(f)
+                .cloned()
+                .or_else(|| t.and_then(|t| t["lfs"]["oid"].as_str().map(String::from)));
+            files.push(
+                json!({"url": crate::hf::resolve_url(&r.model.repo, f, &r.model.revision),
+                "dest": self.recipe_file(&r, f).to_string_lossy(), "size": size,
+                "sha256": sha.map(Value::from).unwrap_or(Value::Null)}),
+            );
+        }
+        Ok(self.downloads.add(
+            &r.title,
+            &files,
+            "model",
+            json!({"recipe": r.id}),
+            &format!("recipe:{}", r.id),
+        ))
+    }
+
     fn hf_token(&self) -> String {
         self.config
             .lock()
@@ -1129,6 +1190,16 @@ fn download_action(p: &str) -> Option<(&str, &str)> {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         && matches!(what, "pause" | "resume" | "cancel" | "remove"))
     .then_some((id, what))
+}
+
+/// `/api/recipes/<id>/download` -> the recipe id (`[\w.-]+`)
+fn recipe_download_id(p: &str) -> Option<&str> {
+    let id = p.strip_prefix("/api/recipes/")?.strip_suffix("/download")?;
+    (!id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')))
+    .then_some(id)
 }
 
 /// `/api/catalog/<id>/download` -> the catalog id (`[\w.-]+`)
@@ -1492,6 +1563,10 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             st.downloads
                 .action(id, what)
                 .ok_or(ApiError(404, "Not found".into()))
+        }
+        ("GET", "/api/recipes") => Ok(st.recipes()),
+        ("POST", _) if recipe_download_id(p).is_some() => {
+            st.recipe_download(recipe_download_id(p).unwrap())
         }
         ("GET", "/api/hf/search") => {
             st.hf_search(r.query.get("q").and_then(|v| v.as_str()).unwrap_or(""))
