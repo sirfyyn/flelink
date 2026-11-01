@@ -3,6 +3,7 @@
 //! No Python, no uv, no git. One static binary on top of this.
 
 pub mod adapter;
+pub mod assets;
 pub mod bench;
 pub mod catalog;
 pub mod chat;
