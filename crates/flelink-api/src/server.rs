@@ -2011,6 +2011,20 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .delete(hex_id(p, "/api/tuning/", "/delete").unwrap());
             Ok(json!({"ok": true}))
         }
+        ("GET", "/api/flags") => Ok(crate::flaghelp::table()),
+        ("POST", "/api/flags/explain") => r.json(MAX_JSON).map(|body| {
+            let args: Vec<String> = body
+                .get("args")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().map(py_str).collect())
+                .unwrap_or_default();
+            let env: Vec<(String, String)> = body
+                .get("env")
+                .and_then(Value::as_object)
+                .map(|o| o.iter().map(|(k, v)| (k.clone(), py_str(v))).collect())
+                .unwrap_or_default();
+            json!({"items": crate::flaghelp::explain(&args, &env)})
+        }),
         ("GET", "/api/recipes") => Ok(st.recipes()),
         ("POST", _) if recipe_download_id(p).is_some() => {
             st.recipe_download(recipe_download_id(p).unwrap())
@@ -2277,8 +2291,6 @@ fn not_yet(path: &str, _method: &Method) -> Option<&'static str> {
         "The quality measurements"
     } else if is("/api/cache") {
         "The expert cache view"
-    } else if is("/api/flags") {
-        "The engine flag help"
     } else if is("/api/mcp") || is("/oauth") || is("/api/apps") || is("/app-frame") {
         "MCP servers"
     } else if is("/api/remote") || is("/h") || is("/api/hosts") {

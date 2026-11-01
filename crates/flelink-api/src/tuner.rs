@@ -54,26 +54,10 @@ fn now() -> f64 {
 
 // ------------------------------------------------------------------------------------------------ plan changes
 
-/// The spellings of the flags the tuner reads or changes, and whether they take a value (`flaghelp` in the Python Studio
-/// knows every flag; the tuner only ever touches these).
-const FLAG_NAMES: [(&[&str], bool); 10] = [
-    (&["-t", "--threads"], true),
-    (&["-b", "--batch-size"], true),
-    (&["-ub", "--ubatch-size"], true),
-    (&["-c", "--ctx-size"], true),
-    (&["--n-cpu-moe", "-ncmoe"], true),
-    (&["--host"], true),
-    (&["--port"], true),
-    (&["-a", "--alias"], true),
-    (&["-lv", "--verbosity", "--log-verbosity"], true),
-    (&["--metrics"], false),
-];
-
-fn names_of(name: &str) -> (Vec<&str>, bool) {
-    FLAG_NAMES
-        .iter()
-        .find(|(n, _)| n.contains(&name))
-        .map_or((vec![name], true), |(n, t)| (n.to_vec(), *t))
+/// Every spelling of a flag and whether it takes a value (the flag help's table; unknown flags take one).
+fn names_of(name: &str) -> (Vec<String>, bool) {
+    let takes = crate::flaghelp::lookup(name).is_none_or(|(_, t, _)| t);
+    (crate::flaghelp::names_of(name), takes)
 }
 
 /// A flag value to set: a value, a switch without value, or remove the flag.
@@ -96,7 +80,7 @@ pub fn set_flag(args: &[String], name: &str, value: &FlagValue) -> Vec<String> {
             Some((b, _)) => (b, true),
             None => (token.as_str(), false),
         };
-        if !names.contains(&base) {
+        if !names.iter().any(|n| n == base) {
             out.push(token.clone());
             i += 1;
             continue;
@@ -130,7 +114,7 @@ pub fn set_flag(args: &[String], name: &str, value: &FlagValue) -> Vec<String> {
 pub fn flag_value(args: &[String], name: &str) -> Option<String> {
     let (names, _) = names_of(name);
     for (i, a) in args.iter().enumerate() {
-        if names.contains(&a.as_str()) && i + 1 < args.len() {
+        if names.iter().any(|n| n == a) && i + 1 < args.len() {
             return Some(args[i + 1].clone());
         }
         for n in names.iter().filter(|n| n.starts_with("--")) {

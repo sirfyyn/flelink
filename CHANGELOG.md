@@ -14,7 +14,8 @@ First version of FLE Link: the layer between an inference engine and the tools t
   exact command, compared with the last run of the same setting (median and 95 % interval, the same numbers as the Python
   Studio). **Tuner** ("Best for my machine" on the Engine page): tries threads, expert cache or `--n-cpu-moe`, batch and
   context one at a time, keeps only what is faster with a 95 % interval and saves the winner as a launch profile.
-  **A/B/A comparison** of two settings with drift check. The knowledge probe and KL divergence are not in FLE Link yet;
+  **A/B/A comparison** of two settings with drift check. **Flag help:** every part of the start command explained in
+  one sentence on the Engine page. The knowledge probe and KL divergence are not in FLE Link yet;
   their card stays hidden.
 - **Desktop app** (Tauri 2, `app/`): the same server inside the app on a free loopback port; closing the window stops the
   server and the model. On Windows the engine ends with the app, also after a crash.

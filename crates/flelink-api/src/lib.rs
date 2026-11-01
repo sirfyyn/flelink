@@ -7,6 +7,7 @@ pub mod chats;
 pub mod downloads;
 pub mod engine;
 pub mod engines;
+pub mod flaghelp;
 pub mod gguf;
 pub mod hf;
 pub mod launch;
