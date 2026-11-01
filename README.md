@@ -31,6 +31,7 @@ upstream llama.cpp as fallback, or any llama-server compatible build of your own
 | **66 s** | from nothing to the first answer on Linux with an NVIDIA card |
 | **92 s** | the same on an 8 GB M2 MacBook, model download included |
 | **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp |
+| **23.2 tok/s** | DeepSeek-V4.1-Flash (232 GiB) on the same 32 GB GPU, with FLE's DSpark draft model |
 
 ## Install
 
@@ -51,6 +52,8 @@ flelink studio           # browser interface on http://127.0.0.1:8642
 flelink system           # what this machine can do, and which engine fits
 flelink models           # known models and whether each fits
 flelink doctor MODEL     # check model, engine, memory, disk
+flelink recipes          # every recipe (built in, yours, from plugins) and whether it fits
+flelink pair-code        # let another FLE Link use this machine (see Remote access)
 fle                      # short name, same program
 ```
 
@@ -59,7 +62,7 @@ fle                      # short name, same program
 | Model | Size | Measured | Notes |
 |---|---|---|---|
 | [Qwen3.8-Flash-Next · FLE](https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF) | 125B MoE, 88.9 GB | decode **91 tok/s** (Strata 74, llama.cpp 36) | one 32 GB RTX PRO 4500, 120 GB RAM, same machine for all three (6 Oct 2026); smaller than Unsloth IQ4_XS at the same KL divergence |
-| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, IQ2_XXS 232 GiB | decode **23.3–23.5 tok/s** (two runs) | one 32 GB RTX PRO 4500, 18 GB expert cache, RAM capped at 102 GB, rest from NVMe (1 Nov 2026); FLE engine v1.2.0, installed by FLE Link |
+| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) + [DSpark draft](https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF) | 763B MoE, IQ2_XXS 232 GiB + 5.2 GB draft | decode **23.2 tok/s** (two rounds of three prompts: 22.9 and 23.6), 72–89 % of the drafts accepted | `flelink run deepseek-v41-ista-dspark`; one 32 GB RTX PRO 4500, 120 GB RAM, 15 GB expert cache, after a warm-up, no CPU pinning, rest from NVMe (1 Nov 2026); FLE engine v1.2.1 |
 
 Small models such as Llama 3.2 1B run on any laptop and are in the built-in catalog (`flelink models`). Any other GGUF on
 Hugging Face can be searched, checked for fit and downloaded from the Studio's Models page.
@@ -67,12 +70,39 @@ Hugging Face can be searched, checked for fit and downloaded from the Studio's M
 ## How it works
 
 1. **It reads the machine:** CPU, memory, GPU, free disk, and which engine build fits.
-2. **It checks fit before downloading:** no 80 GB download that ends in an out-of-memory error. Downloads resume and are
-   checked against SHA-256.
-3. **It serves, and shows the command:** every start is a plain llama-server command you can copy and run without FLE Link.
+2. **It checks fit before downloading:** no 80 GB download that ends in an out-of-memory error. Only what is really missing
+   counts, and a recipe's measured requirements come before the rule of thumb. Downloads resume and are checked against SHA-256.
+3. **It uses what you already have:** before a download it looks in the models folder, `FLE_MODEL_DIRS`, the Hugging Face
+   cache, LM Studio and Ollama for the same file (checked by SHA-256 where known) and links it instead.
+4. **It serves, and shows the command:** every start is a plain llama-server command you can copy and run without FLE Link.
 
 Everything lives in one data folder shared by the terminal, the Studio and the app. An engine left behind by a crash is
 stopped before a second one loads.
+
+## Recipes
+
+A recipe is one TOML file: model, engine, start values, chat defaults, and optionally a draft model for speculative decoding.
+It never runs code. Keep the settings that work for you in `<data>/recipes/`, share the file, and `flelink run my.recipe.toml`
+reproduces them elsewhere. Format and places: [docs/RECIPES.md](docs/RECIPES.md). Plugins add recipes and engines as files:
+[docs/PLUGINS.md](docs/PLUGINS.md).
+
+## In the Studio
+
+- **Chat** with live tokens per second, prompt speed and context fill.
+- **Engine**: the plan with a note for every choice, the log in plain words, profiles, one sentence per start flag.
+- **Experiments**: speed test, a tuner ("Best for my machine") that keeps a change only when it is faster with a 95 %
+  interval that excludes zero, A/B/A comparisons with a drift check, KL divergence and a knowledge probe next to speed.
+- **Expert cache**: hit rate over time and per layer, read from the FLE engine's log.
+- **Forge**: build your own quant: hybrids from whole expert layers of other quants (exact choice for a size budget, memory
+  preview), quantization with an importance matrix, expert pruning, KL-divergence check, a recipe file others can rebuild.
+- **Tools**: MCP servers (stdio and Streamable HTTP, OAuth sign-in, MCP Apps) as chat tools, asked before each call unless trusted.
+- **Updates** in one click, checked against the release's SHA-256.
+
+## Remote access
+
+One FLE Link computes for another. The machine with the GPU shows a pairing code (Settings or `flelink pair-code`); the
+client enters it and gets its own token, with rights per client and revocable any time. Hosts are reached by address (pinned
+TLS) or through an SSH tunnel (keys only).
 
 ## Host mode
 
@@ -94,6 +124,8 @@ broken requests. It runs on macOS and Linux against a release build:
 python3 tests/fulltest/fulltest.py --bin target/release/flelink --work /tmp/ft
 ```
 
+The unit and end-to-end tests run on Linux, macOS and Windows for every pull request.
+
 ## Layout
 
 | Path | What |
@@ -102,6 +134,8 @@ python3 tests/fulltest/fulltest.py --bin target/release/flelink --work /tmp/ft
 | `crates/flelink-api` | the `/api` the Studio talks to, and the `/v1` proxy |
 | `crates/flelink` | the program: CLI, terminal interface, `studio` |
 | `web/studio` | the Studio page (embedded into the binary) |
+| `web/plugins` | the built-in pages: Forge, Updates, Remote access |
+| `crates/flelink-core/recipes` | built-in recipes that need more than the catalog (a draft model, engine flags) |
 | `app/` | the desktop app (Tauri 2) |
 | `site/` | flelink.run |
 | `tests/fulltest` | the fault test suite |
@@ -119,8 +153,8 @@ Without the two source folders the comparison tests skip themselves. See [CONTRI
 
 ## Roadmap
 
-Plugins (recipes and engine adapters as files) ·
-quantization for your machine · LoRA training. Until then, adapters load with `--arg=--lora`.
+More engine adapters (vLLM, ik_llama.cpp) · faster long-prompt reading with FLE · LoRA training. Until then, adapters load
+with `--arg=--lora`.
 
 ## Licence
 
