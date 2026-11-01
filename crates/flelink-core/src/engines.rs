@@ -104,26 +104,24 @@ fn release(repo: &str, tag: Option<&str>) -> Result<Release> {
     Ok(r.json()?)
 }
 
+/// The engine archive of a variant for this platform (crate::assets), the newest CUDA build when there are several.
 fn pick<'a>(assets: &'a [Asset], v: &Variant, os: &str, arch: &str) -> Option<&'a Asset> {
-    let want: Vec<&str> = match (v.backend, os, arch) {
-        ("metal", "macos", "arm64") => vec!["macos-arm64"],
-        ("cpu", "macos", "x64") => vec!["macos-x64"],
-        ("cuda", "linux", _) => vec!["ubuntu", "cuda"],
-        ("cuda", "windows", _) => vec!["win", "cuda"],
-        ("vulkan", "linux", _) => vec!["ubuntu", "vulkan"],
-        ("vulkan", "windows", _) => vec!["win", "vulkan"],
-        ("cpu", "linux", _) => vec!["ubuntu-x64"],
-        ("cpu", "windows", _) => vec!["win-cpu"],
-        _ => return None,
-    };
+    let pattern = crate::assets::asset_patterns(v.id, os, arch)
+        .ok()?
+        .remove(0);
     assets
         .iter()
-        .filter(|a| {
-            (a.name.ends_with(".tar.gz") || a.name.ends_with(".zip"))
-                && want.iter().all(|w| a.name.contains(w))
+        .filter_map(|a| {
+            let cuda = pattern.matches(&a.name)?;
+            let key: Vec<u64> = cuda
+                .unwrap_or_default()
+                .split('.')
+                .map(|x| x.parse().unwrap_or(0))
+                .collect();
+            Some((key, a))
         })
-        .filter(|a| !a.name.contains("cudart"))
-        .max_by_key(|a| a.name.clone())
+        .max_by(|x, y| x.0.cmp(&y.0).then_with(|| x.1.name.cmp(&y.1.name)))
+        .map(|(_, a)| a)
 }
 
 /// The numbers of the version at the end of a folder name (`fle-cuda-v1.2.0` -> [1, 2, 0], `upstream-metal-b11540` ->

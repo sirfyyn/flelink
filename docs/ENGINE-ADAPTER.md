@@ -60,7 +60,10 @@ capabilities, health path, release (repo, default tag, whether it updates itself
 mark a loading phase, which errors get which hint; the Studio's engine supervisor asks the running engine's adapter). Core and Studio ask it which
 engines FLE Link installs, where from and whether the FLE rules apply, instead of comparing ids.
 
-Still outside: `engines.rs` in both crates (asset patterns per variant), `launch.rs` in both crates (plan to command:
+`crates/flelink-core/src/assets.rs` says which archive of a release is the engine for a variant and platform (name
+templates, CUDA version read from the name); the terminal's install and the Studio's both choose with it.
+
+Still outside: `launch.rs` in both crates (plan to command:
 two ports of two Python specifications, each held by its own comparison tests) and the FLE expert cache and draft acceptance lines that
 `flelink-api/src/engine.rs` reads. They move behind the trait one at a time, with the comparison tests green.
 
