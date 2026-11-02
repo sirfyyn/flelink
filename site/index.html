@@ -117,11 +117,11 @@
           <h3>DeepSeek-V4.1-Flash-1017</h3>
           <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO IQ2_XXS by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 232 GiB</p>
         </header>
-        <div class="big-num">23.2 <span>tok/s through FLE Link, with DSpark</span></div>
+        <div class="big-num">29.3 <span>tok/s through FLE Link, hot experts in RAM</span></div>
         <ul class="flag-list">
-          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 15 GB expert cache, the rest read from NVMe; decode after a warm-up, no CPU pinning, two rounds of three prompts (22.9 and 23.6), 72–89 % of the drafts accepted (1 Nov 2026)</li>
-          <li><b>One command</b> <code>flelink run deepseek-v41-ista-dspark</code> installs FLE engine v1.2.1 and our <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">5.2 GB draft model</a>, and uses copies of the model already on your disk</li>
-          <li><b>Without the draft model</b> 23.3–23.5 tok/s in two runs on FLE engine v1.2.0 (18 GB expert cache, RAM capped at 102 GB, 16k context)</li>
+          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 22 GB expert cache on the card, 60 GB of hot experts locked in RAM, the rest read from NVMe; decode after a warm-up, no CPU pinning, two rounds of three tasks the expert profile has not seen (29.2 and 29.3), FLE engine v1.2.2 (2 Nov 2026)</li>
+          <li><b>One command</b> <code>flelink run deepseek-v41-ista</code> installs the FLE engine, profiles the experts on the first run and uses copies of the model already on your disk</li>
+          <li><b>With the DSpark draft model</b> <code>deepseek-v41-ista-dspark</code>: 23.2 tok/s (1 Nov, an earlier engine and cache setting)</li>
           <li><b>Today</b> it also runs through FLE Link on llama.cpp b11870 or newer</li>
         </ul>
       </article>

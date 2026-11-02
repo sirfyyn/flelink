@@ -1,6 +1,6 @@
 id = "deepseek-v41-ista"
 title = "DeepSeek-V4.1-Flash ISTA IQ2_XXS (FLE, hot experts in RAM)"
-note = "ISTA's GSQ-RCO quant with FLE's host-side expert settings: a 22 GB GPU expert cache, the hot experts locked in RAM (memory minus 60 GiB, at most 75) after a profile from the first run, and large batches. Needs the FLE engine after v1.2.1 and permission to lock memory (FLE Link says so in the engine log when the system does not allow it). The expert cache bias (0.05) changes the output slightly (KL divergence 0.014 against the exact run); set FLE_MOE_CACHE_BIAS and FLE_MOE_HOT_BIAS to 0 for the exact output. No draft model: with this cache it does not help any more. About 255 GB on a fast NVMe."
+note = "29.3 tok/s through FLE Link on one 32 GB GPU with 120 GB RAM (RTX PRO 4500, FLE engine v1.2.2, two rounds of three tasks the expert profile has not seen, 29.2 and 29.3, after a warm-up; 2 Nov 2026). ISTA's GSQ-RCO quant with FLE's host-side expert settings: a 22 GB GPU expert cache, the hot experts locked in RAM (memory minus 60 GiB, at most 75) after a profile from the first run, and large batches. Needs the FLE engine after v1.2.1 and permission to lock memory (FLE Link says so in the engine log when the system does not allow it). The expert cache bias (0.05) changes the output slightly (KL divergence 0.014 against the exact run); set FLE_MOE_CACHE_BIAS and FLE_MOE_HOT_BIAS to 0 for the exact output. No draft model: with this cache it does not help any more. One request at a time (-np 1): FLE v1.2.2 aborts when two share the q8_0 cache; more come after the next engine release. About 255 GB on a fast NVMe."
 
 [model]
 repo = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"
@@ -32,8 +32,10 @@ strict = true
 [run]
 context = 16384
 # -t: physical cores only (SMT threads made it much slower)
+# -np 1: one slot. FLE v1.2.2 aborts (ggml_cuda_cpy q8_0 to q8_0) when two requests share the q8_0 KV cache at once, for
+# example the agent and the chat; with one slot the second request waits instead. The next engine release fixes it.
 args = [
-  "--jinja", "-ngl", "99", "-cmoe", "-t", "{physical_cores}", "-ctk", "q8_0", "-ctv", "q8_0",
+  "--jinja", "-ngl", "99", "-cmoe", "-t", "{physical_cores}", "-ctk", "q8_0", "-ctv", "q8_0", "-np", "1",
   "-fit", "on", "--fit-target", "1115", "--moe-expert-cache-inserts", "1", "-b", "4096", "-ub", "4096",
 ]
 

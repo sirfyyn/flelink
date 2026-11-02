@@ -839,7 +839,8 @@ export function mount(main) {
   let connectSeq = 0;
   async function renderConnect() {
     const seq = ++connectSeq;
-    const up = store.engine?.state === "ready";
+    // a model the Studio started, or a server it is attached to (flelink studio --attach, the Engine page)
+    const up = store.engine?.state === "ready" || store.engine?.state === "attached";
     let model = "";
     if (up) {
       try { model = (await fetch("/v1/models").then((r) => r.json())).data?.[0]?.id || ""; } catch { /* the card still shows the address */ }

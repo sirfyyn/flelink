@@ -34,7 +34,7 @@ webhooks, your messages), and FLE Link starts it with your model on the Agent pa
 | **66 s** | from nothing to the first answer on Linux with an NVIDIA card |
 | **92 s** | the same on an 8 GB M2 MacBook, model download included |
 | **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp |
-| **23.2 tok/s** | DeepSeek-V4.1-Flash (232 GiB) on the same 32 GB GPU, with FLE's DSpark draft model |
+| **29.3 tok/s** | DeepSeek-V4.1-Flash (232 GiB) on the same 32 GB GPU, hot experts locked in RAM (`flelink run deepseek-v41-ista`) |
 
 ## Install
 
@@ -77,7 +77,7 @@ Toolkit on the host; not tested yet). Built and smoke-tested with every release 
 | Model | Size | Measured | Notes |
 |---|---|---|---|
 | [Qwen3.8-Flash-Next · FLE](https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF) | 125B MoE, 88.9 GB | decode **91 tok/s** (Strata 74, llama.cpp 36) | one 32 GB RTX PRO 4500, 120 GB RAM, same machine for all three (6 Oct 2026); smaller than Unsloth IQ4_XS at the same KL divergence |
-| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) + [DSpark draft](https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF) | 763B MoE, IQ2_XXS 232 GiB + 5.2 GB draft | decode **23.2 tok/s** (two rounds of three prompts: 22.9 and 23.6), 72–89 % of the drafts accepted | `flelink run deepseek-v41-ista-dspark`; one 32 GB RTX PRO 4500, 120 GB RAM, 15 GB expert cache, after a warm-up, no CPU pinning, rest from NVMe (1 Nov 2026); FLE engine v1.2.1 |
+| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, IQ2_XXS 232 GiB | decode **29.3 tok/s** (two rounds of three tasks the expert profile has not seen: 29.2 and 29.3) | `flelink run deepseek-v41-ista`; one 32 GB RTX PRO 4500, 120 GB RAM, 22 GB expert cache, 60 GB hot experts locked in RAM, after a warm-up, no CPU pinning, rest from NVMe (2 Nov 2026); FLE engine v1.2.2. With the [DSpark draft](https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF) (`deepseek-v41-ista-dspark`): 23.2 tok/s on 1 Nov with an earlier setting |
 
 Small models such as Llama 3.2 1B run on any laptop and are in the built-in catalog (`flelink models`). Any other GGUF on
 Hugging Face can be searched, checked for fit and downloaded from the Studio's Models page.
