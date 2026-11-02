@@ -1,3 +1,4 @@
+mod mcp;
 mod tui;
 
 use anyhow::Result;
@@ -65,9 +66,15 @@ enum Cmd {
     },
     /// Load a model (a recipe id, a .toml recipe or an https:// URL to one) and serve it (OpenAI-compatible API) until Ctrl+C
     Run { model: String },
+    /// An MCP server on stdin/stdout: lets a coding agent list, download, load and stop models, read the log and change settings
+    Mcp {
+        /// the data folder of the Studio to drive (default: per-user app data)
+        #[arg(long, value_name = "DIR")]
+        home: Option<std::path::PathBuf>,
+    },
     /// Set up Claude Code, Codex, OpenCode, pi or any other app for the model FLE Link serves (OpenAI and Anthropic API)
     Connect {
-        /// one of claude, codex, opencode, pi, api; all when left out
+        /// one of claude, codex, opencode, pi, api, mcp; all when left out
         tool: Option<String>,
         /// the address to use instead of the one found running (e.g. http://192.168.1.20:8642)
         #[arg(long)]
@@ -814,6 +821,10 @@ fn run() -> Result<()> {
                 }
             }
             std::process::exit(if ok { 0 } else { 1 });
+        }
+        Some(Cmd::Mcp { home }) => {
+            let explicit = home.is_some();
+            mcp::serve(home.unwrap_or_else(flelink_api::run::data_dir), explicit)
         }
         Some(Cmd::Connect { tool, url, model }) => {
             // an address given: ask that one for its model; otherwise look on this machine

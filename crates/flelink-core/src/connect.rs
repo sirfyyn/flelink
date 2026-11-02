@@ -76,12 +76,35 @@ pub fn snippets(base: &str, model: &str) -> Vec<Snippet> {
                  Model: {model}\nAPI key: none needed (any text where an app insists)"
             ),
         },
+        Snippet {
+            id: "mcp",
+            title: "Let the agent drive FLE Link (MCP)",
+            place: "shell",
+            text: "# Claude Code\nclaude mcp add flelink -- flelink mcp\n\n# Codex CLI: in ~/.codex/config.toml\n\
+                   [mcp_servers.flelink]\ncommand = \"flelink\"\nargs = [\"mcp\"]\n\n\
+                   # OpenCode: in opencode.json\n\"mcp\": { \"flelink\": { \"type\": \"local\", \"command\": [\"flelink\", \"mcp\"] } }"
+                .into(),
+        },
     ]
 }
 
 /// What is serving on this machine: the Studio (port 8642 and the next ones) with a loaded model, else an engine that
 /// `flelink run` started (port 8080 and the next ones). The base address and the model id the API reports.
 pub fn find_running() -> Option<(String, String)> {
+    // the Studio or the desktop app says where it is (also when 8642 was taken and it chose another port)
+    let said = std::fs::read_to_string(crate::data_dir().join("studio.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| {
+            v["url"]
+                .as_str()
+                .map(|u| u.trim_end_matches('/').to_string())
+        });
+    if let Some(base) = said {
+        if let Some(m) = model_at(&base) {
+            return Some((base, m));
+        }
+    }
     for port in (8642..8646).chain(8080..8090) {
         let base = format!("http://127.0.0.1:{port}");
         if let Some(m) = model_at(&base) {
