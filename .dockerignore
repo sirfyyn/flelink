@@ -1,0 +1,6 @@
+target
+app
+site
+tests/fulltest
+**/.DS_Store
+.git
