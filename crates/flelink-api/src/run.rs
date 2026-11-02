@@ -376,14 +376,23 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
             }
         };
         rt.block_on(async {
-            let listener =
-                match tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).await {
-                    Ok(l) => l,
-                    Err(e) => {
-                        let _ = ready_tx.send(Err(format!("no port for the web server: {e}")));
-                        return;
+            // 8642 first, like `flelink studio`: coding agents set up with `flelink connect` keep one address across
+            // restarts of the app; a free port only when another FLE Link holds it
+            let bound =
+                match tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 8642))).await
+                {
+                    Ok(l) => Ok(l),
+                    Err(_) => {
+                        tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).await
                     }
                 };
+            let listener = match bound {
+                Ok(l) => l,
+                Err(e) => {
+                    let _ = ready_tx.send(Err(format!("no port for the web server: {e}")));
+                    return;
+                }
+            };
             let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
             let _ = ready_tx.send(Ok(port));
             let _ = serve_listener(st.clone(), listener, async {

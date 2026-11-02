@@ -8,6 +8,7 @@ pub mod bench;
 pub mod catalog;
 pub mod chat;
 pub mod config;
+pub mod connect;
 pub mod doctor;
 pub mod download;
 pub mod engines;

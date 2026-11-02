@@ -65,6 +65,17 @@ enum Cmd {
     },
     /// Load a model (a recipe id, a .toml recipe or an https:// URL to one) and serve it (OpenAI-compatible API) until Ctrl+C
     Run { model: String },
+    /// Set up Claude Code, Codex, OpenCode, pi or any other app for the model FLE Link serves (OpenAI and Anthropic API)
+    Connect {
+        /// one of claude, codex, opencode, pi, api; all when left out
+        tool: Option<String>,
+        /// the address to use instead of the one found running (e.g. http://192.168.1.20:8642)
+        #[arg(long)]
+        url: Option<String>,
+        /// the model name to use instead of the one the server reports
+        #[arg(long)]
+        model: Option<String>,
+    },
     /// Read a model's header: architecture, parts, expert bytes, KV cache (no weights are loaded)
     Inspect {
         /// model file, first shard, or the folder that contains the shards
@@ -274,7 +285,7 @@ fn print_event(e: &Event) {
             command,
         } => {
             eprintln!(
-                "\n\n{} {model} on {engine}\n  API: {}   (OpenAI-compatible, no key needed)\n  Command (shown, never needed):\n    {}",
+                "\n\n{} {model} on {engine}\n  API: {}   (OpenAI- and Anthropic-compatible, no key needed; `flelink connect` sets up your tools)\n  Command (shown, never needed):\n    {}",
                 paint("1;32", "Ready:"),
                 paint("1", &format!("{base}/v1")),
                 paint("2", command)
@@ -803,6 +814,51 @@ fn run() -> Result<()> {
                 }
             }
             std::process::exit(if ok { 0 } else { 1 });
+        }
+        Some(Cmd::Connect { tool, url, model }) => {
+            // an address given: ask that one for its model; otherwise look on this machine
+            let found = match &url {
+                Some(u) => flelink_core::connect::model_at(u).map(|m| (u.clone(), m)),
+                None => flelink_core::connect::find_running(),
+            };
+            let base = url
+                .or_else(|| found.as_ref().map(|f| f.0.clone()))
+                .unwrap_or_else(|| "http://127.0.0.1:8642".into());
+            let name = model
+                .or_else(|| found.as_ref().map(|f| f.1.clone()))
+                .unwrap_or_else(|| "local".into());
+            if found.is_none() {
+                eprintln!(
+                    "{}",
+                    paint(
+                        "33",
+                        "No model is serving there yet: start one (`flelink run <recipe>` or the app), then run this again for the exact model name."
+                    )
+                );
+            } else {
+                eprintln!("{} {base}  (model {name})", paint("1;32", "Found:"));
+            }
+            let all = flelink_core::connect::snippets(&base, &name);
+            let pick: Vec<_> = all
+                .iter()
+                .filter(|s| tool.as_deref().is_none_or(|t| t == s.id))
+                .collect();
+            if pick.is_empty() {
+                let ids: Vec<_> = all.iter().map(|s| s.id).collect();
+                anyhow::bail!("no such tool; one of: {}", ids.join(", "));
+            }
+            for s in pick {
+                let place = if s.place == "shell" {
+                    "run in the terminal".to_string()
+                } else {
+                    format!("in {}", s.place)
+                };
+                println!("\n{}  {}", paint("1;36", s.title), paint("2", &place));
+                for l in s.text.lines() {
+                    println!("  {l}");
+                }
+            }
+            Ok(())
         }
         Some(Cmd::Run { model }) => {
             let mut srv = flow::ensure_and_start(&home, &model, &mut |e| print_event(&e))?;
