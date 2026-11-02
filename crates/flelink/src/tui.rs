@@ -330,7 +330,7 @@ impl App {
             Screen::Models => "up/down: choose   Enter: load   Esc: back   q: quit",
             Screen::Loading => "q: quit (stops the engine)",
             Screen::Chat => {
-                "Enter: send   Ctrl+O: show the start command   Esc: clear   Ctrl+C: quit"
+                "Enter: send   Ctrl+O: API, agents and start command   Esc: clear   Ctrl+C: quit"
             }
         };
         f.render_widget(
@@ -510,10 +510,15 @@ impl App {
         ))];
         if self.show_cmd {
             if let Some(r) = r {
-                sl.push(Line::from(Span::styled(
-                    format!(" API {}/v1 \n {}", r.base, r.command),
-                    Style::new().fg(Color::DarkGray),
-                )));
+                // one Line each: a "\n" inside a Span is not a line break in ratatui
+                let dim = Style::new().fg(Color::DarkGray);
+                sl.push(Line::from(vec![
+                    Span::styled(format!(" API {}/v1", r.base), dim),
+                    Span::styled("  (OpenAI and Anthropic; ", dim),
+                    Span::styled("flelink connect", Style::new().fg(CYAN)),
+                    Span::styled(" sets up Claude Code, Codex, OpenCode, pi)", dim),
+                ]));
+                sl.push(Line::from(Span::styled(format!(" {}", r.command), dim)));
             }
         }
         f.render_widget(
