@@ -1,6 +1,6 @@
 // FLE Link web app: shared state, the polling loop, the router and the sidebar.
 
-import { del, get } from "./api.js";
+import { del, get, post } from "./api.js";
 import { initChatSearch, searchActive } from "./chat-search.js";
 import { clear, confirmDialog, fmt, h, icon, stateBadge, toast } from "./ui.js";
 
@@ -38,6 +38,34 @@ export async function refreshState() {
   emit("state");
   emit("downloads");
   return st;
+}
+
+// A first start on a fresh machine: the server answers that no engine is installed. Then the engine that fits this
+// machine best (the first variant) is installed, the logo works while it downloads, and the start runs again.
+const NO_ENGINE = "Install an engine first";
+let installingEngine = false; // the tick below keeps the working logo on meanwhile
+export async function withEngine(startFn) {
+  try { return await startFn(); } catch (e) {
+    if (e.status !== 409 || !String(e.message).startsWith(NO_ENGINE)) throw e;
+  }
+  const st = await refreshState();
+  const v = st.engines?.variants?.[0];
+  if (!v) throw new Error("No prebuilt engine fits this machine; point to your own llama-server on the Engine page");
+  toast(`Installing ${v.label} first, the engine for this machine`, "info", 6000);
+  installingEngine = true;
+  document.body.classList.add("engine-busy");
+  try {
+    await post("/api/engines/install", { variant: v.id });
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const r = await get("/api/downloads");
+      const job = r.downloads.find((d) => d.kind === "engine" && d.meta?.variant === v.id);
+      if (!job || job.state === "done") break;
+      if (["failed", "cancelled"].includes(job.state)) throw new Error(job.error || `Installing ${v.label} stopped`);
+    }
+    await refreshState();
+  } finally { installingEngine = false; document.body.classList.remove("engine-busy"); }
+  return startFn();
 }
 
 export async function refreshChats() {
@@ -91,6 +119,7 @@ export const engineModelName = () => store.engine?.model?.name || store.engine?.
 
 let lastLive = 0;
 let lastEngineKey = "";
+let lastDlKey = "";
 const ACTIVE_DL = new Set(["queued", "downloading", "verifying", "installing"]);
 
 async function tick() {
@@ -103,7 +132,7 @@ async function tick() {
     const stateChanged = eng.state !== store.engine?.state;
     const logMoved = eng.log_seq !== store.engine?.log_seq;
     store.engine = eng;
-    document.body.classList.toggle("engine-busy", eng.state === "starting");
+    document.body.classList.toggle("engine-busy", eng.state === "starting" || installingEngine);
     if (key !== lastEngineKey) { lastEngineKey = key; emit("engine"); }
     if (logMoved) emit("enginelog");
     if (stateChanged) renderEngineCard();
@@ -124,7 +153,9 @@ async function tick() {
       const before = new Map(store.downloads.map((d) => [d.id, d.state]));
       const r = await get("/api/downloads");
       store.downloads = r.downloads;
-      emit("downloads");
+      // the poll runs every second on /models and /engine; the pages draw again only when a download moved
+      const dlKey = JSON.stringify(r.downloads);
+      if (dlKey !== lastDlKey) { lastDlKey = dlKey; emit("downloads"); }
       renderNav();
       const finished = r.downloads.some((d) => (d.state === "done" || d.state === "failed") && before.get(d.id) && before.get(d.id) !== d.state);
       if (finished) refreshState().catch(() => {});

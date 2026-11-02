@@ -2,7 +2,7 @@
 // engines, connecting to a server that already runs, and the live log.
 
 import { get, post } from "./api.js";
-import { emit, on, refreshState, store, topbar } from "./app.js";
+import { emit, on, refreshState, store, topbar, withEngine } from "./app.js";
 import { explainBlock, flagTitle, loadFlagTable } from "./flags.js";
 import { loadStyle, mountBest } from "./tuner.js";
 import { clear, confirmDialog, copyButton, copyText, debounce, fmt, h, icon, stateBadge, toast } from "./ui.js";
@@ -297,7 +297,7 @@ export function mount(main) {
 
   async function start() {
     try {
-      store.engine = await post("/api/engine/start", { model: sel.model, profile: sel.profile });
+      store.engine = await withEngine(() => post("/api/engine/start", { model: sel.model, profile: sel.profile }));
       emit("engine");
       renderStatus();
     } catch (e) {

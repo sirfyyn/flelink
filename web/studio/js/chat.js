@@ -2,7 +2,7 @@
 // and the live panel with the engine's numbers.
 
 import { get, hostUrl, post, put, streamChat, upload } from "./api.js";
-import { emit, engineModelName, engineUp, modelMenuProviders, navigate, on, refreshChats, store, topbar } from "./app.js";
+import { emit, engineModelName, engineUp, modelMenuProviders, navigate, on, refreshChats, store, topbar, withEngine } from "./app.js";
 import { attachmentsEl, createAttach } from "./attach.js";
 import { attachmentBlock, buildRequest, estimateRequest, estimateTokens, usedImages } from "./chat-request.js";
 import { addChild, ensureTree, indexOf, newId, pathOf, removeBranch, siblingsOf, switchTo } from "./chat-tree.js";
@@ -983,7 +983,7 @@ export function mount(main, chatId) {
 
   async function loadModel(id) {
     try {
-      const st = await post("/api/engine/start", { model: id });
+      const st = await withEngine(() => post("/api/engine/start", { model: id }));
       store.engine = st;
       emit("engine");
       toast("Loading the model. This can take a few minutes for large files.");
