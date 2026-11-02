@@ -134,6 +134,9 @@ reproduces them elsewhere. Format and places: [docs/RECIPES.md](docs/RECIPES.md)
 - **Expert cache**: hit rate over time and per layer, read from the FLE engine's log.
 - **Forge**: build your own quant: hybrids from whole expert layers of other quants (exact choice for a size budget, memory
   preview), quantization with an importance matrix, expert pruning, KL-divergence check, a recipe file others can rebuild.
+- **Agent**: FLE Durable next to your model, an always-on local agent that works from events. You plan things on its
+  agenda (once, daily, on certain days, every few minutes), it plans its own follow-ups, any tool can hand it an event by
+  webhook; destructive steps wait for your approval. Needs Node 22.19+ and FLE Durable: [docs/AGENT.md](docs/AGENT.md).
 - **Tools**: MCP servers (stdio and Streamable HTTP, OAuth sign-in, MCP Apps) as chat tools, asked before each call unless trusted.
 - **Updates** in one click, checked against the release's SHA-256.
 
@@ -173,7 +176,7 @@ The unit and end-to-end tests run on Linux, macOS and Windows for every pull req
 | `crates/flelink-api` | the `/api` the Studio talks to, and the `/v1` proxy |
 | `crates/flelink` | the program: CLI, terminal interface, `studio`, the MCP server (`mcp.rs`) |
 | `web/studio` | the Studio page (embedded into the binary) |
-| `web/plugins` | the built-in pages: Forge, Updates, Remote access |
+| `web/plugins` | the built-in pages: Agent, Forge, Updates, Remote access |
 | `crates/flelink-core/recipes` | built-in recipes that need more than the catalog (a draft model, engine flags) |
 | `app/` | the desktop app (Tauri 2) |
 | `site/` | flelink.run |
