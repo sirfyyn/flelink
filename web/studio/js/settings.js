@@ -50,12 +50,33 @@ export function mount(main) {
   // The token is never shown again; leaving the field empty keeps the saved one.
   function mcpHub() {
     const box = h("div", { class: "stack" }, h("span", { class: "small faint" }, "…"));
+    // whether the hub answers, from the tool list (the hub is the MCP server "hub")
+    const live = h("div", { class: "callout" }, icon("info", "sm"), h("div", { class: "small" }, "Checking the hub …"));
+    const check = async (url) => {
+      try {
+        const t = await get("/api/tools");
+        const sv = (t.servers || []).find((x) => x.name === "hub");
+        if (!sv) { // the chat's tools are off: the hub is not connected at all
+          live.className = "callout warn";
+          clear(live, icon("alert", "sm"), h("div", { class: "small" }, "Saved, but the chat's tools are off: turn them on under Tools to use the hub."));
+          return;
+        }
+        const ok = sv?.status === "ready";
+        live.className = `callout ${ok ? "good" : sv?.status === "error" ? "bad" : ""}`;
+        clear(live, icon(ok ? "ok" : sv?.status === "error" ? "alert" : "info", "sm"), h("div", { class: "small" },
+          ok ? `Connected to ${url}: ${sv.tools} meta tools stand for all of the hub's plugins.`
+            : sv?.status === "error" ? `The hub does not answer: ${sv.error || "no reason given"}`
+            : `Connecting to ${url} …`));
+        if (!ok && sv?.status !== "error") setTimeout(() => check(url), 1500);
+      } catch { /* the tool list is not reachable: leave the note */ }
+    };
     const draw = (st) => {
+      if (st.connected) check(st.url);
       const url = h("input", { class: "input mono", value: st.url || "", placeholder: "http://127.0.0.1:8090/mcp" });
       const tok = h("input", { class: "input mono", type: "password", autocomplete: "off",
         placeholder: st.token ? `A token is saved (${st.hint})` : "Access token (if the hub asks for one)" });
       clear(box,
-        st.connected ? h("div", { class: "callout good" }, icon("ok", "sm"), h("div", { class: "small" }, `Chat and agent use the hub at ${st.url}.`)) : null,
+        st.connected ? live : null,
         h("label", { class: "field" }, h("span", null, "Hub address"), url),
         h("label", { class: "field" }, h("span", null, "Access token"), tok),
         h("div", { class: "row" },
