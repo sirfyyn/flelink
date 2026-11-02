@@ -816,3 +816,6 @@ svg.i.flip { transform: scaleX(-1); }
 .preview-frame .head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; font-size: 12px; color: var(--muted);
   border-bottom: 1px solid var(--line); }
 .preview-frame iframe { display: block; width: 100%; height: min(60vh, 520px); border: 0; background: #fff; resize: vertical; }
+
+/* recent requests on the Engine page */
+table.t tr.bad td { color: var(--bad); }

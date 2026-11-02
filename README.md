@@ -103,6 +103,13 @@ server (`POST /api/preview`, served like an MCP app at `/app-frame/<id>`), with 
 Studio or its API, scripts and styles only from the common CDNs, and no network requests of its own. "Open in a tab" shows it
 full size.
 
+## Recent requests
+
+The Engine page lists the last answers through FLE Link from any program, the chat in the Studio as well as Claude Code,
+Codex or an app: who asked (from the User-Agent), which API (OpenAI, Anthropic, Responses), prompt and output tokens, speed
+and duration (`GET /api/live/requests`, the MCP tool `requests`). The OpenAI format brings the engine's own timings; for
+the other two the speed is the output over the wall clock, marked with ~.
+
 ## Let a coding agent drive it (MCP)
 
 `flelink mcp` is an MCP server on stdin/stdout. An agent sees what fits the machine, downloads and loads a model (installing
@@ -116,7 +123,7 @@ claude mcp add flelink -- flelink mcp          # Claude Code
 
 Codex (`~/.codex/config.toml`): `[mcp_servers.flelink]` with `command = "flelink"` and `args = ["mcp"]`. OpenCode:
 `"mcp": {"flelink": {"type": "local", "command": ["flelink", "mcp"]}}`. Tools: `status`, `system`, `recipes`,
-`library`, `download`, `downloads`, `load`, `stop`, `log`, `settings`, `connect`, `ask`.
+`library`, `download`, `downloads`, `load`, `stop`, `requests`, `log`, `settings`, `connect`, `ask`.
 
 ## Recipes
 

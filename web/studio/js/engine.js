@@ -5,7 +5,7 @@ import { get, post } from "./api.js";
 import { emit, on, refreshState, store, topbar, withEngine } from "./app.js";
 import { explainBlock, flagTitle, loadFlagTable } from "./flags.js";
 import { loadStyle, mountBest } from "./tuner.js";
-import { clear, confirmDialog, copyButton, copyText, debounce, fmt, h, icon, stateBadge, toast } from "./ui.js";
+import { clear, confirmDialog, copyButton, copyText, debounce, fmt, h, icon, patch, stateBadge, toast } from "./ui.js";
 
 const PLACEHOLDERS = [
   ["{engine}", "The llama-server of the engine picked for this profile"],
@@ -50,6 +50,7 @@ export function mount(main) {
   const boxes = {
     status: h("div", { class: "card pad-lg" }),
     connect: h("div", { class: "card" }),
+    requests: h("div", { class: "card" }),
     best: h("div", { class: "card" }),
     launch: h("div", { class: "card" }),
     preview: h("div", { class: "card sticky-side" }),
@@ -64,6 +65,7 @@ export function mount(main) {
         + "a profile keeps a command of your own, placeholders and all.")), modeSwitch),
     boxes.status,
     boxes.connect,
+    boxes.requests,
     boxes.best,
     h("div", { class: "grid two" }, boxes.launch, boxes.preview),
     boxes.profiles,
@@ -864,11 +866,44 @@ export function mount(main) {
         h("span", { class: "small faint" }, "The same from a terminal: ", h("code", null, `flelink connect ${t.id}`))));
   }
 
+  // ------------------------------------------------------------------------------------------- requests
+
+  // The last answers through FLE Link, whoever asked: the chat here, Claude Code, Codex, any app. Tokens and speed come
+  // from the engine; for the Anthropic and Responses formats the speed is the output over the wall clock (marked ~).
+  let reqBusy = false;
+  async function renderRequests() {
+    if (reqBusy) return;
+    reqBusy = true;
+    let list = [];
+    try { list = (await get("/api/live/requests")).requests || []; } catch { boxes.requests.hidden = true; reqBusy = false; return; }
+    reqBusy = false;
+    boxes.requests.hidden = !list.length;
+    if (!list.length) return;
+    const API = { openai: "OpenAI", anthropic: "Anthropic", responses: "Responses" };
+    const ago = (t) => { const s = Math.max(0, Date.now() / 1000 - t); return s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`; };
+    const num = (v) => fmt.int(v);
+    patch(boxes.requests,
+      h("div", { class: "card-head" }, icon("live"), h("div", { class: "grow" }, h("h3", null, "Recent requests"),
+        h("p", null, "Every answer through FLE Link, from this page or any tool: who asked, which API, tokens and speed."))),
+      h("div", { class: "table-wrap" }, h("table", { class: "t req-table" },
+        h("thead", null, h("tr", null, [["When"], ["From"], ["API"], ["Prompt", "r"], ["Output", "r"], ["tok/s", "r"], ["Time", "r"]].map(([c, k]) => h("th", { class: k || "" }, c)))),
+        h("tbody", null, list.slice(0, 12).map((r) => h("tr", { class: r.status && r.status >= 400 ? "bad" : "" },
+          h("td", { class: "muted" }, ago(r.t)),
+          h("td", null, r.client || "–"),
+          h("td", null, API[r.api] || "OpenAI"),
+          h("td", { class: "r" }, num(r.prompt_n)),
+          h("td", { class: "r" }, num(r.predicted_n)),
+          h("td", { class: "r" }, r.predicted_per_second ? `${r.estimated ? "~" : ""}${r.predicted_per_second.toFixed(1)}` : "–"),
+          h("td", { class: "r muted" }, r.seconds ? fmt.dur(r.seconds) : r.predicted_ms ? fmt.dur((r.prompt_ms + r.predicted_ms) / 1000) : "–"))))))
+    );
+  }
+
   // ------------------------------------------------------------------------------------------- wiring
 
   function renderAll() {
     syncSelection();
     renderConnect();
+    renderRequests();
     applyMode();
     renderStatus();
     renderLaunch();
@@ -881,6 +916,10 @@ export function mount(main) {
   let lastState = store.engine?.state;
   unsub.push(on("state", renderAll));
   let lastUnit = store.engine?.service?.unit;
+  // every third live tick (about 3 s): answers of the Anthropic format carry no engine timings to watch for; patch()
+  // leaves the table alone when nothing changed
+  let reqTick = 0;
+  unsub.push(on("live", () => { if (reqTick++ % 3 === 0) renderRequests(); }));
   unsub.push(on("enginelog", () => { if (store.engine?.log_seq !== logSeq) fetchLog(); }));
   unsub.push(on("engine", () => {
     renderStatus();

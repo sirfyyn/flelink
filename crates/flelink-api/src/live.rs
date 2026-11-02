@@ -165,6 +165,18 @@ impl Live {
 
     /// Called by the chat proxy with the `timings` of every finished answer.
     pub fn record_response(&self, timings: &Value, usage: Option<&Value>) {
+        self.record_request(timings, usage, Map::new());
+    }
+
+    /// The same with what the proxy knows about the request: which API (`api`), which program sent it (`client`), how
+    /// long it took (`seconds`). Answers without engine timings (the Anthropic and Responses formats) count their tokens
+    /// from `usage`, and their speed is estimated from the wall clock (`estimated`).
+    pub fn record_request(
+        &self,
+        timings: &Value,
+        usage: Option<&Value>,
+        extra: Map<String, Value>,
+    ) {
         let mut e = Map::new();
         e.insert("t".into(), json!(now()));
         for k in [
@@ -182,7 +194,24 @@ impl Live {
         }
         if let Some(u) = usage.filter(|u| crate::settings::py_truthy(u)) {
             e.insert("usage".into(), u.clone());
+            let num = |k: &str| u.get(k).and_then(Value::as_f64);
+            if e["prompt_n"].is_null() {
+                if let Some(p) = num("input_tokens").or(num("prompt_tokens")) {
+                    e.insert("prompt_n".into(), json!(p));
+                }
+            }
+            if e["predicted_n"].is_null() {
+                if let Some(o) = num("output_tokens").or(num("completion_tokens")) {
+                    e.insert("predicted_n".into(), json!(o));
+                    let secs = extra.get("seconds").and_then(Value::as_f64).unwrap_or(0.0);
+                    if secs > 0.0 && o > 0.0 {
+                        e.insert("predicted_per_second".into(), json!(o / secs));
+                        e.insert("estimated".into(), json!(true));
+                    }
+                }
+            }
         }
+        e.extend(extra);
         let mut i = self.inner.lock().unwrap();
         i.responses.push_back(Value::Object(e));
         if i.responses.len() > 100 {
@@ -337,6 +366,12 @@ impl Live {
         }
     }
 
+    /// The last answers, newest first (the Engine page's list of requests).
+    pub fn requests(&self) -> Value {
+        let i = self.inner.lock().unwrap();
+        json!({"requests": i.responses.iter().rev().cloned().collect::<Vec<_>>()})
+    }
+
     pub fn snapshot(&self, since: f64) -> Value {
         self.touch();
         let i = self.inner.lock().unwrap();
@@ -349,7 +384,18 @@ impl Live {
         } else {
             i.history.iter().cloned().collect()
         };
-        json!({"now": now(), "history": hist, "metrics_available": i.metrics_available, "last_response": i.responses.back().cloned(),
+        json!({"now": now(), "history": hist, "metrics_available": i.metrics_available, "last_response": last_timed(&i.responses),
             "totals": i.totals, "cache": self.engine.cache_snapshot(), "accept_logged": self.engine.accept_logged()})
     }
+}
+
+/// The last answer with engine timings, in the shape the Python Studio reports (the request list keeps the rest).
+fn last_timed(r: &std::collections::VecDeque<Value>) -> Option<Value> {
+    let mut v = r.iter().rev().find(|x| !x["prompt_ms"].is_null())?.clone();
+    if let Some(m) = v.as_object_mut() {
+        for k in ["api", "client", "seconds", "status", "estimated"] {
+            m.remove(k);
+        }
+    }
+    Some(v)
 }
