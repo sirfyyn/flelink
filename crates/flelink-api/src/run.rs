@@ -204,6 +204,7 @@ pub fn run(o: RunOptions) -> i32 {
             println!("Host mode without TLS: the access key travels in the clear. Use it on a network you trust.");
         }
         println!("Data folder: {}", home.display());
+        announce(&home, &url, &st.token);
         println!("Press Ctrl+C to stop (this also stops a model FLE Link started).");
         let key = cfg("attach_key")
             .and_then(|v| v.as_str().map(String::from))
@@ -308,6 +309,7 @@ pub fn run(o: RunOptions) -> i32 {
         st.hosts.shutdown();
         Ok(())
     });
+    retire(&home);
     match result {
         Ok(()) => 0,
         Err(m) => {
@@ -362,6 +364,7 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
         version: STUDIO_VERSION.into(),
         github_api: github_api(),
     });
+    let home_a = home.clone();
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
     let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<u16, String>>();
     let thread = std::thread::spawn(move || {
@@ -395,6 +398,7 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
             };
             let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
             let _ = ready_tx.send(Ok(port));
+            announce(&home_a, &format!("http://127.0.0.1:{port}/"), &st.token);
             let _ = serve_listener(st.clone(), listener, async {
                 let _ = stop_rx.await;
             })
@@ -402,6 +406,7 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
             st.engine.shutdown();
             st.toolbox.mcp.close_all();
             st.hosts.shutdown();
+            retire(&home_a);
         });
     });
     match ready_rx.recv_timeout(Duration::from_secs(15)) {
@@ -414,5 +419,45 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
         }),
         Ok(Err(e)) => Err(e),
         Err(_) => Err("the web server did not start in time".into()),
+    }
+}
+
+/// Where a running Studio says where it is: `<data>/studio.json` with its address, the page token for changing requests,
+/// and the process. Only this user may read it (the token allows what the page allows). `flelink mcp` and
+/// `flelink connect` read it; a crashed Studio leaves a stale file, which readers recognise because the address no
+/// longer answers.
+pub fn announce(home: &std::path::Path, url: &str, token: &str) {
+    let path = home.join("studio.json");
+    let text =
+        serde_json::json!({"url": url, "token": token, "pid": std::process::id()}).to_string();
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let _ = std::fs::remove_file(&path);
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+        {
+            let _ = f.write_all(text.as_bytes());
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = std::fs::write(&path, text);
+    }
+}
+
+/// Removes `studio.json` when it is this process's.
+pub fn retire(home: &std::path::Path) {
+    let path = home.join("studio.json");
+    let ours = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .is_some_and(|v| v["pid"].as_u64() == Some(std::process::id() as u64));
+    if ours {
+        let _ = std::fs::remove_file(path);
     }
 }

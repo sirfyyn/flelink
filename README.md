@@ -96,6 +96,21 @@ For Claude Code it prints `ANTHROPIC_BASE_URL=http://127.0.0.1:8642` (the Studio
 with the model name; Codex gets a provider with `wire_api = "responses"`, OpenCode and pi an OpenAI-compatible provider. No
 key is checked on this machine.
 
+## Let a coding agent drive it (MCP)
+
+`flelink mcp` is an MCP server on stdin/stdout. An agent sees what fits the machine, downloads and loads a model (installing
+the engine first on a fresh machine), stops it, reads the engine log, changes settings, tests the model with one prompt and
+gets the `connect` setting. It works through the Studio's own API; when no Studio or app runs, it starts one in the
+background (the Studio and the app say where they are in `<data>/studio.json`, readable only by your user).
+
+```sh
+claude mcp add flelink -- flelink mcp          # Claude Code
+```
+
+Codex (`~/.codex/config.toml`): `[mcp_servers.flelink]` with `command = "flelink"` and `args = ["mcp"]`. OpenCode:
+`"mcp": {"flelink": {"type": "local", "command": ["flelink", "mcp"]}}`. Tools: `status`, `system`, `recipes`,
+`library`, `download`, `downloads`, `load`, `stop`, `log`, `settings`, `connect`, `ask`.
+
 ## Recipes
 
 A recipe is one TOML file: model, engine, start values, chat defaults, and optionally a draft model for speculative decoding.
@@ -149,7 +164,7 @@ The unit and end-to-end tests run on Linux, macOS and Windows for every pull req
 |---|---|
 | `crates/flelink-core` | machine inspection, GGUF reading, launch plan, engine install, downloads, supervisor, orphaned-engine cleanup, the settings for coding agents (`connect.rs`) |
 | `crates/flelink-api` | the `/api` the Studio talks to, and the `/v1` proxy |
-| `crates/flelink` | the program: CLI, terminal interface, `studio` |
+| `crates/flelink` | the program: CLI, terminal interface, `studio`, the MCP server (`mcp.rs`) |
 | `web/studio` | the Studio page (embedded into the binary) |
 | `web/plugins` | the built-in pages: Forge, Updates, Remote access |
 | `crates/flelink-core/recipes` | built-in recipes that need more than the catalog (a draft model, engine flags) |
