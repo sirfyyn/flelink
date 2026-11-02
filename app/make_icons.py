@@ -28,4 +28,21 @@ for n in (16, 32, 128, 256, 512):
     sized(mac, n * 2).save(iconset / f"icon_{n}x{n}@2x.png")
 subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(out / "icon.icns")], check=True)
 shutil.rmtree(iconset)
+# macOS 26 and later draw an icon in the new format (Icon Composer) edge to edge; icns-only icons get a grey tile.
+# icons/AppIcon.icon holds the cubes as a layer on a dark fill; actool (Xcode 26 or newer) compiles it into Assets.car,
+# which the bundle carries (tauri.conf.json bundle.macOS.files) with CFBundleIconName in Info.plist. The CI runners have
+# no such Xcode, so Assets.car is kept in the repository: run this script again on a Mac after changing the logo.
+if shutil.which("xcrun"):
+    car = out.parent / "icon-car"
+    shutil.rmtree(car, ignore_errors=True)
+    car.mkdir()
+    r = subprocess.run(["xcrun", "actool", str(out / "AppIcon.icon"), "--compile", str(car), "--platform", "macosx",
+                        "--minimum-deployment-target", "11.0", "--app-icon", "AppIcon",
+                        "--output-partial-info-plist", str(car / "partial.plist")], capture_output=True, text=True)
+    if (car / "Assets.car").is_file():
+        shutil.copy(car / "Assets.car", out / "Assets.car")
+        print("Assets.car written")
+    else:
+        print("actool could not compile AppIcon.icon (needs Xcode 26 or newer):", r.stderr[-300:])
+    shutil.rmtree(car)
 print("icons written to", out)
