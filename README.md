@@ -88,7 +88,7 @@ Hugging Face can be searched, checked for fit and downloaded from the Studio's M
    cache, LM Studio and Ollama for the same file (checked by SHA-256 where known) and links it instead.
 4. **It serves, and shows the command:** every start is a plain llama-server command you can copy and run without FLE Link.
 
-Everything lives in one data folder shared by the terminal, the Studio and the app. An engine left behind by a crash is
+The rules and numbers behind each step: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md). Everything lives in one data folder shared by the terminal, the Studio and the app. An engine left behind by a crash is
 stopped before a second one loads.
 
 ## Connect your tools
