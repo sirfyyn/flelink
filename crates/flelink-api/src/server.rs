@@ -1872,6 +1872,19 @@ impl Studio {
             Some((_, e)) => self.plugin_plan(&r, e, &main)?,
             None => self.make_plan(&main, Some(&json!("auto")))?,
         };
+        // a recipe whose settings need a newer engine than the installed one: say so instead of starting it with values the
+        // engine does not know (`flelink run` installs the newer release itself)
+        if let Some(min) = r.engine.min_version.as_deref().filter(|_| plugin.is_none()) {
+            if flelink_core::recipe::engine_too_old(&plan.binary, min) {
+                return Err(ApiError(
+                    409,
+                    format!(
+                        "{} needs FLE {min} or newer. Update the engine on the Engine page (Engines, Update), then start again.",
+                        r.title
+                    ),
+                ));
+            }
+        }
         if plugin.is_none() && r.engine.strict && !r.engine.prefer.contains(&plan.engine) {
             return Err(ApiError(
                 409,

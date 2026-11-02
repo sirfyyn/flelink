@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **DeepSeek-V4.1 ISTA on FLE v1.2.3:** the cache bonus only after layer 14, the CPU side scheduled asynchronously, two
+  requests at once again (v1.2.3 fixes the q8_0 abort; the one-slot workaround is gone). Recipes can name the oldest
+  engine they work with (`min_version`); the Studio refuses an older one with the reason, `flelink run` updates it.
 - **MCP hub:** one hub address in Settings gives the chat and the agent their tools through a few meta tools, so many
   tools do not slow the model down.
 - **GitHub sign-in:** a token in Settings, checked with GitHub and kept private; the agent works in your repos with it

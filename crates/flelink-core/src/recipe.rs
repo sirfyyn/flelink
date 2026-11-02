@@ -94,6 +94,33 @@ pub struct EngineSpec {
     /// Only these engines may run it (for a model that needs FLE's expert offloading).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub strict: bool,
+    /// The oldest engine release the settings work with (`v1.2.3`): an older installed FLE is refused with the reason
+    /// instead of starting with settings it does not know.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_version: Option<String>,
+}
+
+/// `v1.2.3` (or the folder of an installed engine that contains it, `fle-cuda-v1.2.3`) as numbers.
+pub fn engine_version(text: &str) -> Option<(u32, u32, u32)> {
+    let i = text.rfind('v')?;
+    let mut it = text[i + 1..]
+        .split(|c: char| !c.is_ascii_digit() && c != '.')
+        .next()?
+        .split('.');
+    Some((
+        it.next()?.parse().ok()?,
+        it.next()?.parse().ok()?,
+        it.next().and_then(|x| x.parse().ok()).unwrap_or(0),
+    ))
+}
+
+/// Is the engine at `path_or_tag` older than `min`? Unknown versions (an own build) are not refused.
+pub fn engine_too_old(path_or_tag: &str, min: &str) -> bool {
+    let found = path_or_tag.rsplit(['/', '\\']).find_map(engine_version);
+    match (found, engine_version(min)) {
+        (Some(have), Some(want)) => have < want,
+        _ => false,
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -508,6 +535,7 @@ fn builtin_catalog() -> Vec<Recipe> {
                         vec![]
                     },
                     strict: m.fle_only,
+                    min_version: None,
                 },
                 run: RunSpec::default(),
                 requires: Requires::default(),
@@ -627,6 +655,28 @@ env = { FLE_MOE_CACHE_BIAS = "0.002" }
 thinking = false
 temperature = 0.2
 "#;
+
+    #[test]
+    fn an_engine_older_than_the_recipe_wants_is_recognised_by_its_folder() {
+        assert!(engine_too_old(
+            "/d/engines/fle-cuda-v1.2.2/fle-b70fc06e-bin/llama-server",
+            "v1.2.3"
+        ));
+        assert!(!engine_too_old(
+            "/d/engines/fle-cuda-v1.2.3/fle-d90513f3-bin/llama-server",
+            "v1.2.3"
+        ));
+        assert!(!engine_too_old(
+            "/d/engines/fle-cuda-v1.10.0/x/llama-server",
+            "v1.2.3"
+        ));
+        assert!(
+            !engine_too_old("/usr/local/bin/llama-server", "v1.2.3"),
+            "an own build is not refused"
+        );
+        let r = find(std::path::Path::new("/nonexistent"), "deepseek-v41-ista").unwrap();
+        assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.3"));
+    }
 
     #[test]
     fn parse_check_and_round_trip() {
