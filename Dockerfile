@@ -8,6 +8,9 @@ COPY . .
 RUN cargo build --release --locked -p flelink
 
 FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source="https://github.com/sirfyyn/flelink" \
+      org.opencontainers.image.description="FLE Link: local models, wired up in one command" \
+      org.opencontainers.image.licenses="MIT"
 # what the prebuilt llama.cpp and FLE engines for Linux load: OpenMP, curl, TLS roots, the Vulkan loader
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libgomp1 libcurl4 libvulkan1 \
