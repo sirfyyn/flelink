@@ -59,6 +59,16 @@ flelink pair-code        # let another FLE Link use this machine (see Remote acc
 fle                      # short name, same program
 ```
 
+### Docker
+
+```bash
+docker run -d --name flelink -p 127.0.0.1:8642:8642 -v flelink:/data ghcr.io/sirfyyn/flelink
+docker logs flelink        # the access key: requests from outside the container need it
+```
+
+The Studio on port 8642, settings, engines and models in the volume `/data`. NVIDIA GPUs: add `--gpus all` (NVIDIA Container
+Toolkit on the host; not tested yet). Built and smoke-tested with every release (`.github/workflows/docker.yml`).
+
 ## Flagship models
 
 | Model | Size | Measured | Notes |

@@ -1,0 +1,53 @@
+# The container image: built and started on every change to it (smoke test), published to ghcr.io/sirfyyn/flelink with a
+# release tag (vX.Y.Z also as latest; a tag with '-' is a release candidate and only gets its own name).
+name: docker
+
+on:
+  push: { tags: ["v*"] }
+  pull_request:
+    paths: ["Dockerfile", ".dockerignore", ".github/workflows/docker.yml", "Cargo.lock"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: flelink:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: |
+          docker run -d --name fl -p 127.0.0.1:8642:8642 flelink:test
+          # up: from outside the container every request needs the access key (401 until it is given)
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8642/api/ping || true)
+            [ "$code" = 401 ] && break; sleep 1
+          done
+          docker logs fl
+          test "$code" = 401
+          key=$(docker logs fl 2>&1 | grep -A1 "Access key" | tail -1 | tr -d ' ')
+          curl -fsS -H "Authorization: Bearer $key" http://127.0.0.1:8642/api/ping
+          curl -fsS -H "Authorization: Bearer $key" http://127.0.0.1:8642/api/system | head -c 300; echo
+          docker exec fl flelink --version
+          docker rm -f fl
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          ver="${GITHUB_REF_NAME#v}"
+          docker tag flelink:test "ghcr.io/sirfyyn/flelink:$ver"
+          docker push "ghcr.io/sirfyyn/flelink:$ver"
+          case "$ver" in
+            *-*) ;;
+            *) docker tag flelink:test ghcr.io/sirfyyn/flelink:latest && docker push ghcr.io/sirfyyn/flelink:latest ;;
+          esac
