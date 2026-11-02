@@ -206,6 +206,17 @@ fn eta(secs: f64) -> String {
     }
 }
 
+/// Done and total for the progress line, both in the unit of the total: an engine archive of 40 MB reads as MB, not
+/// as "0.0 GiB", and a model as GiB from its first byte on.
+fn sizes(done: u64, total: u64) -> (String, String) {
+    if total < 1 << 30 {
+        let mb = |b: u64| format!("{:.0} MB", b as f64 / 1e6);
+        (mb(done), mb(total))
+    } else {
+        (system::gib(done), system::gib(total))
+    }
+}
+
 fn print_event(e: &Event) {
     match e {
         Event::Step(s) => eprintln!("\n{} {s}", paint("1;35", "==>")),
@@ -248,11 +259,8 @@ fn print_event(e: &Event) {
                 paint("36", &"━".repeat(fill)),
                 paint("2", &"━".repeat(width - fill))
             );
-            eprint!(
-                "\r    {label}  {bar} {pct:5.1} %  ({} / {}){tail}   ",
-                system::gib(*done),
-                system::gib(*total)
-            );
+            let (d, t) = sizes(*done, *total);
+            eprint!("\r    {label}  {bar} {pct:5.1} %  ({d} / {t}){tail}   ");
             let _ = std::io::stderr().flush();
         }
         Event::Log(l) => {

@@ -8,6 +8,7 @@
 //! modification time. Without a SHA-256 the name has to do (and the size, when the recipe gives one). A found file is
 //! linked (a symbolic link; on Windows a hard link, which needs the same drive), never moved or changed.
 use crate::recipe::{Fetch, Recipe};
+use crate::Event;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -104,25 +105,42 @@ impl Checked {
         ))
     }
 
-    fn sha(&mut self, p: &Path, say: &mut dyn FnMut(&str)) -> Option<String> {
+    fn sha(&mut self, p: &Path, say: &mut dyn FnMut(Event)) -> Option<String> {
         let key = Self::key(p)?;
         if let Some(s) = self.map.get(&key).and_then(Value::as_str) {
             return Some(s.to_string());
         }
-        say(&format!(
+        say(Event::Step(format!(
             "Checking {} (read once, then remembered)",
             p.display()
-        ));
+        )));
         let mut f = std::fs::File::open(p).ok()?;
+        let total = f.metadata().map(|m| m.len()).unwrap_or(0);
+        let label = format!(
+            "checking {}",
+            p.file_name().unwrap_or_default().to_string_lossy()
+        );
         let mut h = Sha256::new();
         let mut buf = vec![0u8; 8 << 20];
+        let (mut done, mut shown) = (0u64, std::time::Instant::now());
         loop {
             let n = f.read(&mut buf).ok()?;
             if n == 0 {
                 break;
             }
             h.update(&buf[..n]);
+            done += n as u64;
+            // a model of 100 GB takes minutes to read: the bar shows that something happens
+            if shown.elapsed().as_millis() >= 250 {
+                shown = std::time::Instant::now();
+                say(Event::Progress {
+                    label: label.clone(),
+                    done,
+                    total,
+                });
+            }
         }
+        say(Event::Progress { label, done, total });
         let s = hex::encode(h.finalize());
         self.map.insert(key, json!(s));
         if let Some(d) = self.file.parent() {
@@ -140,7 +158,7 @@ fn find(
     idx: &HashMap<String, Vec<PathBuf>>,
     dest: &Path,
     checked: &mut Checked,
-    say: &mut dyn FnMut(&str),
+    say: &mut dyn FnMut(Event),
 ) -> Option<PathBuf> {
     if let Some(sha) = &x.sha256 {
         if let Some(b) = ollama_blob(sha) {
@@ -189,7 +207,7 @@ pub fn adopt(
     r: &Recipe,
     home: &Path,
     models: &Path,
-    say: &mut dyn FnMut(&str),
+    say: &mut dyn FnMut(Event),
 ) -> Vec<(String, PathBuf)> {
     adopt_fetches(r.fetches(), home, models, say)
 }
@@ -199,7 +217,7 @@ pub fn adopt_fetches(
     fetches: Vec<Fetch>,
     home: &Path,
     models: &Path,
-    say: &mut dyn FnMut(&str),
+    say: &mut dyn FnMut(Event),
 ) -> Vec<(String, PathBuf)> {
     let missing: Vec<Fetch> = fetches
         .into_iter()
@@ -232,16 +250,16 @@ pub fn adopt_fetches(
         if let Some(found) = find(&x, &names, &idx, &dest, &mut checked, say) {
             match link(&found, &dest) {
                 Ok(()) => {
-                    say(&format!(
+                    say(Event::Step(format!(
                         "Using {} (already on this machine)",
                         found.display()
-                    ));
+                    )));
                     out.push((x.file.clone(), found));
                 }
-                Err(e) => say(&format!(
+                Err(e) => say(Event::Step(format!(
                     "Found {} but could not link it ({e}); downloading instead",
                     found.display()
-                )),
+                ))),
             }
         }
     }
@@ -273,7 +291,11 @@ mod tests {
         let r = Recipe::parse(&text, "t").unwrap();
         std::env::set_var("FLE_MODEL_DIRS", &other);
         let mut said = vec![];
-        let got = adopt(&r, &home, &models, &mut |s| said.push(s.to_string()));
+        let got = adopt(&r, &home, &models, &mut |e| {
+            if let Event::Step(s) = e {
+                said.push(s)
+            }
+        });
         std::env::remove_var("FLE_MODEL_DIRS");
         assert_eq!(got.len(), 2, "{said:?}");
         let first = models.join("a__b/m-00001-of-00002.gguf");
