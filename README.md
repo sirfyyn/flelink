@@ -41,7 +41,9 @@ irm https://flelink.run/install.ps1 | iex          # Windows
 ```
 
 One file. No Python, no git, no sudo. The program is checked against its SHA-256 and lands in your user folder.
-The desktop app is on the [releases page](https://github.com/sirfyyn/flelink/releases). The builds are unsigned: on macOS,
+On a machine with a screen the installer asks whether to add the desktop app (macOS: `~/Applications/FLE Link.app`, Linux:
+an AppImage with a menu entry, Windows: its setup), checked against the release's `SHA256SUMS`; `--app` / `--no-app`
+(Windows: `$env:FLE_APP = 'yes'`) answer without asking. The app is also on the [releases page](https://github.com/sirfyyn/flelink/releases). The builds are unsigned: on macOS,
 right-click the app and choose Open once; on Windows, choose More info, then Run anyway.
 
 ```bash
