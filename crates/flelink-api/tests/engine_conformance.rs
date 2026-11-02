@@ -148,7 +148,13 @@ fn log_texts(addr: SocketAddr) -> Vec<String> {
         .as_array()
         .unwrap()
         .iter()
-        .map(|l| l["text"].as_str().unwrap().to_string())
+        // FLE Link's own notes in the log carry its name where the Python Studio's say "FLE Studio:" (DEVIATIONS D11)
+        .map(|l| {
+            l["text"]
+                .as_str()
+                .unwrap()
+                .replace("FLE Studio: ", "FLE Link: ")
+        })
         .collect()
 }
 

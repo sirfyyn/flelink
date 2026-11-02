@@ -781,6 +781,26 @@ svg.i.flip { transform: scaleX(-1); }
   .send { flex: none; }
   .ctx-meter { display: none; }
 }
+/* the mark at work: a token's route runs between the three active experts, their lights come on in turn, the glow under
+   them breathes. On the sidebar's mark while an engine starts, on the avatar of the answer being written; the welcome
+   page's mark only breathes. prefers-reduced-motion (below) stops all of it. */
+.fl-dot { transform-box: fill-box; transform-origin: center; }
+.engine-busy .brand-mark .fl-link, .avatar.busy .fl-link { stroke-dasharray: 8 22; animation: fl-route 1.4s linear infinite; }
+.engine-busy .brand-mark .fl-dot, .avatar.busy .fl-dot { animation: fl-light 1.4s ease-in-out infinite; }
+.engine-busy .brand-mark .fl-d2, .avatar.busy .fl-d2 { animation-delay: 0.47s; }
+.engine-busy .brand-mark .fl-d3, .avatar.busy .fl-d3 { animation-delay: 0.93s; }
+.engine-busy .brand-mark .fl-spill, .avatar.busy .fl-spill, .hero-mark .fl-spill { animation: fl-breathe 2.8s ease-in-out infinite; }
+@keyframes fl-route { to { stroke-dashoffset: -30; } }
+@keyframes fl-light { 0%, 100% { opacity: 0.55; transform: scale(1); } 40% { opacity: 1; transform: scale(1.7); } }
+@keyframes fl-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+/* a page that opens settles in; buttons give a little under the click */
+.page > * { animation: page-in 0.22s ease-out both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.btn { transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.08s; }
+.btn:not(:disabled):active { transform: translateY(1px) scale(0.985); }
+.btn.primary:not(:disabled):hover { box-shadow: 0 6px 18px -8px var(--accent); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

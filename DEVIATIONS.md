@@ -17,6 +17,7 @@ text or skips the Python call, and asserts the intended behaviour on the Rust si
 | D13 | GPU `auto` takes the GPU with the most total memory | the GPU with the most free memory | A large card that another service fills is the worst place for a new engine |
 | D14 | The tuner screens threads, batch and `--n-cpu-moe` with one `llama-bench` call before the trials (llama.cpp only) | No screening: every value gets a full trial | `llama-bench` is not part of what FLE Link installs; the trials decide anyway, the screening only saved time |
 | D15 | Forge: "Use the Python library as a first trial" mixes a calibration text from the Python standard library | No such button; `stdlib` answers 400 | FLE Link carries no Python; the bundled text (85/15 split, CC0/MIT) is the start. The Forge is otherwise compared job by job with the Python plugin (`tests/forge_conformance.rs`: same files, same SHA-256) |
+| D16 | A download whose connection breaks stops with "run again to resume" | The terminal's download picks it up again by itself where it stopped (up to five tries in a row without progress, pauses 2–16 s), and a connection silent for 60 s counts as broken; a machine without network still fails at once | 248 GB do not survive one try; the Studio's download worker is unchanged |
 | D11 | `doctor` keeps `auto` on a machine without NVIDIA GPU or with an upstream engine and reports the FLE checks as failures | `auto` becomes `off` there, like `flelink run` | `doctor` failed on every Mac and with every plain llama.cpp |
 
 Gone from the list because Python fixed them itself (0.4.1): D1, a plan error with a hint was printed as a tuple; now the two
@@ -38,7 +39,8 @@ from the IANA zone, Python from the C library). Same zone, same offset; the test
 ## D11: the program is called `flelink`
 
 Hints, error texts and the saved config header say `flelink ...` where the Python helper says `fle ...`. The comparison tests
-apply one rule to Python's output (`common::brand`) and compare everything else word for word.
+apply one rule to Python's output (`common::brand`) and compare everything else word for word. The same for the notes FLE Link writes into the
+engine log: `FLE Link: …` where the Python Studio writes `FLE Studio: …` (the engine test swaps the name before comparing).
 
 ## D12: installed engines before the PATH
 

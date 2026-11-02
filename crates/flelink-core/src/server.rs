@@ -117,7 +117,22 @@ impl Server {
             .collect()
     }
 
+    /// The polite stop: SIGTERM lets llama-server finish its cleanup (and FLE save its expert profile), then SIGKILL after
+    /// ten seconds for an engine that hangs on the way out.
     pub fn stop(&mut self) {
+        #[cfg(unix)]
+        if matches!(self.child.try_wait(), Ok(None)) {
+            // SAFETY: a plain signal to our own child
+            unsafe {
+                libc::kill(self.child.id() as i32, libc::SIGTERM);
+            }
+            let t = std::time::Instant::now();
+            while matches!(self.child.try_wait(), Ok(None))
+                && t.elapsed() < std::time::Duration::from_secs(10)
+            {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
         crate::orphans::forget(&self.home, self.child.id());

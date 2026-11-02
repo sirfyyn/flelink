@@ -172,30 +172,105 @@ enum Cmd {
     },
 }
 
+/// Colours on stderr only for a terminal and only without NO_COLOR.
+fn color() -> bool {
+    use std::io::IsTerminal;
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty())
+    })
+}
+
+fn paint(code: &str, text: &str) -> String {
+    if color() {
+        format!("\x1b[{code}m{text}\x1b[0m")
+    } else {
+        text.to_string()
+    }
+}
+
+/// What the progress line needs to tell a speed: where this download started, and when.
+struct Rate {
+    label: String,
+    t0: std::time::Instant,
+    from: u64,
+}
+static RATE: std::sync::Mutex<Option<Rate>> = std::sync::Mutex::new(None);
+
+fn eta(secs: f64) -> String {
+    let s = secs.round() as u64;
+    match s {
+        0..=59 => format!("{s} s"),
+        60..=3599 => format!("{} min {:02} s", s / 60, s % 60),
+        _ => format!("{} h {:02} min", s / 3600, s % 3600 / 60),
+    }
+}
+
 fn print_event(e: &Event) {
     match e {
-        Event::Step(s) => eprintln!("\n==> {s}"),
+        Event::Step(s) => eprintln!("\n{} {s}", paint("1;35", "==>")),
         Event::Progress { label, done, total } => {
             let pct = if *total > 0 {
                 *done as f64 * 100.0 / *total as f64
             } else {
                 0.0
             };
+            let mut r = RATE.lock().unwrap();
+            if r.as_ref()
+                .is_none_or(|r| r.label != *label || *done < r.from)
+            {
+                *r = Some(Rate {
+                    label: label.clone(),
+                    t0: std::time::Instant::now(),
+                    from: *done,
+                });
+            }
+            let rt = r.as_ref().unwrap();
+            let secs = rt.t0.elapsed().as_secs_f64();
+            let speed = if secs > 1.0 {
+                (done - rt.from) as f64 / secs
+            } else {
+                0.0
+            };
+            let tail = if speed > 0.0 && *total > *done {
+                format!(
+                    "  {:.0} MB/s, {} left",
+                    speed / 1e6,
+                    eta((total - done) as f64 / speed)
+                )
+            } else {
+                String::new()
+            };
+            let width = 24usize;
+            let fill = ((pct / 100.0) * width as f64).round().min(width as f64) as usize;
+            let bar = format!(
+                "{}{}",
+                paint("36", &"━".repeat(fill)),
+                paint("2", &"━".repeat(width - fill))
+            );
             eprint!(
-                "\r    {label}: {pct:5.1} %  ({} / {})   ",
+                "\r    {label}  {bar} {pct:5.1} %  ({} / {}){tail}   ",
                 system::gib(*done),
                 system::gib(*total)
             );
             let _ = std::io::stderr().flush();
         }
-        Event::Log(l) => eprint!("\r    {l:<110}"),
+        Event::Log(l) => {
+            let short: String = l.chars().take(110).collect();
+            eprint!("\r    {}", paint("2", &format!("{short:<110}")))
+        }
         Event::Ready {
             base,
             engine,
             model,
             command,
         } => {
-            eprintln!("\n\nReady: {model} on {engine}\n  API: {base}/v1   (OpenAI-compatible, no key needed)\n  Command (shown, never needed):\n    {command}");
+            eprintln!(
+                "\n\n{} {model} on {engine}\n  API: {}   (OpenAI-compatible, no key needed)\n  Command (shown, never needed):\n    {}",
+                paint("1;32", "Ready:"),
+                paint("1", &format!("{base}/v1")),
+                paint("2", command)
+            );
         }
     }
 }

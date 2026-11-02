@@ -5,12 +5,61 @@ use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Gauge, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, BorderType, Gauge, List, ListItem, ListState, Paragraph, Wrap},
     DefaultTerminal, Frame,
 };
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
+
+// The brand in 256 colours (the macOS Terminal has no 24-bit colour): cyan, violet, fuchsia as on flelink.run, and the
+// muted line colour for the frames.
+const CYAN: Color = Color::Indexed(51);
+const VIOLET: Color = Color::Indexed(99);
+const FUCHSIA: Color = Color::Indexed(213);
+const LINE: Color = Color::Indexed(238);
+
+/// A rounded frame in the line colour with its title in normal text.
+fn panel(title: &str) -> Block<'static> {
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(LINE))
+        .title(Span::styled(
+            title.to_string(),
+            Style::new().fg(Color::Reset),
+        ))
+}
+
+/// "FLE Link" in the gradient of the logo.
+fn brand() -> Vec<Span<'static>> {
+    let colors = [
+        CYAN, CYAN, VIOLET, VIOLET, VIOLET, FUCHSIA, FUCHSIA, FUCHSIA,
+    ];
+    let mut out = vec![Span::raw(" ")];
+    for (ch, c) in "FLE Link".chars().zip(colors) {
+        out.push(Span::styled(
+            ch.to_string(),
+            Style::new().fg(c).add_modifier(Modifier::BOLD),
+        ));
+    }
+    out.push(Span::raw(" "));
+    out
+}
+
+/// Three lights that come on in turn, like the route between the active experts of the logo.
+fn lights() -> Vec<Span<'static>> {
+    let n = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+        / 220
+        % 3) as usize;
+    [CYAN, VIOLET, FUCHSIA]
+        .iter()
+        .enumerate()
+        .map(|(i, c)| Span::styled(if i == n { "● " } else { "∙ " }, Style::new().fg(*c)))
+        .collect()
+}
 
 enum Msg {
     Ev(Event),
@@ -261,21 +310,20 @@ impl App {
             Constraint::Length(1),
         ])
         .areas(area);
-        let title = Line::from(vec![
-            Span::styled(
-                " FLE Link ",
-                Style::new()
-                    .bg(Color::Magenta)
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(match self.screen {
-                Screen::Machine => " this machine",
-                Screen::Models => " choose a model",
-                Screen::Loading => " loading",
-                Screen::Chat => " chat",
-            }),
-        ]);
+        let mut title = brand();
+        title.push(Span::styled(
+            match self.screen {
+                Screen::Machine => "· this machine",
+                Screen::Models => "· choose a model",
+                Screen::Loading => "· loading ",
+                Screen::Chat => "· chat",
+            },
+            Style::new().fg(Color::DarkGray),
+        ));
+        if matches!(self.screen, Screen::Loading) {
+            title.extend(lights());
+        }
+        let title = Line::from(title);
         f.render_widget(Paragraph::new(title), head);
         let hint = match self.screen {
             Screen::Machine => "Enter: continue   q: quit",
@@ -338,10 +386,7 @@ impl App {
                 )
             }));
         }
-        f.render_widget(
-            Paragraph::new(t).block(Block::bordered().title(" Your machine ")),
-            area,
-        );
+        f.render_widget(Paragraph::new(t).block(panel(" Your machine ")), area);
     }
 
     fn models_view(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
@@ -372,10 +417,9 @@ impl App {
             })
             .collect();
         let list = List::new(items)
-            .block(
-                Block::bordered()
-                    .title(" Models (whether they fit is checked before anything is downloaded) "),
-            )
+            .block(panel(
+                " Models (whether they fit is checked before anything is downloaded) ",
+            ))
             .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
             .highlight_symbol("> ");
         f.render_stateful_widget(list, top, &mut self.list);
@@ -390,7 +434,7 @@ impl App {
         f.render_widget(
             Paragraph::new(lines)
                 .wrap(Wrap { trim: true })
-                .block(Block::bordered().title(" About ")),
+                .block(panel(" About ")),
             bottom,
         );
     }
@@ -411,7 +455,7 @@ impl App {
                 Line::from(vec![
                     Span::styled(
                         if last { " ... " } else { " ok  " },
-                        Style::new().fg(if last { Color::Yellow } else { Color::Green }),
+                        Style::new().fg(if last { FUCHSIA } else { Color::Green }),
                     ),
                     Span::raw(s.clone()),
                 ])
@@ -420,7 +464,7 @@ impl App {
         f.render_widget(
             Paragraph::new(lines)
                 .wrap(Wrap { trim: true })
-                .block(Block::bordered().title(" Getting ready ")),
+                .block(panel(" Getting ready ")),
             steps,
         );
         let (label, ratio) = match &self.progress {
@@ -432,8 +476,8 @@ impl App {
         };
         f.render_widget(
             Gauge::default()
-                .block(Block::bordered().title(" Download "))
-                .gauge_style(Style::new().fg(Color::Magenta))
+                .block(panel(" Download "))
+                .gauge_style(Style::new().fg(VIOLET))
                 .ratio(ratio.clamp(0.0, 1.0))
                 .label(label),
             gauge,
@@ -441,7 +485,7 @@ impl App {
         f.render_widget(
             Paragraph::new(self.logline.clone())
                 .style(Style::new().fg(Color::DarkGray))
-                .block(Block::bordered().title(" Engine ")),
+                .block(panel(" Engine ")),
             log,
         );
     }
@@ -475,7 +519,7 @@ impl App {
         f.render_widget(
             Paragraph::new(sl)
                 .wrap(Wrap { trim: true })
-                .block(Block::bordered().title(" Live ")),
+                .block(panel(" Live ")),
             status,
         );
         let mut t = Text::default();
@@ -536,7 +580,7 @@ impl App {
             Paragraph::new(t)
                 .wrap(Wrap { trim: false })
                 .scroll((scroll, 0))
-                .block(Block::bordered().title(" Conversation ")),
+                .block(panel(" Conversation ")),
             convo,
         );
         f.render_widget(
@@ -545,7 +589,7 @@ impl App {
                 self.input,
                 if self.busy { "" } else { "_" }
             ))
-            .block(Block::bordered().title(if self.busy {
+            .block(panel(if self.busy {
                 " answering ... "
             } else {
                 " your message "

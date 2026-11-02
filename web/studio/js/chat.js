@@ -9,7 +9,7 @@ import { addChild, ensureTree, indexOf, newId, pathOf, removeBranch, siblingsOf,
 import { createStreamRenderer, renderMarkdown } from "./md.js";
 import { host as appHost, replaceMessages, swapNode } from "./app-bridge.js";
 import { showAppNow, toolCardEl, waitForApproval } from "./tools-ui.js";
-import { clear, confirmDialog, copyText, debounce, fmt, h, icon, mark, meter, openMenu, ring, sparkline, stateBadge, toast } from "./ui.js";
+import { clear, confirmDialog, copyText, debounce, fmt, h, icon, mark, meter, openMenu, ring, sparkline, stateBadge, toast, countTo } from "./ui.js";
 
 const SUGGESTIONS = [
   ["Explain mixture-of-experts", "and why only a few experts run for each token"],
@@ -319,7 +319,7 @@ export function mount(main, chatId) {
     const box = h("div", { class: "welcome" });
     if (e.state === "ready" || e.state === "attached") {
       box.append(
-        h("div", { style: { width: "44px", height: "44px" } }, mark(44)),
+        h("div", { class: "hero-mark", style: { width: "44px", height: "44px" } }, mark(44)),
         h("h2", null, "What should ", h("span", { class: "grad" }, engineModelName() || "the model"), " work on?"),
         h("p", { class: "lead" }, "Answers stream from the engine on this computer. Speed, MTP acceptance and the expert cache show in the live panel. Attach files with the paperclip or drop them here."),
         h("div", { class: "suggest" }, SUGGESTIONS.map(([a, b]) => h("button", { onclick: () => { ta.value = `${a} ${b}`; autosize(); submit(); } },
@@ -342,7 +342,7 @@ export function mount(main, chatId) {
     if (e.service) {
       const svc = e.service;
       box.append(
-        h("div", { style: { width: "44px", height: "44px" } }, mark(44)),
+        h("div", { class: "hero-mark", style: { width: "44px", height: "44px" } }, mark(44)),
         h("h2", null, h("span", { class: "grad" }, svc.unit), e.state === "stopping" ? " is stopping" : e.state === "crashed" ? " stopped with an error" : " is not running"),
         h("p", { class: "lead" }, "FLE Link is connected to this service. Starting it runs the service's own command, which loads its model."),
         e.error ? h("div", { class: "callout bad" }, icon("alert"), h("div", null, e.error)) : null,
@@ -354,7 +354,7 @@ export function mount(main, chatId) {
     const hasModel = models.length > 0;
     const first = models.find((m) => m.id === st.settings?.last_model) || models[0];
     box.append(
-      h("div", { style: { width: "44px", height: "44px" } }, mark(44)),
+      h("div", { class: "hero-mark", style: { width: "44px", height: "44px" } }, mark(44)),
       // the model this machine has, not a showcase model that may not fit it
       h("h2", null, "Run ", h("span", { class: "grad" }, hasModel ? first.name : "a language model"), " on your own machine"),
       h("p", { class: "lead" }, "FLE Link downloads a model, picks the engine and the settings that fit your hardware, and shows what the engine is doing while you chat."));
@@ -439,7 +439,7 @@ export function mount(main, chatId) {
         h("button", { class: "btn ghost icon sm", title: "Delete this message and what follows", "aria-label": "Delete", disabled: !!turn, onclick: () => removeMsg(m) }, icon("trash", "sm")))));
     }
     return h("div", { class: `msg assistant${last ? " last" : ""}${cont ? " cont" : ""}`, "data-id": m.id, "data-i": i },
-      h("div", { class: "avatar" }, cont ? null : mark(20)), body);
+      h("div", { class: `avatar${isLive ? " busy" : ""}` }, cont ? null : mark(20)), body);
   }
 
   function thinkEl(m, isLive) {
@@ -1041,12 +1041,12 @@ export function mount(main, chatId) {
     tiles.push(h("div", { class: "row between" }, h("h4", null, "Live"), stateBadge(e.state)));
     tiles.push(h("div", { class: "tile" },
       h("div", { class: "k" }, h("span", null, "Generation"), h("span", { class: "faint" }, decodeNow !== null ? "now" : lr ? "last answer" : "")),
-      h("div", { class: "v" }, fmt.rate(decode), h("small", null, "tok/s")),
+      h("div", { class: "v" }, countTo("live-decode", decode, fmt.rate), h("small", null, "tok/s")),
       sparkline(hist.map((x) => x.decode ?? null), { color: "var(--accent)", id: "dec" }),
       h("div", { class: "sub" }, perAnswer ? "Average of each finished answer, last two minutes" : "Tokens per second while answering, last two minutes")));
     tiles.push(h("div", { class: "tile" },
       h("div", { class: "k" }, h("span", null, "Prompt reading (prefill)")),
-      h("div", { class: "v" }, fmt.rate(prefill), h("small", null, "tok/s")),
+      h("div", { class: "v" }, countTo("live-prefill", prefill, fmt.rate), h("small", null, "tok/s")),
       sparkline(hist.map((x) => x.prefill ?? null), { color: "var(--violet)", id: "pre" })));
     tiles.push(h("div", { class: "tile" }, h("div", { class: "rings" },
       ring(accept, { color: "var(--cyan)", label: "MTP drafts accepted" }),

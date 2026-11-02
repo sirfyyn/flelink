@@ -103,6 +103,7 @@ async function tick() {
     const stateChanged = eng.state !== store.engine?.state;
     const logMoved = eng.log_seq !== store.engine?.log_seq;
     store.engine = eng;
+    document.body.classList.toggle("engine-busy", eng.state === "starting");
     if (key !== lastEngineKey) { lastEngineKey = key; emit("engine"); }
     if (logMoved) emit("enginelog");
     if (stateChanged) renderEngineCard();
