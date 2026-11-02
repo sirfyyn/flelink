@@ -2274,6 +2274,17 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             }
         }
         ("GET", "/api/engine") => Ok(st.engine.status()),
+        // the settings for coding agents and other apps (flelink connect); the page passes its own address and model
+        ("GET", "/api/connect") => {
+            let q = |k: &str| r.query.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let base = Some(q("base")).filter(|b| b.starts_with("http")).unwrap_or_else(|| "http://127.0.0.1:8642".into());
+            let model = Some(q("model")).filter(|m| !m.is_empty()).unwrap_or_else(|| "local".into());
+            let tools: Vec<Value> = flelink_core::connect::snippets(&base, &model)
+                .into_iter()
+                .map(|s| json!({"id": s.id, "title": s.title, "place": s.place, "text": s.text}))
+                .collect();
+            Ok(json!({"base": base, "model": model, "tools": tools}))
+        }
         ("GET", "/api/engine/log") => Ok(st.engine.log_since(
             r.query
                 .get("since")

@@ -804,3 +804,7 @@ svg.i.flip { transform: scaleX(-1); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* the settings for coding agents on the Engine page */
+.seg.wrap { flex-wrap: wrap; }
+.connect-code { margin: 0; padding: 12px 14px; background: var(--code-bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; white-space: pre; line-height: 1.55; }

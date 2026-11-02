@@ -18,7 +18,7 @@ The layer between an inference engine and everything that talks to it.</p>
 <!-- demo: a first run from nothing to an answer (recording goes here) -->
 
 FLE Link reads your machine, installs the engine that fits, downloads a model that fits, picks the start settings and serves an
-OpenAI-compatible API, a browser Studio and a desktop app. The engine underneath can be swapped:
+OpenAI- and Anthropic-compatible API, a browser Studio and a desktop app. The engine underneath can be swapped:
 [FLE (Fast Local Experts)](https://github.com/sirfyyn/FastLocalExperts) for big mixture-of-experts models on small GPUs, the
 upstream llama.cpp as fallback, or any llama-server compatible build of your own.
 
@@ -81,6 +81,21 @@ Hugging Face can be searched, checked for fit and downloaded from the Studio's M
 Everything lives in one data folder shared by the terminal, the Studio and the app. An engine left behind by a crash is
 stopped before a second one loads.
 
+## Connect your tools
+
+The engine answers the OpenAI API (Chat Completions and Responses) and the Anthropic API (Messages) on the same address, so
+coding agents use the local model in the format they speak natively. `flelink connect` finds the running model and prints the
+setting for each tool; the Engine page of the Studio shows the same with a copy button.
+
+```sh
+flelink connect            # Claude Code, Codex CLI, OpenCode, pi and the plain addresses
+flelink connect claude     # one tool
+```
+
+For Claude Code it prints `ANTHROPIC_BASE_URL=http://127.0.0.1:8642` (the Studio and the app) or `:8080` (`flelink run`)
+with the model name; Codex gets a provider with `wire_api = "responses"`, OpenCode and pi an OpenAI-compatible provider. No
+key is checked on this machine.
+
 ## Recipes
 
 A recipe is one TOML file: model, engine, start values, chat defaults, and optionally a draft model for speculative decoding.
@@ -132,7 +147,7 @@ The unit and end-to-end tests run on Linux, macOS and Windows for every pull req
 
 | Path | What |
 |---|---|
-| `crates/flelink-core` | machine inspection, GGUF reading, launch plan, engine install, downloads, supervisor, orphaned-engine cleanup |
+| `crates/flelink-core` | machine inspection, GGUF reading, launch plan, engine install, downloads, supervisor, orphaned-engine cleanup, the settings for coding agents (`connect.rs`) |
 | `crates/flelink-api` | the `/api` the Studio talks to, and the `/v1` proxy |
 | `crates/flelink` | the program: CLI, terminal interface, `studio` |
 | `web/studio` | the Studio page (embedded into the binary) |

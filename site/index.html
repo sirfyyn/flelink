@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>FLE Link · local models, wired up in one command</title>
-<meta name="description" content="Run local AI models in one command. FLE Link picks the engine and a model that fit your machine and serves an OpenAI-compatible API. Open source, MIT.">
+<meta name="description" content="Run local AI models in one command. FLE Link picks the engine and a model that fit your machine and serves an OpenAI- and Anthropic-compatible API. Open source, MIT.">
 <meta name="theme-color" content="#0b0e14">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="FLE Link">
@@ -47,7 +47,7 @@
     <div class="hero-copy">
       <p class="eyebrow">Open source · MIT · macOS, Linux, Windows</p>
       <h1>Local models,<br><span class="grad">wired up</span> in one command.</h1>
-      <p class="lede">FLE Link sits between your inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API. Nothing to configure.</p>
+      <p class="lede">FLE Link sits between your inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI- and Anthropic-compatible API. Nothing to configure.</p>
 
       <div class="install" data-install>
         <div class="tabs" role="tablist" aria-label="Your system">
@@ -80,7 +80,7 @@
     starting the engine ...
 
 <span class="ok">Ready:</span> llama-3.2-1b on llama.cpp for Apple Silicon (Metal)
-  API: http://127.0.0.1:8080/v1   <span class="d">(OpenAI-compatible, no key needed)</span>
+  API: http://127.0.0.1:8080/v1   <span class="d">(OpenAI- and Anthropic-compatible, no key needed)</span>
 
 &gt; Name the capital of France in one word.
 
@@ -220,10 +220,11 @@ fle-iq3-m        82.8 GiB  <span class="bad">too big</span></pre>
       </article>
       <article>
         <h3>API</h3>
-        <p>OpenAI-compatible <code>/v1</code>. Point any client at it.</p>
-<pre class="out">curl http://127.0.0.1:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"Hi"}]}'</pre>
+        <p>OpenAI- and Anthropic-compatible on one address. <code>flelink connect</code> prints the setting for Claude Code, Codex, OpenCode and pi.</p>
+<pre class="out">$ flelink connect claude
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8642
+export ANTHROPIC_MODEL=&lt;the model it found&gt;
+claude</pre>
       </article>
     </div>
   </div>

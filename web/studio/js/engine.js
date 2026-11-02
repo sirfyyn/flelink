@@ -49,6 +49,7 @@ export function mount(main) {
   }
   const boxes = {
     status: h("div", { class: "card pad-lg" }),
+    connect: h("div", { class: "card" }),
     best: h("div", { class: "card" }),
     launch: h("div", { class: "card" }),
     preview: h("div", { class: "card sticky-side" }),
@@ -62,6 +63,7 @@ export function mount(main) {
       h("p", null, "FLE Link runs llama-server for you. Every start is a plain command that you can read, copy and change; "
         + "a profile keeps a command of your own, placeholders and all.")), modeSwitch),
     boxes.status,
+    boxes.connect,
     boxes.best,
     h("div", { class: "grid two" }, boxes.launch, boxes.preview),
     boxes.profiles,
@@ -226,11 +228,11 @@ export function mount(main) {
 
     const endpoint = e.state === "ready" || e.state === "attached"
       ? h("div", { class: "callout info" }, icon("link", "sm"), h("div", { class: "stack tight", style: { minWidth: 0 } },
-        h("div", { class: "row wrap" }, h("b", null, "OpenAI-compatible API"), h("code", { class: "mono" }, `${location.origin}/v1`),
+        h("div", { class: "row wrap" }, h("b", null, "OpenAI- and Anthropic-compatible API"), h("code", { class: "mono" }, `${location.origin}/v1`),
           copyButton(`${location.origin}/v1`, "Copy the API address")),
         h("span", { class: "small muted" }, store.state?.lan
           ? "Apps on this computer need no key. Other machines use the access key from Settings as their API key."
-          : "Any app on this computer that speaks the OpenAI API can use the loaded model; no key needed.")))
+          : "Any app on this computer that speaks the OpenAI or Anthropic API can use the loaded model; no key needed (setup below).")))
       : null;
 
     clear(boxes.status,
@@ -827,10 +829,46 @@ export function mount(main) {
       logView);
   }
 
+  // ------------------------------------------------------------------------------------------- connect
+
+  // Coding agents and other apps on the address of this page: Claude Code speaks the Anthropic API, Codex the
+  // Responses API, the rest Chat Completions; the engine answers all three (the same text as `flelink connect`).
+  let connectTool = "claude";
+  let connectSeq = 0;
+  async function renderConnect() {
+    const seq = ++connectSeq;
+    const up = store.engine?.state === "ready";
+    let model = "";
+    if (up) {
+      try { model = (await fetch("/v1/models").then((r) => r.json())).data?.[0]?.id || ""; } catch { /* the card still shows the address */ }
+    }
+    let data;
+    try { data = await get(`/api/connect?base=${encodeURIComponent(location.origin)}&model=${encodeURIComponent(model)}`); }
+    catch { boxes.connect.hidden = true; return; }
+    if (seq !== connectSeq) return;
+    boxes.connect.hidden = false;
+    const tools = data.tools || [];
+    const t = tools.find((x) => x.id === connectTool) || tools[0];
+    if (!t) return;
+    const pre = h("pre", { class: "code connect-code" }, t.text);
+    clear(boxes.connect,
+      h("div", { class: "card-head" }, icon("link"), h("div", { class: "grow" }, h("h3", null, "Use it from your tools"),
+        h("p", null, up ? `Claude Code, Codex, OpenCode, pi or any app that speaks the OpenAI or Anthropic API, on ${data.base}.`
+          : "Load a model first; then this shows the exact model name for your tools."))),
+      h("div", { class: "stack" },
+        h("div", { class: "seg wrap" }, tools.map((x) => h("button", { class: x.id === t.id ? "on" : "",
+          onclick: () => { connectTool = x.id; renderConnect(); } }, x.title))),
+        h("div", { class: "row small muted" }, t.place === "shell" ? "Run in a terminal:" : `In ${t.place}:`, h("span", { class: "grow" }),
+          copyButton(() => t.text, "Copy")),
+        pre,
+        h("span", { class: "small faint" }, "The same from a terminal: ", h("code", null, `flelink connect ${t.id}`))));
+  }
+
   // ------------------------------------------------------------------------------------------- wiring
 
   function renderAll() {
     syncSelection();
+    renderConnect();
     applyMode();
     renderStatus();
     renderLaunch();
@@ -852,6 +890,7 @@ export function mount(main) {
       renderLaunch();
       renderAttach();
       renderLogSub();
+      renderConnect();
     }
   }));
   unsub.push(on("downloads", () => { if (store.downloads.some((d) => d.kind === "engine")) renderEngines(); }));
