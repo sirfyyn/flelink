@@ -34,6 +34,7 @@
       <a href="#models">Models</a>
       <a href="#how">How it works</a>
       <a href="#ways">Ways in</a>
+      <a href="#agents">Agents</a>
       <a href="#roadmap">Roadmap</a>
       <a class="btn ghost" href="https://github.com/sirfyyn/flelink">GitHub</a>
     </nav>
@@ -241,9 +242,31 @@ claude</pre>
       <li><b>Quality next to speed</b> KL divergence against the reference and a knowledge probe, right after a speed test.</li>
       <li><b>Expert cache</b> Hit rate over time and per layer, read from the FLE engine.</li>
       <li><b>Forge</b> Build your own quant: whole expert layers from other quants, the best mix for your size budget, expert pruning, a KL check, and a recipe others can rebuild.</li>
+      <li><b>Live preview</b> HTML and SVG from an answer run right under the code, sandboxed, with no access to the Studio.</li>
       <li><b>Tools</b> MCP servers, local or remote with sign-in, as chat tools that ask before each call.</li>
       <li><b>Recipes</b> Model, engine and settings in one small file to share; plugins add engines and recipes as files.</li>
     </ul>
+  </div>
+</section>
+
+<section class="band" id="agents">
+  <div class="wrap two">
+    <div>
+      <p class="eyebrow">Coding agents</p>
+      <h2>Your coding agent, on your own model</h2>
+      <p>The engine answers the OpenAI API and the Anthropic API on one address, so Claude Code, Codex, OpenCode and pi talk to the local model in the format they already speak. <code>flelink connect</code> finds the loaded model and prints the setting for each of them; the Engine page shows the same with a copy button.</p>
+      <p>And the agent can run FLE Link itself: <code>flelink mcp</code> is an MCP server that lists what fits the machine, downloads and loads a model, stops it, reads the engine log, changes settings and tests the model with one prompt.</p>
+    </div>
+<pre class="out"><span class="p">$</span> flelink connect claude
+Found: http://127.0.0.1:8642  (model Qwen3.8-Flash-Next)
+
+Claude Code  run in the terminal
+  export ANTHROPIC_BASE_URL=http://127.0.0.1:8642
+  export ANTHROPIC_AUTH_TOKEN=flelink
+  export ANTHROPIC_MODEL=Qwen3.8-Flash-Next
+  claude
+
+<span class="p">$</span> claude mcp add flelink -- flelink mcp</pre>
   </div>
 </section>
 
@@ -288,7 +311,7 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
     <h2>Open, and built to be changed</h2>
     <p class="intro">MIT licensed. The engine sits behind an adapter, so a new engine is a new adapter, not a fork.</p>
     <ol class="road">
-      <li class="now"><span>0.1</span><div><b>Now</b> one command from nothing to an answer, any GGUF from Hugging Face with a fit check, models you already have, Studio, desktop app, host mode and remote access, engine adapters for FLE, llama.cpp and your own build, recipes and plugins as files, the Forge for your own quants</div></li>
+      <li class="now"><span>0.1</span><div><b>Now</b> one command from nothing to an answer, any GGUF from Hugging Face with a fit check, models you already have, Studio, desktop app, host mode and remote access, OpenAI and Anthropic API with <code>flelink connect</code> for coding agents, an MCP server so agents run FLE Link, engine adapters for FLE, llama.cpp and your own build, recipes and plugins as files, the Forge for your own quants</div></li>
       <li><span>next</span><div><b>More engines</b> adapters for vLLM and ik_llama.cpp</div></li>
       <li><span>later</span><div><b>Training</b> LoRA adapters on your own data</div></li>
     </ol>

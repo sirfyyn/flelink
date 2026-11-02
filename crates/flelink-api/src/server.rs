@@ -2618,6 +2618,17 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .and_then(|l| l.parse().ok());
             Ok(st.cache.snapshot(layer))
         }
+        // the live preview of an HTML or SVG block in a chat: the same frame as an MCP app (/app-frame/<id>: opaque origin,
+        // no access to this page or its API), scripts and styles from the common CDNs, nothing sent anywhere
+        ("POST", "/api/preview") => r.json(MAX_JSON).map(|body| {
+            let html = body.get("html").map(py_str).unwrap_or_default();
+            let cdns = json!({"ui": {"csp": {"resourceDomains": ["https://cdn.jsdelivr.net", "https://unpkg.com",
+                "https://cdnjs.cloudflare.com", "https://cdn.tailwindcss.com", "https://fonts.googleapis.com",
+                "https://fonts.gstatic.com"]}}});
+            let csp = format!("{}; sandbox allow-scripts allow-forms allow-modals", crate::mcp::frame_csp(&cdns));
+            let frame = st.toolbox.frames.add(json!({"html": html, "csp": csp, "server": "", "preview": true}));
+            json!({"frame": frame, "url": format!("/app-frame/{frame}")})
+        }),
         ("POST", "/api/apps/prepare") => r.json(MAX_JSON).and_then(|body| {
             let name = body.get("name").map(py_str).unwrap_or_default();
             st.toolbox
