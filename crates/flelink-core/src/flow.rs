@@ -31,9 +31,7 @@ pub fn ensure_and_start_recipe(
 ) -> Result<Server> {
     let sys = system::detect(home);
     // copies already on this machine first: the fit check then counts only what is really missing
-    crate::locate::adopt(r, home, &home.join("models"), &mut |s| {
-        emit(Event::Step(s.to_string()))
-    });
+    crate::locate::adopt(r, home, &home.join("models"), &mut |e| emit(e));
     if r.fit(&home.join("models"), &sys) == catalog::Fit::TooBig {
         bail!(
             "{} does not fit this machine ({} RAM, {} free on disk)",
