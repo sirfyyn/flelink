@@ -38,6 +38,15 @@ export function clear(el, ...children) {
   return el;
 }
 
+// clear() for parts the live poll draws again: the old nodes stay when the new ones look the same, so a click that
+// falls between press and release, a hover and a running animation are not lost to an identical copy.
+export function patch(el, ...children) {
+  const next = document.createElement(el.tagName);
+  append(next, children);
+  if (next.innerHTML !== el.innerHTML) el.replaceChildren(...next.childNodes);
+  return el;
+}
+
 function svg(tag, attrs, ...children) {
   const el = document.createElementNS(SVG_NS, tag);
   for (const [k, v] of Object.entries(attrs || {})) {

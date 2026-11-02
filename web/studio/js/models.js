@@ -1,8 +1,8 @@
 // Models: what this machine can run, the FLE catalog, Hugging Face, downloads and the local library.
 
 import { get, post } from "./api.js";
-import { emit, navigate, on, refreshState, store, topbar } from "./app.js";
-import { clear, confirmDialog, debounce, fmt, h, icon, toast } from "./ui.js";
+import { emit, navigate, on, refreshState, store, topbar, withEngine } from "./app.js";
+import { clear, confirmDialog, debounce, fmt, h, icon, patch, toast } from "./ui.js";
 
 const FIT = {
   good: ["good", "Fits this machine"],
@@ -12,6 +12,8 @@ const FIT = {
 
 export function mount(main) {
   const unsub = [];
+  let recipeBusy = false; // before the first renderRecipes() below, which mount calls at once
+  let recipeData = null;
   const hw = h("div", { class: "hw" });
   const catGrid = h("div", { class: "cat-grid" });
   const dlBox = h("div");
@@ -34,7 +36,13 @@ export function mount(main) {
   let hfState = { q: "", results: [], repo: null, loading: false };
 
   unsub.push(on("state", renderAll));
-  unsub.push(on("downloads", () => { renderCatalog(); renderDownloads(); renderRecipes(); }));
+  // the recipes say whether their model is there: asked again when a download starts, ends or stops, not per byte
+  let dlStates = store.downloads.map((d) => `${d.id}:${d.state}`).join();
+  unsub.push(on("downloads", () => {
+    renderCatalog(); renderDownloads();
+    const k = store.downloads.map((d) => `${d.id}:${d.state}`).join();
+    if (k !== dlStates) { dlStates = k; renderRecipes(); } else drawRecipes();
+  }));
   renderAll();
   renderHF();
   renderRecipes();
@@ -56,7 +64,7 @@ export function mount(main) {
     const gpuText = gpus.length ? gpus.map((g) => g.name).join(", ") : "None found";
     const vram = gpus.reduce((a, g) => a + (g.unified ? 0 : g.memory_total || 0), 0);
     const apple = gpus.find((g) => g.unified);
-    clear(hw,
+    patch(hw,
       tile("Processor", s.cpu?.name || "–", `${s.cpu?.physical || "?"} cores · ${s.cpu?.arch || ""}${s.cpu?.avx2 === false ? " · no AVX2" : ""}`),
       tile("Memory", fmt.gib(s.memory?.total, 0), `${fmt.gib(s.memory?.available)} free right now`),
       tile(gpus.length > 1 ? "GPUs" : "GPU", apple ? apple.name : vram ? fmt.gib(vram, 0) : "–",
@@ -72,16 +80,22 @@ export function mount(main) {
   // ------------------------------------------------------------------------------------------- recipes
 
   const FIT_ORDER = { good: 0, tight: 1, too_big: 2 };
-  let recipeBusy = false;
   async function renderRecipes() {
     if (recipeBusy) return;
     recipeBusy = true;
     let data;
     try { data = await get("/api/recipes"); } catch (e) { recipeBox.hidden = e.status === 404 || e.status === 501; recipeBusy = false; return; }
     recipeBusy = false;
+    recipeData = data;
+    drawRecipes();
+  }
+  // the cards again from the last answer: a running download moves its percentage without asking the server
+  function drawRecipes() {
+    const data = recipeData;
+    if (!data) return;
     const list = [...(data.recipes || [])].sort((a, b) =>
       (FIT_ORDER[a.fit?.verdict] ?? 1) - (FIT_ORDER[b.fit?.verdict] ?? 1) || (a.size || 0) - (b.size || 0));
-    clear(recipeGrid, list.map(recipeCard),
+    patch(recipeGrid, list.map(recipeCard),
       (data.problems || []).length ? h("div", { class: "callout warn" }, icon("alert", "sm"),
         h("div", { class: "small" }, "Skipped: ", data.problems.join(" · "))) : null);
   }
@@ -93,7 +107,7 @@ export function mount(main) {
     // a plugin engine is installed from its release the first time, which the start request waits for
     const action = r.downloaded ? h("button", { class: "btn primary sm", onclick: async (ev) => {
           const b = ev.currentTarget; b.disabled = true;
-          try { await post(`/api/recipes/${encodeURIComponent(r.id)}/start`, {}); await refreshState(); toast(`Starting ${r.title}`); navigate("/"); }
+          try { await withEngine(() => post(`/api/recipes/${encodeURIComponent(r.id)}/start`, {})); await refreshState(); toast(`Starting ${r.title}`); navigate("/"); }
           catch (e) { toast(e.message, "bad"); }
           finally { b.disabled = false; }
         } }, icon("play", "sm"), "Start")
@@ -126,7 +140,7 @@ export function mount(main) {
     const cat = store.state?.catalog;
     if (!cat) return;
     const jobs = new Map(store.downloads.map((d) => [d.dedupe, d]));
-    clear(catGrid, cat.map((m) => modelCard(m, jobs.get(`catalog:${m.id}`))));
+    patch(catGrid, cat.map((m) => modelCard(m, jobs.get(`catalog:${m.id}`))));
   }
 
   function modelCard(m, job) {
@@ -230,8 +244,8 @@ export function mount(main) {
 
   function renderDownloads() {
     const jobs = store.downloads.filter((d) => d.state !== "done" || Date.now() / 1000 - (d.finished || 0) < 600);
-    if (!jobs.length) { clear(dlBox); return; }
-    clear(dlBox, section("Downloads", "", h("div", { class: "card", style: { padding: 0 } },
+    if (!jobs.length) { patch(dlBox); return; }
+    patch(dlBox, section("Downloads", "", h("div", { class: "card", style: { padding: 0 } },
       jobs.map((j) => h("div", { class: "dl" }, h("div", { class: "top" }, icon(j.kind === "engine" ? "engine" : "download", "sm"),
         h("b", null, j.title), h("span", { class: "tag" }, `${j.files.length} file${j.files.length > 1 ? "s" : ""}`)), jobBlock(j))))));
   }
@@ -273,7 +287,7 @@ export function mount(main) {
           h("button", { class: "btn ghost icon sm", title: m.source === "import" ? "Remove from the list" : "Delete the files",
             "aria-label": "Remove", onclick: () => removeModel(m) }, icon("trash", "sm"))));
     });
-    clear(libBox, section("Your library", `Models in ${store.state?.settings?.models_dir || "the models folder"} and files you added.`,
+    patch(libBox, section("Your library", `Models in ${store.state?.settings?.models_dir || "the models folder"} and files you added.`,
       h("div", { class: "card", style: { padding: 0 } },
         rows.length ? rows : h("div", { class: "empty" }, "No models yet. Download one above or add a GGUF file you already have."),
         h("div", { class: "lib-row", style: { borderTop: rows.length ? "1px solid var(--line)" : "0" } },
@@ -294,7 +308,7 @@ export function mount(main) {
 
   async function loadModel(id) {
     try {
-      store.engine = await post("/api/engine/start", { model: id });
+      store.engine = await withEngine(() => post("/api/engine/start", { model: id }));
       emit("engine");
       navigate("/");
     } catch (e) {
