@@ -1,6 +1,6 @@
 # Agent
 
-The Agent page runs **FLE Durable** next to your model: a local agent that is always on and works from events instead of
+The Agent page runs **[FLE Durable](https://github.com/sirfyyn/fle-durable)** next to your model: a local agent that is always on and works from events instead of
 waiting for you to type. It uses the model on the Engine page through FLE Link's own `/v1`, so it follows whatever model
 you run.
 
@@ -22,7 +22,11 @@ you run.
 ## Set up
 
 1. Node.js 22.19 or newer.
-2. FLE Durable in a folder, its packages installed once: `npm ci --ignore-scripts` in that folder.
+2. [FLE Durable](https://github.com/sirfyyn/fle-durable) in a folder, its packages installed once:
+
+   ```bash
+   git clone https://github.com/sirfyyn/fle-durable && cd fle-durable && npm ci --ignore-scripts
+   ```
 3. Agent page → Set up: the folder (and Node's path if it is not on the PATH). Start the engine, then the agent.
    "Start with FLE Link" starts it with FLE Link from then on.
 
@@ -50,5 +54,6 @@ The page talks to the runner only through FLE Link; the runner listens on the lo
 | `DELETE /api/p/agent/agenda/<id>` · `POST …/<id>/pause` | remove, pause or resume |
 | `POST /api/p/agent/events` | webhook |
 | `GET /api/p/agent/queue` | what waits for the agent |
-| `GET /api/p/agent/approvals` · `POST …/<id>` | open approvals, decide (`entscheidung`: `erteilt` or `abgelehnt`) |
+| `GET /api/p/agent/approvals` · `POST …/<id>` | open approvals, decide (`decision`: `granted` or `refused`, `note`) |
+| `GET /api/p/agent/conversation` · `POST /api/p/agent/message` | the conversation; write to the agent |
 | `POST /api/p/agent/chat` | a one-time address for its chat page |

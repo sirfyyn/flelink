@@ -26,6 +26,9 @@ upstream llama.cpp as fallback, or any llama-server compatible build of your own
  your tools (chat page, editor, agent)  ──/v1──►  FLE Link  ──►  engine (FLE, llama.cpp, your build)
 ```
 
+Above it, [FLE Durable](https://github.com/sirfyyn/fle-durable) is the agent: always on, works from events (its agenda,
+webhooks, your messages), and FLE Link starts it with your model on the Agent page.
+
 | | |
 |---|---|
 | **66 s** | from nothing to the first answer on Linux with an NVIDIA card |
@@ -134,7 +137,7 @@ reproduces them elsewhere. Format and places: [docs/RECIPES.md](docs/RECIPES.md)
 - **Expert cache**: hit rate over time and per layer, read from the FLE engine's log.
 - **Forge**: build your own quant: hybrids from whole expert layers of other quants (exact choice for a size budget, memory
   preview), quantization with an importance matrix, expert pruning, KL-divergence check, a recipe file others can rebuild.
-- **Agent**: FLE Durable next to your model, an always-on local agent that works from events. You plan things on its
+- **Agent**: [FLE Durable](https://github.com/sirfyyn/fle-durable) next to your model, an always-on local agent that works from events. You plan things on its
   agenda (once, daily, on certain days, every few minutes), it plans its own follow-ups, any tool can hand it an event by
   webhook; destructive steps wait for your approval. Needs Node 22.19+ and FLE Durable: [docs/AGENT.md](docs/AGENT.md).
 - **Tools**: MCP servers (stdio and Streamable HTTP, OAuth sign-in, MCP Apps) as chat tools, asked before each call unless trusted.

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Agent:** a new built-in page runs FLE Durable next to your model, an always-on local agent that works from events: an
+- **Agent:** a new built-in page runs [FLE Durable](https://github.com/sirfyyn/fle-durable) next to your model, an always-on local agent that works from events: an
   agenda you and the agent plan (once, daily, on certain days, every few minutes), webhooks (`POST /api/p/agent/events`),
   one durable queue, approvals for destructive steps. FLE Link starts and stops it, gives it the engine's model and window,
   and keeps its token to itself. Needs Node 22.19+ and FLE Durable ([docs/AGENT.md](docs/AGENT.md)).

@@ -121,13 +121,11 @@ export function mount(main, kit) {
   function renderSetup() {
     const s = status;
     if (!s || (s.installed && s.node.ok)) return clear(setupBox);
-    const form = { runner_dir: s.runner_dir || "", node: "", language: s.language || "en" };
+    const form = { runner_dir: s.runner_dir || "", node: "" };
     const dir = h("input", { class: "input mono", value: form.runner_dir, spellcheck: "false", placeholder: "~/fle-durable",
       oninput: (e) => { form.runner_dir = e.target.value; } });
     const node = h("input", { class: "input mono", value: "", spellcheck: "false", placeholder: s.node.ok ? s.node.path : "empty: node from the PATH",
       oninput: (e) => { form.node = e.target.value; } });
-    const lang = h("select", { class: "select", onchange: (e) => { form.language = e.target.value; } },
-      [["en", "English"], ["de", "Deutsch"]].map(([v, l]) => h("option", { value: v, selected: v === form.language }, l)));
     const save = h("button", { class: "btn primary", onclick: (e) => busy(e.currentTarget, async () => {
       status = await api.post("/setup", form);
       renderStatus();
@@ -135,13 +133,12 @@ export function mount(main, kit) {
     }) }, icon("check", "sm"), "Save");
     clear(setupBox, h("div", { class: "card stack" },
       h("div", { class: "card-head" }, icon("wrench"), h("div", { class: "grow" }, h("h3", null, "Set up"),
-        h("p", null, "The agent is FLE Durable, a Node program. FLE Link starts it and gives it your model."))),
+        h("p", null, "The agent is FLE Durable (github.com/sirfyyn/fle-durable), a Node program. FLE Link starts it and gives it your model."))),
       s.node.ok ? callout("info", `Node ${s.node.version} found at ${s.node.path}.`) : callout("warn", s.node.error),
       s.problem ? callout("warn", s.problem) : null,
       h("div", { class: "grid two" },
-        field("FLE Durable folder", dir, "The folder with src/durable.js; inside it once: npm ci --ignore-scripts"),
+        field("FLE Durable folder", dir, "git clone https://github.com/sirfyyn/fle-durable, then inside it once: npm ci --ignore-scripts"),
         field("Node (optional)", node, "Node 22.19 or newer")),
-      h("div", { class: "grid two" }, field("Language of the agent", lang)),
       h("div", { class: "row" }, save)));
   }
 
@@ -233,11 +230,11 @@ export function mount(main, kit) {
 
   function renderSide() {
     if (!status?.running) return clear(sideBox);
-    const waiting = queue?.eintraege ?? [];
-    const open = approvals.filter((f) => f.status === "offen");
-    const decide = (f, entscheidung) => (e) => busy(e.currentTarget, async () => {
-      await api.post(`/approvals/${encodeURIComponent(f.id)}`, { entscheidung });
-      toast(entscheidung === "erteilt" ? "Allowed" : "Refused", "good");
+    const waiting = queue?.entries ?? [];
+    const open = approvals.filter((f) => f.status === "open");
+    const decide = (f, decision) => (e) => busy(e.currentTarget, async () => {
+      await api.post(`/approvals/${encodeURIComponent(f.id)}`, { decision });
+      toast(decision === "granted" ? "Allowed" : "Refused", "good");
       refresh();
     });
     const hookUrl = `${location.origin}/api/p/agent/events`;
@@ -246,16 +243,16 @@ export function mount(main, kit) {
         h("div", { class: "card-head" }, icon("alert"), h("div", { class: "grow" }, h("h3", null, "Asks you"),
           h("p", null, "Only destructive steps wait for you."))),
         open.map((f) => h("div", { class: "ag-approval stack" },
-          h("div", { class: "ag-title" }, f.aktion),
-          f.kontext ? h("p", { class: "faint" }, f.kontext) : null,
-          f.befehl ? h("pre", { class: "mono ag-cmd" }, f.befehl) : null,
-          h("div", { class: "row" }, h("button", { class: "btn primary", onclick: decide(f, "erteilt") }, "Allow"),
-            h("button", { class: "btn", onclick: decide(f, "abgelehnt") }, "Refuse"))))) : null,
+          h("div", { class: "ag-title" }, f.action),
+          f.context ? h("p", { class: "faint" }, f.context) : null,
+          f.command ? h("pre", { class: "mono ag-cmd" }, f.command) : null,
+          h("div", { class: "row" }, h("button", { class: "btn primary", onclick: decide(f, "granted") }, "Allow"),
+            h("button", { class: "btn", onclick: decide(f, "refused") }, "Refuse"))))) : null,
       h("div", { class: "card stack" },
         h("div", { class: "card-head" }, icon("layers"), h("div", { class: "grow" }, h("h3", null, "Waiting"),
           h("p", null, waiting.length ? `${waiting.length} event${waiting.length === 1 ? "" : "s"} for the agent` : "Nothing waits; the agent is up to date."))),
-        waiting.map((e) => h("div", { class: "ag-event" }, h("div", { class: "row" }, h("span", { class: "tag" }, e.quelle),
-          e.klasse === "max" ? h("span", { class: "pill info" }, "right of way") : null, h("span", { class: "grow" }), h("span", { class: "faint" }, ago(e.angenommen))),
+        waiting.map((e) => h("div", { class: "ag-event" }, h("div", { class: "row" }, h("span", { class: "tag" }, e.source),
+          e.priority === "owner" ? h("span", { class: "pill info" }, "right of way") : null, h("span", { class: "grow" }), h("span", { class: "faint" }, ago(e.accepted))),
           h("div", { class: "faint ag-text" }, e.text)))),
       h("div", { class: "card stack" },
         h("div", { class: "card-head" }, icon("refresh"), h("div", { class: "grow" }, h("h3", null, "Fired recently"))),
@@ -266,7 +263,7 @@ export function mount(main, kit) {
       h("div", { class: "card stack" },
         h("div", { class: "card-head" }, icon("link"), h("div", { class: "grow" }, h("h3", null, "Webhook"),
           h("p", null, "Any tool can hand the agent an event. The same id twice counts once."))),
-        h("pre", { class: "mono ag-cmd" }, `curl -X POST ${hookUrl} \\\n  -H 'X-Agent-Key: ${status.webhook_key}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"id":"ci-42","von":"ci","text":"Build 42 failed on main"}'`),
+        h("pre", { class: "mono ag-cmd" }, `curl -X POST ${hookUrl} \\\n  -H 'X-Agent-Key: ${status.webhook_key}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"id":"ci-42","from":"ci","text":"Build 42 failed on main"}'`),
         h("p", { class: "hint" }, "The key is this agent's own. From another computer add the access key as Bearer token.")));
   }
 
@@ -279,7 +276,7 @@ export function mount(main, kit) {
         [agenda, queue, approvals] = await Promise.all([
           api.get("/agenda").catch(() => agenda),
           api.get("/queue").catch(() => queue),
-          api.get("/approvals").then((r) => r.freigaben ?? []).catch(() => approvals),
+          api.get("/approvals").then((r) => r.approvals ?? []).catch(() => approvals),
         ]);
       } else {
         agenda = null;

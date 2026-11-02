@@ -6,8 +6,8 @@
 //! only through the routes here; the runner's token never leaves this server.
 //!
 //! Settings in `<data>/agent/settings.json` (the plugin's own file; FLE Link's settings stay as the Studio's):
-//! `runner_dir` (a checkout or package of FLE Durable, with `src/durable.js` and its `node_modules`), `node` (empty: from the
-//! PATH), `autostart`, `language` (en, de), `workspace` (empty: `<data>/agent/work`).
+//! `runner_dir` (a checkout of github.com/sirfyyn/fle-durable, with `src/main.js` and its `node_modules`), `node` (empty: from
+//! the PATH), `autostart`, `workspace` (empty: `<data>/agent/work`).
 //! The runner's files live in `<data>/agent/` too: `config.json` (FLE Link sets model window, zone and device on every start and
 //! keeps the rest, so `ports` and other keys you add stay), `durable.sqlite` (conversations, agenda, queue), `work/`.
 use crate::server::ApiError;
@@ -44,7 +44,6 @@ pub struct Agent {
 pub struct AgentSettings {
     pub runner_dir: String,
     pub node: String,
-    pub language: String,
     pub workspace: String,
 }
 
@@ -108,11 +107,11 @@ pub fn find_node(configured: &str) -> Result<(PathBuf, String), String> {
 /// Is FLE Durable in `dir`, with its packages installed?
 pub fn runner_problem(dir: &str) -> Option<String> {
     if dir.trim().is_empty() {
-        return Some("Enter the folder of FLE Durable (the one with src/durable.js).".into());
+        return Some("Enter the folder of FLE Durable (the one with src/main.js; git clone https://github.com/sirfyyn/fle-durable).".into());
     }
     let d = expand(dir.trim());
-    if !d.join("src").join("durable.js").is_file() {
-        return Some(format!("{} has no src/durable.js.", d.display()));
+    if !d.join("src").join("main.js").is_file() {
+        return Some(format!("{} has no src/main.js.", d.display()));
     }
     if !d
         .join("node_modules")
@@ -141,7 +140,7 @@ fn token() -> String {
     hex::encode(b)
 }
 
-/// The runner's config: the file as it is, with the keys FLE Link owns set again.
+/// The runner's config: the file as it is, with the keys FLE Link owns set again (model name, window, answer limit, zone).
 pub fn runner_config(existing: Option<Value>, n_ctx: u64, zone: &str) -> Value {
     let mut cfg = existing
         .filter(Value::is_object)
@@ -149,23 +148,14 @@ pub fn runner_config(existing: Option<Value>, n_ctx: u64, zone: &str) -> Value {
     let o = cfg.as_object_mut().unwrap();
     o.entry("agent").or_insert(json!("agent"));
     let window = n_ctx.max(4096);
-    let pd = o.entry("pi_durable").or_insert(json!({}));
-    if !pd.is_object() {
-        *pd = json!({});
+    let model = o.entry("model").or_insert(json!({}));
+    if !model.is_object() {
+        *model = json!({});
     }
-    let pd = pd.as_object_mut().unwrap();
-    pd.insert(
-        "device".into(),
-        json!({"id": "flelink", "name": "FLE Link", "kind": if cfg!(target_os = "macos") { "mac" } else { "linux" }}),
-    );
-    let provider = pd.entry("provider").or_insert(json!({}));
-    if !provider.is_object() {
-        *provider = json!({});
-    }
-    provider.as_object_mut().unwrap().insert(
-        "rhea".into(),
-        json!({"name": "FLE Link", "contextWindow": window, "maxTokens": (window / 4).clamp(1024, 16384), "sperrtSpielmodus": false}),
-    );
+    let model = model.as_object_mut().unwrap();
+    model.insert("name".into(), json!("FLE Link"));
+    model.insert("contextWindow".into(), json!(window));
+    model.insert("maxTokens".into(), json!((window / 4).clamp(1024, 16384)));
     let agenda = o.entry("agenda").or_insert(json!({}));
     if !agenda.is_object() {
         *agenda = json!({});
@@ -202,12 +192,10 @@ impl Agent {
     pub fn settings(&self) -> (AgentSettings, bool) {
         let raw = self.settings_raw();
         let s = |k: &str| raw.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-        let lang = s("language");
         (
             AgentSettings {
                 runner_dir: s("runner_dir"),
                 node: s("node"),
-                language: if lang.is_empty() { "en".into() } else { lang },
                 workspace: s("workspace"),
             },
             raw.get("autostart")
@@ -315,7 +303,7 @@ impl Agent {
             "installed": problem.is_none(), "problem": problem.unwrap_or_default(), "runner_dir": s.runner_dir, "node": node,
             "running": r.child.is_some(), "pid": r.child.as_ref().map(Child::id), "port": if r.child.is_some() { r.port } else { 0 },
             "started": if r.child.is_some() { json!(r.started) } else { Value::Null }, "error": r.error, "exit": r.exit,
-            "autostart": autostart, "language": if s.language.is_empty() { "en" } else { &s.language }, "workspace": s.workspace,
+            "autostart": autostart, "workspace": s.workspace,
             "data_dir": self.dir.to_string_lossy(), "log": log, "webhook_key": self.webhook_key(),
         })
     }
@@ -359,27 +347,23 @@ impl Agent {
         let port = free_port()?;
         let tok = token();
         let mut cmd = Command::new(&node);
-        cmd.arg(runner.join("src").join("durable.js"))
+        cmd.arg(runner.join("src").join("main.js"))
             .current_dir(&runner)
-            .env("FYOS_RUNNER_CONFIG", &cfg_path)
-            .env("FYOS_RUNNER_TOKEN", &tok)
-            .env("FYOS_RUNNER_HOST", "127.0.0.1")
-            .env("FYOS_RUNNER_PORT", port.to_string())
-            .env("FYOS_RUNNER_STORAGE", self.dir.join("durable.sqlite"))
-            .env("FYOS_RUNNER_WORKSPACE", &work)
+            .env("FLE_DURABLE_CONFIG", &cfg_path)
+            .env("FLE_DURABLE_HOME", &self.dir)
+            .env("FLE_DURABLE_TOKEN", &tok)
+            .env("FLE_DURABLE_HOST", "127.0.0.1")
+            .env("FLE_DURABLE_PORT", port.to_string())
+            .env("FLE_DURABLE_WORKSPACE", &work)
             .env(
-                "FYOS_RUNNER_SPRACHE",
-                if s.language == "de" { "de" } else { "en" },
-            )
-            .env(
-                "FYOS_MODELL_BASIS_URL",
+                "FLE_DURABLE_MODEL_URL",
                 format!("http://127.0.0.1:{studio_port}/v1"),
             )
-            .env("FYOS_MODELL_SCHLUESSEL", "flelink")
             .env(
-                "FYOS_MODELL_NAME",
+                "FLE_DURABLE_MODEL",
                 if model.is_empty() { "local" } else { model },
             )
+            .env("FLE_DURABLE_CONTEXT", n_ctx.max(4096).to_string())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -479,7 +463,6 @@ impl Agent {
         };
         let req = ureq::request(method, &format!("http://127.0.0.1:{port}{path}"))
             .set("Authorization", &format!("Bearer {tok}"))
-            .set("X-FYOS-Agent", "1")
             .timeout(Duration::from_secs(20));
         let res = match body {
             Some(b) => req
@@ -496,9 +479,8 @@ impl Agent {
             Ok(r) => parse(r).ok_or_else(|| ApiError(502, "FLE Durable sent no JSON".into())),
             Err(ureq::Error::Status(code, r)) => {
                 let v = parse(r).unwrap_or(json!({}));
-                let msg = v["fehler"]
+                let msg = v["error"]
                     .as_str()
-                    .or(v["error"].as_str())
                     .unwrap_or("FLE Durable refused the call")
                     .to_string();
                 Err(ApiError(code, msg))
@@ -509,7 +491,7 @@ impl Agent {
 
     /// A one-time address for the runner's own chat page (the code turns into a cookie there, the token stays here).
     pub fn chat_url(&self) -> Result<Value, ApiError> {
-        let v = self.call("POST", "/api/sitzung/code", Some(&json!({})))?;
+        let v = self.call("POST", "/api/session/code", Some(&json!({})))?;
         let port = self.run.lock().unwrap().port;
         let code = v["code"].as_str().unwrap_or_default();
         Ok(json!({"url": format!("http://127.0.0.1:{port}/?code={code}")}))
@@ -537,8 +519,9 @@ pub fn proxied(method: &str, rest: &str) -> Option<(&'static str, String)> {
         ("POST", "agenda") => Some(("POST", "/api/agenda".into())),
         ("POST", "events") => Some(("POST", "/api/events".into())),
         ("GET", "queue") => Some(("GET", "/api/queue".into())),
-        ("GET", "approvals") => Some(("GET", "/api/freigaben".into())),
-        ("GET", "conversations") => Some(("GET", "/api/gespraeche".into())),
+        ("GET", "approvals") => Some(("GET", "/api/approvals".into())),
+        ("GET", "conversation") => Some(("GET", "/api/conversation".into())),
+        ("POST", "message") => Some(("POST", "/api/message".into())),
         _ => {
             let (kind, tail) = rest.split_once('/')?;
             match (method, kind, tail.split_once('/')) {
@@ -549,7 +532,7 @@ pub fn proxied(method: &str, rest: &str) -> Option<(&'static str, String)> {
                     Some(("POST", format!("/api/agenda/{id}/pause")))
                 }
                 ("POST", "approvals", None) if id_ok(tail) => {
-                    Some(("POST", format!("/api/freigaben/{tail}")))
+                    Some(("POST", format!("/api/approvals/{tail}")))
                 }
                 _ => None,
             }
@@ -562,13 +545,9 @@ pub fn merge_settings(
     mut cur: Map<String, Value>,
     body: &Map<String, Value>,
 ) -> Map<String, Value> {
-    for k in ["runner_dir", "node", "language", "workspace"] {
+    for k in ["runner_dir", "node", "workspace"] {
         if let Some(v) = body.get(k).and_then(Value::as_str) {
-            let v = v.trim();
-            if k == "language" && !matches!(v, "en" | "de") {
-                continue;
-            }
-            cur.insert(k.into(), json!(v));
+            cur.insert(k.into(), json!(v.trim()));
         }
     }
     if let Some(b) = body.get("autostart").and_then(Value::as_bool) {
@@ -591,15 +570,16 @@ mod tests {
 
     #[test]
     fn config_keeps_what_the_user_added_and_sets_ours() {
-        let mine = json!({"ports": {"sources": ["agenda", "./mine.js"]}, "pi_durable": {"provider": {"rhea": {"contextWindow": 1}}, "x": 1}});
+        let mine = json!({"ports": {"sources": ["agenda", "./mine.js"]}, "model": {"contextWindow": 1, "x": 1}, "instructions": "be brief"});
         let c = runner_config(Some(mine), 32768, "Europe/Berlin");
         assert_eq!(c["ports"]["sources"][1], "./mine.js");
-        assert_eq!(c["pi_durable"]["x"], 1);
-        assert_eq!(c["pi_durable"]["provider"]["rhea"]["contextWindow"], 32768);
-        assert_eq!(c["pi_durable"]["provider"]["rhea"]["maxTokens"], 8192);
+        assert_eq!(c["instructions"], "be brief");
+        assert_eq!(c["model"]["x"], 1);
+        assert_eq!(c["model"]["contextWindow"], 32768);
+        assert_eq!(c["model"]["maxTokens"], 8192);
         assert_eq!(c["agenda"]["zone"], "Europe/Berlin");
         assert_eq!(
-            runner_config(None, 0, "UTC")["pi_durable"]["provider"]["rhea"]["contextWindow"],
+            runner_config(None, 0, "UTC")["model"]["contextWindow"],
             4096
         );
     }
@@ -620,7 +600,7 @@ mod tests {
         );
         assert_eq!(
             proxied("POST", "approvals/f-1"),
-            Some(("POST", "/api/freigaben/f-1".into()))
+            Some(("POST", "/api/approvals/f-1".into()))
         );
         assert_eq!(proxied("DELETE", "agenda/../../x"), None);
         assert_eq!(proxied("GET", "verwaltung"), None);
@@ -629,18 +609,23 @@ mod tests {
 
     #[test]
     fn settings_merge_only_known_keys() {
-        let cur = merge_settings(Map::new(), json!({"runner_dir": " ~/fle-durable ", "autostart": true, "evil": "x", "language": "fr"}).as_object().unwrap());
+        let cur = merge_settings(
+            Map::new(),
+            json!({"runner_dir": " ~/fle-durable ", "autostart": true, "evil": "x"})
+                .as_object()
+                .unwrap(),
+        );
         assert_eq!(
             Value::Object(cur.clone()),
             json!({"runner_dir": "~/fle-durable", "autostart": true})
         );
         let next = merge_settings(
             cur,
-            json!({"language": "de", "autostart": false})
+            json!({"workspace": "~/w", "autostart": false})
                 .as_object()
                 .unwrap(),
         );
-        assert_eq!(next["language"], "de");
+        assert_eq!(next["workspace"], "~/w");
         assert_eq!(next["autostart"], false);
         assert_eq!(next["runner_dir"], "~/fle-durable");
     }
@@ -667,6 +652,6 @@ mod tests {
         assert!(runner_problem("").unwrap().contains("folder"));
         assert!(runner_problem("/nonexistent/fle-durable")
             .unwrap()
-            .contains("src/durable.js"));
+            .contains("src/main.js"));
     }
 }

@@ -1153,17 +1153,12 @@ impl Studio {
             _ => {
                 let (m, path) = crate::agent::proxied(method, rest)
                     .ok_or_else(|| ApiError(404, "Not found".into()))?;
-                let mut b = if m == "POST" {
+                // FLE Durable records every decision through its token as the owner's; the page cannot name someone else
+                let b = if m == "POST" {
                     Some(Value::Object(body()?))
                 } else {
                     None
                 };
-                // approvals decided here count as the owner's, from FLE Link; the page cannot name someone else
-                if path.starts_with("/api/freigaben/") {
-                    if let Some(Value::Object(o)) = b.as_mut() {
-                        o.insert("von".into(), json!("flelink"));
-                    }
-                }
                 self.agent.call(m, &path, b.as_ref())
             }
         }
