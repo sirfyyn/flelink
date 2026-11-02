@@ -18,6 +18,9 @@ enum Mode {
     Range,
     NoRange,
     CutFirst,
+    CutAlways,
+    /// the first answer breaks after a third, every later one breaks before a single byte
+    Dies,
 }
 
 struct Srv {
@@ -82,13 +85,23 @@ fn serve(mode: Mode) -> Srv {
             } else {
                 "200 OK"
             };
-            if mode == Mode::CutFirst && nth == 1 {
+            if mode == Mode::Dies && nth > 1 {
+                let _ = write!(s, "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", part.len());
+                continue;
+            }
+            if (mode == Mode::CutFirst && nth == 1) || mode == Mode::CutAlways || mode == Mode::Dies
+            {
                 let _ = write!(
                     s,
                     "HTTP/1.1 {code}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                     part.len()
                 );
-                let _ = s.write_all(&part[..part.len() / 3]); // closes with bytes missing
+                let cut = if mode == Mode::CutAlways {
+                    part.len().min(1000)
+                } else {
+                    part.len() / 3
+                };
+                let _ = s.write_all(&part[..cut]); // closes with bytes missing
                 continue;
             }
             reply(&mut s, code, "", part);
@@ -112,6 +125,8 @@ fn part_of(dest: &Path) -> std::path::PathBuf {
     ))
 }
 fn go(url: &str, dest: &Path, s: Option<&str>) -> anyhow::Result<()> {
+    // the pauses between tries in milliseconds, not seconds
+    std::env::set_var("FLE_TEST_FAST_RETRY", "1");
     fetch(url, dest, s, &mut |_, _| {})
 }
 
@@ -188,21 +203,54 @@ fn http_404_and_403_become_readable_errors() {
 }
 
 #[test]
-fn connection_cut_mid_file_is_resumed_by_running_again() {
+fn connection_cut_mid_file_is_picked_up_again_by_itself() {
     let srv = serve(Mode::CutFirst);
     let dest = tmp("cut").join("a.gguf");
     let url = format!("{}/file", srv.url);
-    let e = go(&url, &dest, Some(&sha(&data())))
-        .unwrap_err()
-        .to_string();
-    assert!(e.contains("ended early") || e.contains("error"), "{e}");
-    assert!(
-        part_of(&dest).exists(),
-        "the .part file stays for the resume"
-    );
     go(&url, &dest, Some(&sha(&data()))).unwrap();
     assert_eq!(std::fs::read(&dest).unwrap(), data());
     let r = srv.requests.lock().unwrap();
     assert_eq!(r.len(), 2);
     assert!(!r[1].is_empty(), "the second request asked for the rest");
+}
+
+#[test]
+fn a_connection_that_keeps_breaking_goes_on_while_it_brings_new_bytes() {
+    // every request delivers half of what is left and breaks: progress each time, so it keeps going to the end
+    let srv = serve(Mode::CutAlways);
+    let dest = tmp("cut-always").join("a.gguf");
+    let url = format!("{}/file", srv.url);
+    let r = go(&url, &dest, Some(&sha(&data())));
+    let n = srv.requests.lock().unwrap().len();
+    // more breaks than RETRIES, but each one brought new bytes, so the count started again
+    assert!(n > 6, "{n} requests");
+    assert!(r.is_ok(), "{r:?} after {n} requests");
+    assert_eq!(std::fs::read(&dest).unwrap(), data());
+}
+
+#[test]
+fn no_network_fails_at_once() {
+    let dest = tmp("nonet").join("a.gguf");
+    let t = std::time::Instant::now();
+    let e = go("http://127.0.0.1:9/file", &dest, None)
+        .unwrap_err()
+        .to_string();
+    assert!(t.elapsed() < std::time::Duration::from_secs(5), "{e}");
+}
+
+#[test]
+fn a_connection_that_brings_nothing_any_more_gives_up_and_keeps_the_part_file() {
+    let srv = serve(Mode::Dies);
+    let dest = tmp("dies").join("a.gguf");
+    let url = format!("{}/file", srv.url);
+    let e = go(&url, &dest, Some(&sha(&data())))
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("run again to resume"), "{e}");
+    assert!(
+        part_of(&dest).exists(),
+        "the .part file stays for the next run"
+    );
+    // the first request (a third, then the break) and five more without a single byte
+    assert_eq!(srv.requests.lock().unwrap().len(), 6);
 }
