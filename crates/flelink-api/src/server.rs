@@ -1791,10 +1791,10 @@ impl Studio {
             }
         }
         plan.args.extend(r.run_args(&self.models_dir()));
-        for (k, v) in &r.run.env {
-            match plan.env.iter_mut().find(|(a, _)| a == k) {
-                Some(e) => e.1 = v.clone(),
-                None => plan.env.push((k.clone(), v.clone())),
+        for (k, v) in r.run_env(&self.models_dir()) {
+            match plan.env.iter_mut().find(|(a, _)| *a == k) {
+                Some(e) => e.1 = v,
+                None => plan.env.push((k, v)),
             }
         }
         plan.notes.push(format!("Recipe {}", r.id));

@@ -1,0 +1,62 @@
+id = "deepseek-v41-ista"
+title = "DeepSeek-V4.1-Flash ISTA IQ2_XXS (FLE, hot experts in RAM)"
+note = "ISTA's GSQ-RCO quant with FLE's host-side expert settings: a 22 GB GPU expert cache, the hot experts locked in RAM (memory minus 60 GiB, at most 75) after a profile from the first run, and large batches. Needs the FLE engine after v1.2.1 and permission to lock memory (FLE Link says so in the engine log when the system does not allow it). The expert cache bias (0.05) changes the output slightly (KL divergence 0.014 against the exact run); set FLE_MOE_CACHE_BIAS and FLE_MOE_HOT_BIAS to 0 for the exact output. No draft model: with this cache it does not help any more. About 255 GB on a fast NVMe."
+
+[model]
+repo = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"
+files = [
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00001-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00002-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00003-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00004-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00005-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
+]
+size = 248834257920
+
+[model.save_as]
+"DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf" = "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00006-of-00006.gguf"
+
+[model.sha256]
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00001-of-00006.gguf" = "f356f198561f56df36f7ab92d7238a926646d76de992c34f15bcb939a5f529b9"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00002-of-00006.gguf" = "25af3785ccf925f54137e1ead4c481a8952315dc0b1af6519a99407f67bce8f3"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00003-of-00006.gguf" = "8168d0998fc494def2e1952d83c131425a108660aae9d29190f5a8670ab62b48"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00004-of-00006.gguf" = "9eb9b4de1968f150dfc207eb31c27be9cd9b5666a9a6246bde8a22b184b4bee0"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00005-of-00006.gguf" = "7e35f6b4e6fc46f6c4b152b593d84d683c5ece695ae6ad734f556198c041bec1"
+"DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf" = "3dac4c54893ad7aa89103c0028500eadc78e74112cef3a2930a97e67dc9fb4f3"
+
+[engine]
+prefer = ["fle"]
+strict = true
+
+[run]
+context = 16384
+# -t: physical cores only (SMT threads made it much slower)
+args = [
+  "--jinja", "-ngl", "99", "-cmoe", "-t", "{physical_cores}", "-ctk", "q8_0", "-ctv", "q8_0",
+  "-fit", "on", "--fit-target", "1115", "--moe-expert-cache-inserts", "1", "-b", "4096", "-ub", "4096",
+]
+
+[run.env]
+FLE_MOE_CACHE_BUDGET_FIT = "1"
+FLE_MOE_CACHE_BUDGET_MIB = "22000"
+FLE_MOE_PROFILE = "{profile}"
+FLE_MOE_HOT_MLOCK_GB = "{hot_mlock_gb}"
+FLE_MMAP_NO_RANDOM = "1"
+FLE_MOE_WILLNEED_NOW = "1"
+FLE_MC_OVERLAP = "1"
+FLE_MOE_CACHE_BIAS = "0.05"
+FLE_MOE_HOT_BIAS = "0.02"
+FLE_UBATCH_LEND = "1"
+FLE_UBATCH_PREFETCH = "1"
+FLE_UBATCH_PREFETCH_SLOTS = "3"
+FLE_PREFILL_LEAN = "1"
+FLE_HC_FUSED = "1"
+
+# where it was measured, not a determined minimum
+[requires]
+ram_gib = 120
+vram_gib = 32
+
+[chat]
+thinking = false

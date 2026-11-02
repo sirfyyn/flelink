@@ -322,20 +322,57 @@ impl Recipe {
             .map(|_| models.join(&self.fetches().last().unwrap().local))
     }
 
-    /// `run.args` with `{draft}` (the draft model's path) and `{physical_cores}` filled in.
+    /// A file the engine keeps between starts for this recipe (an expert usage profile): `<models>/profiles/<id>.prof`.
+    pub fn profile_path(&self, models: &Path) -> PathBuf {
+        models.join("profiles").join(format!("{}.prof", self.id))
+    }
+
+    /// Fill the placeholders of `run.args` and `run.env`: `{draft}` (the draft model's path), `{physical_cores}`,
+    /// `{profile}` (profile_path; its folder is created) and `{hot_mlock_gb}` (memory minus 60 GiB, at most 75, at least 0:
+    /// how much of the hot experts may be locked in RAM).
+    pub fn fill(&self, text: &str, models: &Path) -> String {
+        let mut t = text.to_string();
+        if t.contains("{draft}") {
+            let draft = self
+                .draft_path(models)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            t = t.replace("{draft}", &draft);
+        }
+        if t.contains("{physical_cores}") {
+            t = t.replace(
+                "{physical_cores}",
+                &crate::system::physical_cores().to_string(),
+            );
+        }
+        if t.contains("{profile}") {
+            let p = self.profile_path(models);
+            if let Some(d) = p.parent() {
+                let _ = std::fs::create_dir_all(d);
+            }
+            t = t.replace("{profile}", &p.to_string_lossy());
+        }
+        if t.contains("{hot_mlock_gb}") {
+            let gib = crate::system::detect(models).ram_bytes >> 30;
+            t = t.replace(
+                "{hot_mlock_gb}",
+                &gib.saturating_sub(60).min(75).to_string(),
+            );
+        }
+        t
+    }
+
+    /// `run.args` with the placeholders filled in (see `fill`).
     pub fn run_args(&self, models: &Path) -> Vec<String> {
-        let draft = self
-            .draft_path(models)
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let cores = crate::system::physical_cores().to_string();
+        self.run.args.iter().map(|a| self.fill(a, models)).collect()
+    }
+
+    /// `run.env` with the placeholders filled in (see `fill`).
+    pub fn run_env(&self, models: &Path) -> Vec<(String, String)> {
         self.run
-            .args
+            .env
             .iter()
-            .map(|a| {
-                a.replace("{draft}", &draft)
-                    .replace("{physical_cores}", &cores)
-            })
+            .map(|(k, v)| (k.clone(), self.fill(v, models)))
             .collect()
     }
 
@@ -417,17 +454,20 @@ impl Recipe {
             }
         }
         plan.args.extend(self.run_args(models));
-        for (k, v) in &self.run.env {
-            match plan.env.iter_mut().find(|(a, _)| a == k) {
-                Some(e) => e.1 = v.clone(),
-                None => plan.env.push((k.clone(), v.clone())),
+        for (k, v) in self.run_env(models) {
+            match plan.env.iter_mut().find(|(a, _)| *a == k) {
+                Some(e) => e.1 = v,
+                None => plan.env.push((k, v)),
             }
         }
     }
 }
 
 /// Recipes that ship as TOML because the catalog's fields do not cover them (a draft model, engine flags).
-const BUILTIN_TOML: [&str; 1] = [include_str!("../recipes/deepseek-v41-ista-dspark.toml")];
+const BUILTIN_TOML: [&str; 2] = [
+    include_str!("../recipes/deepseek-v41-ista.toml"),
+    include_str!("../recipes/deepseek-v41-ista-dspark.toml"),
+];
 
 /// The built-in catalog as recipes, then the built-in TOML recipes.
 pub fn builtin() -> Vec<Recipe> {
@@ -719,6 +759,32 @@ temperature = 0.2
             ..titan
         };
         assert_eq!(r.fit(&models, &mac), Fit::TooBig);
+        let _ = std::fs::remove_dir_all(&models);
+    }
+
+    #[test]
+    fn the_hot_lock_recipe_fills_profile_and_lock_size() {
+        let r = builtin()
+            .into_iter()
+            .find(|r| r.id == "deepseek-v41-ista")
+            .unwrap();
+        assert!(r.draft.is_none());
+        let models = std::env::temp_dir().join(format!("fle-hot-{}", std::process::id()));
+        let env: std::collections::HashMap<_, _> = r.run_env(&models).into_iter().collect();
+        assert_eq!(
+            Path::new(&env["FLE_MOE_PROFILE"]),
+            models.join("profiles/deepseek-v41-ista.prof")
+        );
+        assert!(
+            models.join("profiles").is_dir(),
+            "the profile folder is made"
+        );
+        let gib = crate::system::detect(&models).ram_bytes >> 30;
+        assert_eq!(
+            env["FLE_MOE_HOT_MLOCK_GB"],
+            gib.saturating_sub(60).min(75).to_string()
+        );
+        assert!(r.run_args(&models).windows(2).any(|w| w == ["-ub", "4096"]));
         let _ = std::fs::remove_dir_all(&models);
     }
 

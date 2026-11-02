@@ -17,7 +17,12 @@ impl Server {
     pub fn start(server: &Path, plan: &Plan, log_dir: &Path) -> Result<Server> {
         std::fs::create_dir_all(log_dir)?;
         let log = log_dir.join("engine.log");
-        let out = std::fs::File::create(&log)?;
+        let mut out = std::fs::File::create(&log)?;
+        if let Some(note) = crate::system::allow_memlock(&plan.env) {
+            use std::io::Write;
+            let _ = writeln!(out, "{note}");
+            eprintln!("{note}");
+        }
         let mut cmd = Command::new(server);
         cmd.args(&plan.args)
             .stdout(Stdio::from(out.try_clone()?))

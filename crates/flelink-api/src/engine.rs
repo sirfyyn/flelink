@@ -413,6 +413,9 @@ impl Engine {
             return Err(format!("no engine at {}", binary.display()));
         }
         let dir = binary.parent().unwrap_or(Path::new(".")).to_path_buf();
+        if let Some(note) = flelink_core::system::allow_memlock(&plan.env) {
+            self.append(&note);
+        }
         let mut cmd = Command::new(&binary);
         cmd.args(&plan.args).current_dir(&dir).stdin(Stdio::null());
         for (k, v) in &plan.env {

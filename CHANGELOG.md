@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **DeepSeek-V4.1 with the hot experts in RAM:** recipe `deepseek-v41-ista` (decision 735: 22 GB expert cache, hot experts
+  locked in RAM after a profile from the first run, large batches); needs the FLE engine after v1.2.1. Recipes can name a
+  per-recipe profile file (`{profile}`) and a lock size from the memory (`{hot_mlock_gb}`); FLE Link raises the limit for
+  locked memory before such an engine starts and says in the engine log when the system does not allow enough.
+
 ## 0.1.0 (2026-11-01)
 
 First version of FLE Link: the layer between an inference engine and the tools that use it.

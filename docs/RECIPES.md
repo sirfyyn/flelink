@@ -50,6 +50,8 @@ strict = true          # only these may run it (the model needs FLE's expert off
 context = 65536                            # tokens; default: sized from free memory
 args = ["--cache-reuse", "256"]            # appended after the automatic arguments; the last value of a flag wins
                                            # {draft}: path of the draft model; {physical_cores}: cores without SMT
+                                           # in args and env also {profile}: <models>/profiles/<id>.prof (a file the
+                                           # engine keeps between starts), {hot_mlock_gb}: memory minus 60 GiB, at most 75
 env = { FLE_MOE_CACHE_BIAS = "0.002" }     # overrides the automatic environment
 
 [requires]             # shown to people; the fit check uses model.size
@@ -65,7 +67,9 @@ top_p = 0.95
 ```
 
 Built-in recipes with a draft model or engine flags of their own are TOML files in `crates/flelink-core/recipes/`
-(`deepseek-v41-ista-dspark`: DeepSeek-V4.1-Flash with FLE's DSpark draft model).
+(`deepseek-v41-ista`: DeepSeek-V4.1-Flash with the hot experts locked in RAM; `deepseek-v41-ista-dspark`: the same model
+with FLE's DSpark draft model, for the FLE engine v1.2.1). An engine that locks memory (`FLE_MOE_HOT_MLOCK_GB`) gets the
+system's limit for locked memory; when that is too low, the engine log says how to allow it.
 
 Checks when a recipe is read: the id and the repo are plain names, every file is a `.gguf` path inside the repo (no `..`,
 no absolute path), environment names are letters, digits and `_`, the context is between 512 and 1,048,576, and unknown
