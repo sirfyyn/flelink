@@ -762,7 +762,7 @@ export function mount(main) {
 
   function lineClass(t) {
     if (t.startsWith("$ ")) return "ln cmdline";
-    if (t.startsWith("FLE Studio:")) return "ln ok";
+    if (t.startsWith("FLE Link:") || t.startsWith("FLE Studio:")) return "ln ok";
     if (/\b(error|failed|fatal|abort|exception|out of memory)\b/i.test(t)) return "ln err";
     if (/\bwarn(ing)?\b/i.test(t)) return "ln warn";
     if (/server is listening|model loaded|all slots are idle/i.test(t)) return "ln ok";

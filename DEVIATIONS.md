@@ -38,7 +38,8 @@ from the IANA zone, Python from the C library). Same zone, same offset; the test
 ## D11: the program is called `flelink`
 
 Hints, error texts and the saved config header say `flelink ...` where the Python helper says `fle ...`. The comparison tests
-apply one rule to Python's output (`common::brand`) and compare everything else word for word.
+apply one rule to Python's output (`common::brand`) and compare everything else word for word. The same for the notes FLE Link writes into the
+engine log: `FLE Link: …` where the Python Studio writes `FLE Studio: …` (the engine test swaps the name before comparing).
 
 ## D12: installed engines before the PATH
 

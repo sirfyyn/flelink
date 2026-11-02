@@ -393,7 +393,7 @@ impl Engine {
                             s.error = msg.clone();
                             s.phase.clear();
                         }
-                        self.append(&format!("FLE Studio: {msg}"));
+                        self.append(&format!("FLE Link: {msg}"));
                     }
                 }
                 Op::Stop => self.terminate(),
@@ -449,7 +449,7 @@ impl Engine {
         self.open_log();
         if !plan.fallback.is_empty() {
             // first line of the new run's log file (the failed run's file is closed by now)
-            self.append(&format!("FLE Studio: {}", plan.fallback));
+            self.append(&format!("FLE Link: {}", plan.fallback));
         }
         let start_line = format!("$ {}", plan.command_line().replace('\n', " "));
         self.append(&start_line);
@@ -528,7 +528,7 @@ impl Engine {
             std::thread::sleep(Duration::from_millis(50));
         }
         if is_running(&c) {
-            self.append("FLE Studio: the engine did not stop within 20 s; killing it");
+            self.append("FLE Link: the engine did not stop within 20 s; killing it");
             let _ = c.lock().unwrap().kill();
             let t = Instant::now();
             while is_running(&c) && t.elapsed() < Duration::from_secs(10) {
@@ -621,7 +621,7 @@ impl Engine {
                         .iter()
                         .rev()
                         .map(|(_, _, t)| t.clone())
-                        .find(|t| !t.starts_with("FLE Studio:"))
+                        .find(|t| !t.starts_with("FLE Link:"))
                         .unwrap_or_default();
                     s.error = format!("The engine exited (code {rc})")
                         + &if last.is_empty() {
@@ -647,7 +647,7 @@ impl Engine {
             }
             error = s.error.clone();
         }
-        self.append(&format!("FLE Studio: engine exited with code {rc}"));
+        self.append(&format!("FLE Link: engine exited with code {rc}"));
         self.close_log();
         if let Some(failed) = failed_load {
             if self.on_load_failure.lock().unwrap().is_some() {
@@ -656,12 +656,12 @@ impl Engine {
             }
         }
         if let Some(plan) = again {
-            self.append("FLE Studio: restart on crash is on; starting the engine again in 5 s");
+            self.append("FLE Link: restart on crash is on; starting the engine again in 5 s");
             let me = self.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_secs(5));
                 if let Err(EngineErr::Busy(m) | EngineErr::Invalid(m)) = me.start(plan) {
-                    me.append(&format!("FLE Studio: not restarted. {m}"));
+                    me.append(&format!("FLE Link: not restarted. {m}"));
                 }
             });
         }
@@ -678,7 +678,7 @@ impl Engine {
         let Some(plan) = replacement else { return };
         // `start` writes the reason as the first line of the new log
         if let Err(EngineErr::Busy(m) | EngineErr::Invalid(m)) = self.start(plan) {
-            self.append(&format!("FLE Studio: the fallback start did not work: {m}"));
+            self.append(&format!("FLE Link: the fallback start did not work: {m}"));
         }
     }
 
