@@ -23,6 +23,7 @@ struct Studio {
 fn client(timeout: Duration) -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
         .timeout(timeout)
+        .user_agent(concat!("flelink-mcp/", env!("CARGO_PKG_VERSION")))
         // host mode serves https with a certificate of its own; this client only ever talks to 127.0.0.1
         .danger_accept_invalid_certs(true)
         .build()
@@ -117,6 +118,8 @@ fn tools() -> Value {
             "model": {"type": "string", "description": "model id from `library`, when not a recipe"},
             "wait_s": {"type": "integer", "description": "how long to wait for ready (default 900)"}}}},
         {"name": "stop", "description": "Stop the loaded model (frees GPU and RAM).", "inputSchema": none},
+        {"name": "requests", "description": "The last answers through FLE Link from any program (the Studio chat, Claude Code, Codex, apps): which API, prompt and output tokens, speed (tok/s, ~ when estimated from the wall clock), duration, HTTP status.",
+         "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "default 20"}}}},
         {"name": "log", "description": "The last lines of the engine log (start command, loading, errors).",
          "inputSchema": {"type": "object", "properties": {"lines": {"type": "integer", "description": "default 60, at most 400"}}}},
         {"name": "settings", "description": "Read the Studio settings, or change some: pass `changes` as an object of the keys to set (the same keys `settings` returns).",
@@ -274,6 +277,30 @@ fn call(s: &Studio, name: &str, a: &Value) -> Result<Value> {
                     _ => std::thread::sleep(Duration::from_secs(1)),
                 }
             }
+        }
+        "requests" => {
+            let n = a.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+            let r = s.get("/api/live/requests")?;
+            json!(r["requests"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(n)
+                .map(|x| pick(
+                    x,
+                    &[
+                        "t",
+                        "client",
+                        "api",
+                        "prompt_n",
+                        "predicted_n",
+                        "predicted_per_second",
+                        "estimated",
+                        "seconds",
+                        "status"
+                    ]
+                ))
+                .collect::<Vec<_>>())
         }
         "stop" => {
             s.post("/api/engine/stop", &json!({}))?;

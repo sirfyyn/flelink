@@ -2254,6 +2254,7 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             }
             Ok(json!({"ok": true}))
         }
+        ("GET", "/api/live/requests") => Ok(st.live.requests()),
         ("GET", "/api/live") => {
             let since = r
                 .query
@@ -3475,6 +3476,23 @@ async fn proxy(
         .to_string();
     let live = st.live.clone();
     live.touch();
+    // for the list of requests: which API, which program, how long
+    let api = ["chat/completions", "messages", "responses", "completions"]
+        .into_iter()
+        .find(|k| parts.uri.path().ends_with(&format!("/v1/{k}")))
+        .map(|k| match k {
+            "messages" => "anthropic",
+            "responses" => "responses",
+            _ => "openai",
+        });
+    let client = client_name(
+        parts
+            .headers
+            .get(header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or(""),
+    );
+    let t0 = std::time::Instant::now();
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(16);
     let (meta_tx, meta_rx) = tokio::sync::oneshot::channel::<Upstream>();
     std::thread::spawn(move || {
@@ -3514,6 +3532,7 @@ async fn proxy(
             .unwrap_or("application/json")
             .to_string();
         let stream = rtype.contains("text/event-stream");
+        let status = resp.status();
         let _ = meta_tx.send(Upstream::Answer {
             status: resp.status(),
             ctype: rtype,
@@ -3542,10 +3561,22 @@ async fn proxy(
                 all.extend_from_slice(&buf[..n]);
             }
         }
-        if stream {
-            record_stream(&live, &all);
-        } else {
-            record_data(&live, &all);
+        let extra = |status: u16| {
+            let mut m = Map::new();
+            m.insert("api".into(), json!(api));
+            m.insert("client".into(), json!(client));
+            m.insert("seconds".into(), json!(t0.elapsed().as_secs_f64()));
+            m.insert("status".into(), json!(status));
+            m
+        };
+        if api.is_some() && method == "POST" {
+            if stream {
+                record_stream(&live, &all, extra(status));
+            } else {
+                record_data(&live, &all, extra(status));
+            }
+        }
+        if !stream {
             let _ = tx.blocking_send(Ok(bytes::Bytes::from(all)));
         }
     });
@@ -3591,23 +3622,76 @@ async fn proxy(
     }
 }
 
-fn record_data(live: &Live, data: &[u8]) {
+fn record_data(live: &Live, data: &[u8], extra: Map<String, Value>) {
     if let Ok(Value::Object(o)) = serde_json::from_slice::<Value>(data) {
-        if let Some(t) = o.get("timings").filter(|t| crate::settings::py_truthy(t)) {
-            live.record_response(t, o.get("usage"));
-        }
+        let t = o
+            .get("timings")
+            .filter(|t| crate::settings::py_truthy(t))
+            .cloned()
+            .unwrap_or(json!({}));
+        // the Responses format keeps its usage inside `response` when it is an event; as a plain answer at the top
+        live.record_request(&t, o.get("usage"), extra);
     }
 }
 
-fn record_stream(live: &Live, tail: &[u8]) {
+/// A streamed answer: the engine timings of the OpenAI format, or the token counts the Anthropic format
+/// (`message_start` input, `message_delta` output) and the Responses format (`response.completed`) send at the end.
+fn record_stream(live: &Live, tail: &[u8], extra: Map<String, Value>) {
     let text = String::from_utf8_lossy(tail).to_string();
     for line in text.lines().rev() {
         if line.starts_with("data:") && line.contains("\"timings\"") {
             let Ok(obj) = serde_json::from_str::<Value>(line[5..].trim()) else {
                 continue;
             };
-            live.record_response(obj.get("timings").unwrap_or(&json!({})), obj.get("usage"));
+            live.record_request(
+                obj.get("timings").unwrap_or(&json!({})),
+                obj.get("usage"),
+                extra,
+            );
             return;
         }
     }
+    let mut usage = Map::new();
+    for line in text.lines() {
+        let Some(d) = line.strip_prefix("data:") else {
+            continue;
+        };
+        let Ok(obj) = serde_json::from_str::<Value>(d.trim()) else {
+            continue;
+        };
+        for u in [
+            &obj["usage"],
+            &obj["message"]["usage"],
+            &obj["response"]["usage"],
+        ] {
+            if let Some(m) = u.as_object() {
+                for (k, v) in m {
+                    if v.as_f64().is_some_and(|x| x > 0.0) || !usage.contains_key(k) {
+                        usage.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+    }
+    if !usage.is_empty() {
+        live.record_request(&json!({}), Some(&Value::Object(usage)), extra);
+    }
+}
+
+/// A short name for the program behind a User-Agent: `claude-cli/2.1 (external, cli)` is `claude-cli`, a browser is
+/// `browser` (the Studio page itself, or a web app).
+fn client_name(ua: &str) -> String {
+    if ua.is_empty() {
+        return String::new();
+    }
+    if ua.starts_with("Mozilla/") {
+        return "browser".into();
+    }
+    ua.split(['/', ' ', ';', '('])
+        .next()
+        .unwrap_or("")
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || "-_.".contains(*c))
+        .take(32)
+        .collect()
 }
