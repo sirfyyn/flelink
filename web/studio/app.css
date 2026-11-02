@@ -808,3 +808,11 @@ svg.i.flip { transform: scaleX(-1); }
 /* the settings for coding agents on the Engine page */
 .seg.wrap { flex-wrap: wrap; }
 .connect-code { margin: 0; padding: 12px 14px; background: var(--code-bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; white-space: pre; line-height: 1.55; }
+
+/* the live preview of an HTML or SVG block (chat.js togglePreview) */
+.codeblock .head [data-preview].on { color: var(--accent); }
+.preview-frame { margin: -0.4em 0 0.9em; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card);
+  animation: page-in 0.22s ease-out both; }
+.preview-frame .head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; font-size: 12px; color: var(--muted);
+  border-bottom: 1px solid var(--line); }
+.preview-frame iframe { display: block; width: 100%; height: min(60vh, 520px); border: 0; background: #fff; resize: vertical; }

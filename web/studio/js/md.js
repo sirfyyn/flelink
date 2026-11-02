@@ -312,9 +312,14 @@ function inline(text) {
 
 // ----------------------------------------------------------------------------------------------- code
 
+// blocks that can be shown as a page right under the code (chat.js: the preview frame)
+const PREVIEWABLE = new Set(["html", "svg", "xml"]);
+const PLAY_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 5v14l11-7z"/></svg>';
+
 function codeBlock(code, lang, open) {
   const label = (lang || "").toLowerCase();
   return `<div class="codeblock${open ? " open" : ""}"><div class="head"><span>${esc(label || "text")}</span>` +
+    (PREVIEWABLE.has(label) && !open ? `<button class="btn ghost sm" data-preview type="button">${PLAY_SVG}<span>Preview</span></button>` : "") +
     `<button class="btn ghost sm" data-copy type="button">${COPY_SVG}<span>Copy</span></button></div>` +
     `<pre><code>${highlight(code, label)}</code></pre></div>`;
 }

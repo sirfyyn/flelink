@@ -480,10 +480,34 @@ export function mount(main, chatId) {
   }
 
   function onMessagesClick(e) {
+    const p = e.target.closest("[data-preview]");
+    if (p) { togglePreview(p); return; }
     const b = e.target.closest("[data-copy]");
     if (!b) return;
     const code = b.closest(".codeblock")?.querySelector("code");
     if (code) copyText(code.textContent, b);
+  }
+
+  // The page an HTML or SVG block describes, right under the block: a sandboxed frame from the server (/api/preview),
+  // which cannot reach this page, its API or the network beyond the common CDNs. Pressing again closes it.
+  async function togglePreview(btn) {
+    const block = btn.closest(".codeblock");
+    const open = block?.nextElementSibling?.classList.contains("preview-frame") ? block.nextElementSibling : null;
+    if (open) { open.remove(); btn.classList.remove("on"); return; }
+    const code = block?.querySelector("code")?.textContent || "";
+    const svg = /^\s*<svg[\s>]/i.test(code);
+    const html = svg ? `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%;display:grid;place-items:center;background:#fff}svg{max-width:100%;max-height:100%}</style>${code}` : code;
+    try {
+      const r = await post("/api/preview", { html });
+      const frame = h("iframe", { src: hostUrl(r.url), sandbox: "allow-scripts allow-forms allow-modals", title: "Preview", loading: "lazy" });
+      const wrap = h("div", { class: "preview-frame" },
+        h("div", { class: "head" }, h("span", null, "Preview"), h("span", { class: "grow" }),
+          h("a", { class: "btn ghost sm", href: hostUrl(r.url), target: "_blank", rel: "noopener" }, "Open in a tab"),
+          h("button", { class: "btn ghost sm", type: "button", onclick: () => { wrap.remove(); btn.classList.remove("on"); } }, "Close")),
+        frame);
+      block.after(wrap);
+      btn.classList.add("on");
+    } catch (err) { toast(err.message, "bad"); }
   }
 
   function scrollBottom(force = false) {

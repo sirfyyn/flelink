@@ -96,6 +96,13 @@ For Claude Code it prints `ANTHROPIC_BASE_URL=http://127.0.0.1:8642` (the Studio
 with the model name; Codex gets a provider with `wire_api = "responses"`, OpenCode and pi an OpenAI-compatible provider. No
 key is checked on this machine.
 
+## Live preview in the chat
+
+An HTML or SVG block in an answer gets a Preview button: the page runs right under the code, in a sandboxed frame from the
+server (`POST /api/preview`, served like an MCP app at `/app-frame/<id>`), with its own opaque origin, no access to the
+Studio or its API, scripts and styles only from the common CDNs, and no network requests of its own. "Open in a tab" shows it
+full size.
+
 ## Let a coding agent drive it (MCP)
 
 `flelink mcp` is an MCP server on stdin/stdout. An agent sees what fits the machine, downloads and loads a model (installing
