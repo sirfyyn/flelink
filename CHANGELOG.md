@@ -2,6 +2,8 @@
 
 ## 0.1.1 (2026-11-02)
 
+- **No foreign update notice:** in a data folder taken over from FLE Studio, FLE Link showed the Python Studio's own
+  update answer ("FLE Link 0.4.0 is available"). It keeps its answer in its own file now (`flelink-update-check.json`).
 - **The installers offer the desktop app:** on a machine with a screen `install.sh` and `install.ps1` ask whether to
   add the app too (`--app` / `--no-app`), checked against `SHA256SUMS`, which every release now carries for all its files.
 - **DeepSeek-V4.1 with the hot experts in RAM:** recipe `deepseek-v41-ista` (decision 735: 22 GB expert cache, hot experts

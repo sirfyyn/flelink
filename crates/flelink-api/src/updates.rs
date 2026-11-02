@@ -2,7 +2,8 @@
 //!
 //! The check asks GitHub (no login, nothing but the usual request headers) for the latest release of FLE Link and, when
 //! an FLE engine is installed, for the latest FLE engine. It runs at most once a day, can be turned off in Settings, keeps
-//! its answer in `<data>/update-check.json` and stays quiet without network.
+//! its answer in `<data>/flelink-update-check.json` and stays quiet without network. (Not `update-check.json`: the data
+//! folder can still be FLE Studio's, and that file holds the Python Studio's own update answer, from another repository.)
 //!
 //! The one-click update works for the `flelink` file the installer put into a folder the user can write: it downloads the
 //! release archive for this machine, checks it against the SHA-256 file of the release, puts the new `flelink` (and
@@ -221,7 +222,7 @@ fn idle() -> Value {
 
 impl Updates {
     pub fn new(data_dir: &Path, github_api: &str) -> Updates {
-        let file = data_dir.join("update-check.json");
+        let file = data_dir.join("flelink-update-check.json");
         let state = std::fs::read_to_string(&file)
             .ok()
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
@@ -229,7 +230,7 @@ impl Updates {
             .unwrap_or(json!({}));
         Updates {
             file,
-            result_file: data_dir.join("update-result.json"),
+            result_file: data_dir.join("flelink-update-result.json"),
             api: github_api.trim_end_matches('/').to_string(),
             state: Mutex::new(state),
             checking: Mutex::new(false),
@@ -690,5 +691,20 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("releases/tag/v0.1.1"));
+    }
+
+    #[test]
+    fn the_python_studios_update_answer_is_not_ours() {
+        // a data folder FLE Link took over from FLE Studio: its update-check.json names FLE Studio 0.4.0
+        let d = std::env::temp_dir().join(format!("fle-upd-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(
+            d.join("update-check.json"),
+            r#"{"v": 1, "checked": 1, "app": {"version": "0.4.0", "tag": "v0.4.0", "url": "https://github.com/sirfyyn/fle-studio/releases/tag/v0.4.0"}}"#,
+        )
+        .unwrap();
+        let u = Updates::new(&d, "http://127.0.0.1:9");
+        assert_eq!(*u.state.lock().unwrap(), json!({}));
+        let _ = std::fs::remove_dir_all(&d);
     }
 }
