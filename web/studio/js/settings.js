@@ -1,6 +1,6 @@
 // Settings: looks, where models live, how the chat samples, the Hugging Face token and access from other machines.
 
-import { post } from "./api.js";
+import { del, get, post } from "./api.js";
 import { applyTheme, on, refreshPlugins, refreshState, settingsSections, store, topbar } from "./app.js";
 import { toolsSection, stopToolsPolling } from "./settings-tools.js";
 import { clear, fmt, h, icon, toast } from "./ui.js";
@@ -31,7 +31,7 @@ export function mount(main) {
     if (!force && page.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     const ui = { section, field, toggle, save, render: () => render(true) };
     const parts = [
-      [10, look(s)], [20, models(s)], [30, chat(s)], [40, toolsSection(s, ui)],
+      [10, look(s)], [20, models(s)], [30, chat(s)], [40, toolsSection(s, ui)], [44, mcpHub()], [46, github()],
       [60, hub(s)], [70, network(s)],
       [100, plugins()], [110, about()],
     ];
@@ -45,6 +45,81 @@ export function mount(main) {
   }
 
   // ------------------------------------------------------------------------------------------- sections
+
+  // The MCP hub: one address whose few meta tools stand for all its plugins, so many tools do not slow the model down.
+  // The token is never shown again; leaving the field empty keeps the saved one.
+  function mcpHub() {
+    const box = h("div", { class: "stack" }, h("span", { class: "small faint" }, "…"));
+    // whether the hub answers, from the tool list (the hub is the MCP server "hub")
+    const live = h("div", { class: "callout" }, icon("info", "sm"), h("div", { class: "small" }, "Checking the hub …"));
+    const check = async (url) => {
+      try {
+        const t = await get("/api/tools");
+        const sv = (t.servers || []).find((x) => x.name === "hub");
+        if (!sv) { // the chat's tools are off: the hub is not connected at all
+          live.className = "callout warn";
+          clear(live, icon("alert", "sm"), h("div", { class: "small" }, "Saved, but the chat's tools are off: turn them on under Tools to use the hub."));
+          return;
+        }
+        const ok = sv?.status === "ready";
+        live.className = `callout ${ok ? "good" : sv?.status === "error" ? "bad" : ""}`;
+        clear(live, icon(ok ? "ok" : sv?.status === "error" ? "alert" : "info", "sm"), h("div", { class: "small" },
+          ok ? `Connected to ${url}: ${sv.tools} meta tools stand for all of the hub's plugins.`
+            : sv?.status === "error" ? `The hub does not answer: ${sv.error || "no reason given"}`
+            : `Connecting to ${url} …`));
+        if (!ok && sv?.status !== "error") setTimeout(() => check(url), 1500);
+      } catch { /* the tool list is not reachable: leave the note */ }
+    };
+    const draw = (st) => {
+      if (st.connected) check(st.url);
+      const url = h("input", { class: "input mono", value: st.url || "", placeholder: "http://127.0.0.1:8090/mcp" });
+      const tok = h("input", { class: "input mono", type: "password", autocomplete: "off",
+        placeholder: st.token ? `A token is saved (${st.hint})` : "Access token (if the hub asks for one)" });
+      clear(box,
+        st.connected ? live : null,
+        h("label", { class: "field" }, h("span", null, "Hub address"), url),
+        h("label", { class: "field" }, h("span", null, "Access token"), tok),
+        h("div", { class: "row" },
+          h("button", { class: "btn", onclick: async () => {
+            try { draw(await post("/api/hub", { url: url.value.trim(), token: tok.value.trim() })); toast("Hub saved", "good", 1600); }
+            catch (e) { toast(e.message, "bad", 7000); }
+          } }, "Save"),
+          st.connected ? h("button", { class: "btn ghost danger", onclick: async () => {
+            try { draw(await del("/api/hub")); } catch (e) { toast(e.message, "bad"); }
+          } }, "Remove") : null),
+        h("span", { class: "small faint" }, "The FYOS MCP hub (fyos-hub) on this computer or another one. Its token stays in a file only you can read and is only sent to the hub."));
+    };
+    get("/api/hub").then(draw).catch(() => clear(box));
+    return section("grid", "MCP hub", "Tools for the chat and the agent through one hub: it shows the model a handful of meta tools instead of every tool, so adding many tools does not slow it down.", box);
+  }
+
+  // The GitHub sign-in: a token for the agent's git and gh, and for the hub's GitHub plugin. Never shown again.
+  function github() {
+    const box = h("div", { class: "stack" }, h("span", { class: "small faint" }, "…"));
+    const draw = (st) => {
+      const tok = h("input", { class: "input mono", type: "password", autocomplete: "off", placeholder: "github_pat_…" });
+      clear(box,
+        st.connected
+          ? h("div", { class: "callout good" }, icon("ok", "sm"), h("div", { class: "small" },
+              `Signed in as ${st.login}${st.name ? ` (${st.name})` : ""}, token ${st.hint}.`))
+          : h("span", { class: "small muted" }, "Not signed in."),
+        h("div", { class: "row" }, tok,
+          h("button", { class: "btn", onclick: async () => {
+            if (!tok.value.trim()) return;
+            try { draw(await post("/api/github", { token: tok.value.trim() })); toast("Signed in to GitHub", "good", 2000); }
+            catch (e) { toast(e.message, "bad", 8000); }
+          } }, st.connected ? "Replace" : "Sign in"),
+          st.connected ? h("button", { class: "btn ghost danger", onclick: async () => {
+            try { draw(await del("/api/github")); } catch (e) { toast(e.message, "bad"); }
+          } }, "Sign out") : null),
+        h("span", { class: "small faint" },
+          "A fine-grained token is best: only the repos you choose, with Contents, Pull requests and Issues read and write. ",
+          h("a", { href: st.new_token_url, target: "_blank", rel: "noopener" }, "Make one on GitHub ", icon("external", "sm")),
+          ". FLE Link checks it with GitHub, keeps it in a file only you can read and gives it to the agent (git, gh) and to the hub's GitHub plugin; the page never shows it again."));
+    };
+    get("/api/github").then(draw).catch(() => clear(box));
+    return section("link", "GitHub", "Let the model work in your repos.", box);
+  }
 
   function section(iconName, title, sub, ...body) {
     return h("div", { class: "card" }, h("div", { class: "card-head" }, icon(iconName), h("div", null, h("h3", null, title), sub ? h("p", null, sub) : null)),

@@ -116,6 +116,17 @@ server (`POST /api/preview`, served like an MCP app at `/app-frame/<id>`), with 
 Studio or its API, scripts and styles only from the common CDNs, and no network requests of its own. "Open in a tab" shows it
 full size.
 
+## Tools through a hub, GitHub for the agent
+
+Settings → **MCP hub**: the address of an MCP hub (the FYOS hub, `fyos-hub`, on this computer or another one) and its token.
+The chat and the agent then see the hub's few meta tools (search a tool, call it) instead of every tool of every plugin, so
+adding many tools does not fill the model's context or slow it down.
+
+Settings → **GitHub**: a token (best a fine-grained one, only for the repos you choose, with Contents, Pull requests and
+Issues read and write). FLE Link checks it with GitHub and keeps it in `<data>/secrets/github.json` (only you can read it;
+the page never shows it again). The agent gets it as `GH_TOKEN` and as git's credential for github.com, so `git` and `gh`
+work in your repos; requests to the hub carry it as `X-GitHub-Token` for the hub's GitHub plugin.
+
 ## Recent requests
 
 The Engine page lists the last answers through FLE Link from any program, the chat in the Studio as well as Claude Code,

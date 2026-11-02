@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **MCP hub:** one hub address in Settings gives the chat and the agent their tools through a few meta tools, so many
+  tools do not slow the model down.
+- **GitHub sign-in:** a token in Settings, checked with GitHub and kept private; the agent works in your repos with it
+  (`git`, `gh`), and the hub's GitHub plugin gets it.
+
 ## 0.1.1 (2026-11-02)
 
 - **Agent:** a new built-in page runs [FLE Durable](https://github.com/sirfyyn/fle-durable) next to your model, an always-on local agent that works from events: an
