@@ -117,9 +117,8 @@ pub fn engine_version(text: &str) -> Option<(u32, u32, u32)> {
 /// Is the engine at `path_or_tag` older than `min`? Unknown versions (an own build) are not refused.
 pub fn engine_too_old(path_or_tag: &str, min: &str) -> bool {
     let found = path_or_tag
-        .split(['/', '\\'])
-        .filter_map(engine_version)
-        .last();
+        .rsplit(['/', '\\'])
+        .find_map(engine_version);
     match (found, engine_version(min)) {
         (Some(have), Some(want)) => have < want,
         _ => false,
