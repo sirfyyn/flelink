@@ -2,6 +2,28 @@
 
 ## 0.1.1 (2026-11-02)
 
+- **Coding agents on the local model:** the engine answers the OpenAI API (Chat Completions and Responses) and the
+  Anthropic API (Messages) on one address. `flelink connect [claude|codex|opencode|pi|api|mcp]` finds the running model
+  and prints the setting for each tool; the Engine page shows the same with a copy button. The desktop app takes port
+  8642 first, so the address stays the same.
+- **MCP server:** `flelink mcp` lets an agent run FLE Link: what fits, download, load (installing the engine first on a
+  fresh machine), stop, recent requests, engine log, settings, connect, one test prompt. It finds the Studio or the app
+  through `<data>/studio.json` (mode 0600) and starts a Studio when none runs.
+- **Live preview in the chat:** HTML and SVG blocks get a Preview button; the page runs under the code in a sandboxed
+  frame without access to the Studio.
+- **Recent requests** on the Engine page: every answer from any program (the chat, Claude Code, Codex, apps) with API,
+  tokens, speed and duration; Anthropic and Responses traffic now counts in the live numbers too.
+- **First start on a fresh machine:** Start in the Studio installs the engine that fits by itself, then starts.
+- **Downloads pick themselves up again:** a broken or stalled connection (60 s without data) resumes where it stopped,
+  up to five tries in a row without progress. Checking a model already on disk shows its progress.
+- **Looks:** the logo works while the engine starts or answers, live numbers count up, pages fade in, buttons answer;
+  the terminal shows a bar with speed and time left and colours (not with `NO_COLOR`); the full-screen terminal uses the
+  brand colours and rounded frames; new macOS 26 icon and the cube logo everywhere.
+- **Calmer Models page:** it no longer rebuilds every second (clicks could get lost) and shows its recipes on the first
+  visit. Small models whose tool call the engine cannot read answer without tools from then on, without a failed try first.
+- **`flelink run` stops politely:** SIGTERM, ten seconds, then SIGKILL.
+- **Docker:** `ghcr.io/sirfyyn/flelink`, the Studio on port 8642 with the data in `/data`, built and tested with every
+  release.
 - **No foreign update notice:** in a data folder taken over from FLE Studio, FLE Link showed the Python Studio's own
   update answer ("FLE Link 0.4.0 is available"). It keeps its answer in its own file now (`flelink-update-check.json`).
 - **The installers offer the desktop app:** on a machine with a screen `install.sh` and `install.ps1` ask whether to
