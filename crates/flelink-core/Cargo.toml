@@ -20,3 +20,8 @@ toml = "0.8"
 
 [target."cfg(unix)".dependencies]
 libc = "0.2"
+
+# SHA-256 of model files (downloads, files found elsewhere): on ARM the hardware instructions through the asm backend,
+# 2.2 GB/s instead of 0.2 GB/s on an M2 (it does not build with MSVC, so not on Windows; x86 finds SHA-NI by itself)
+[target.'cfg(all(target_arch = "aarch64", not(target_os = "windows")))'.dependencies]
+sha2 = { version = "0.10", features = ["asm"] }

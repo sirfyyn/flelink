@@ -12,3 +12,7 @@ opt-level = "s"
 lto = true
 codegen-units = 1
 strip = true
+
+# hashing is the slow part of checking a 248 GB model; size optimisation halves its speed
+[profile.release.package.sha2]
+opt-level = 3
