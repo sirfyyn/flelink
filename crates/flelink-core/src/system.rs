@@ -99,6 +99,47 @@ pub fn physical_cores() -> usize {
     }
 }
 
+/// Before an engine that locks hot experts in RAM starts (`FLE_MOE_HOT_MLOCK_GB` in its environment): raise this process's
+/// soft limit for locked memory to the hard limit, so the engine inherits it. The hard limit itself needs the system's
+/// permission; when it is below what the engine wants, the returned text says how to allow it (the engine then runs without
+/// the lock, slower).
+#[allow(clippy::unnecessary_cast)] // rlim_t is not u64 everywhere
+pub fn allow_memlock(env: &[(String, String)]) -> Option<String> {
+    let gb: u64 = env
+        .iter()
+        .find(|(k, _)| k == "FLE_MOE_HOT_MLOCK_GB")
+        .and_then(|(_, v)| v.trim().parse().ok())
+        .filter(|g| *g > 0)?;
+    #[cfg(unix)]
+    {
+        let mut r = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        // SAFETY: plain getrlimit/setrlimit on this process with a valid struct
+        unsafe {
+            if libc::getrlimit(libc::RLIMIT_MEMLOCK, &mut r) != 0 {
+                return None;
+            }
+            r.rlim_cur = r.rlim_max;
+            libc::setrlimit(libc::RLIMIT_MEMLOCK, &r);
+        }
+        let want = gb << 30;
+        if r.rlim_max != libc::RLIM_INFINITY && (r.rlim_max as u64) < want {
+            return Some(format!(
+                "FLE Link: the system allows only {} MiB of locked memory, the hot expert lock wants {gb} GiB; it runs without the lock (slower). Allow it once (as root): a line `<user> - memlock unlimited` in /etc/security/limits.d/fle.conf, then log in again.",
+                r.rlim_max as u64 >> 20
+            ));
+        }
+        None
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = gb;
+        None
+    }
+}
+
 pub fn detect(dir: &Path) -> SysInfo {
     let os = std::env::consts::OS.to_string();
     let arch = match std::env::consts::ARCH {
@@ -212,5 +253,31 @@ mod tests {
         let s = detect(&d);
         assert!(s.ram_bytes > 0 && s.cores > 0 && s.disk_free_bytes > 0);
         assert!(!s.os.is_empty() && !s.arch.is_empty());
+    }
+}
+
+#[cfg(all(test, unix))]
+mod memlock_tests {
+    #[test]
+    #[allow(clippy::unnecessary_cast)]
+    fn the_lock_limit_is_raised_or_explained() {
+        assert_eq!(super::allow_memlock(&[]), None);
+        assert_eq!(
+            super::allow_memlock(&[("FLE_MOE_HOT_MLOCK_GB".into(), "0".into())]),
+            None
+        );
+        let note = super::allow_memlock(&[("FLE_MOE_HOT_MLOCK_GB".into(), "60".into())]);
+        let mut r = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        unsafe { libc::getrlimit(libc::RLIMIT_MEMLOCK, &mut r) };
+        // the soft limit now equals the hard one, and a hard limit below 60 GiB is explained
+        assert_eq!(r.rlim_cur, r.rlim_max);
+        let enough = r.rlim_max == libc::RLIM_INFINITY || (r.rlim_max as u64) >= 60 << 30;
+        assert_eq!(note.is_none(), enough, "{note:?}");
+        if let Some(n) = note {
+            assert!(n.contains("memlock unlimited"), "{n}");
+        }
     }
 }
