@@ -98,10 +98,69 @@ fn release(repo: &str, tag: Option<&str>) -> Result<Release> {
         .get(&url)
         .header("Accept", "application/vnd.github+json")
         .send()?;
-    if !r.status().is_success() {
-        bail!("GitHub answered {} for {url}", r.status());
+    let code = r.status();
+    if code.is_success() {
+        return Ok(r.json()?);
     }
-    Ok(r.json()?)
+    // 403/429: GitHub's API allows 60 requests an hour per address without sign-in (a shared office or lab address uses
+    // them up quickly). The release page and its SHA256SUMS have no such limit and name every file with its checksum.
+    if code.as_u16() == 403 || code.as_u16() == 429 {
+        if let Ok(rel) = release_from_page(repo, tag) {
+            return Ok(rel);
+        }
+    }
+    bail!("GitHub answered {code} for {url}")
+}
+
+/// A release without the API: the tag from `/releases/latest` (it redirects to `/releases/tag/<tag>`), the files and
+/// their SHA-256 from the release's `SHA256SUMS`.
+fn release_from_page(repo: &str, tag: Option<&str>) -> Result<Release> {
+    let c = client()?;
+    let tag = match tag {
+        Some(t) => t.to_string(),
+        None => {
+            let r = c
+                .get(format!("https://github.com/{repo}/releases/latest"))
+                .send()?;
+            let path = r.url().path().to_string();
+            path.rsplit_once("/releases/tag/")
+                .map(|(_, t)| t.to_string())
+                .filter(|t| !t.is_empty())
+                .context("the release page did not name a tag")?
+        }
+    };
+    let base = format!("https://github.com/{repo}/releases/download/{tag}");
+    let sums = c.get(format!("{base}/SHA256SUMS")).send()?;
+    if !sums.status().is_success() {
+        bail!("no SHA256SUMS in release {tag}");
+    }
+    let assets = parse_sums(&sums.text()?, &base);
+    if assets.is_empty() {
+        bail!("SHA256SUMS of {tag} names no files");
+    }
+    Ok(Release {
+        tag_name: tag,
+        assets,
+    })
+}
+
+/// `<sha256>  <name>` lines (sha256sum's format, `*` before binary names allowed) as release assets.
+fn parse_sums(text: &str, base: &str) -> Vec<Asset> {
+    text.lines()
+        .filter_map(|l| {
+            let (sha, name) = l.trim().split_once(char::is_whitespace)?;
+            let name = name.trim().trim_start_matches('*');
+            (sha.len() == 64
+                && sha.chars().all(|c| c.is_ascii_hexdigit())
+                && !name.is_empty()
+                && !name.contains('/'))
+            .then(|| Asset {
+                name: name.to_string(),
+                browser_download_url: format!("{base}/{name}"),
+                digest: Some(format!("sha256:{}", sha.to_lowercase())),
+            })
+        })
+        .collect()
 }
 
 /// The engine archive of a variant for this platform (crate::assets), the newest CUDA build when there are several.
@@ -488,5 +547,22 @@ mod version_tests {
             "fle-cuda-v1.10.0"
         );
         let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[cfg(test)]
+mod sums_tests {
+    use super::*;
+
+    #[test]
+    fn sha256sums_become_assets_with_their_checksum() {
+        let text = "35a728b2ad5c71759edcd60cd0916cc87886d5657340d0589c20e8ea2dda0d4e  fle-d90513f3-bin-ubuntu-cuda-12.8-x64.tar.gz\n\
+                    53EEDF7A7E63D35E8986615753308B0C9A3BAE80554D7B2B80E61ED1DAD2CFD3 *fle-win.zip\nnot a line\n\
+                    abcd  ../evil\n";
+        let a = parse_sums(text, "https://github.com/o/r/releases/download/v1.2.3");
+        assert_eq!(a.len(), 2);
+        assert_eq!(a[0].browser_download_url, "https://github.com/o/r/releases/download/v1.2.3/fle-d90513f3-bin-ubuntu-cuda-12.8-x64.tar.gz");
+        assert_eq!(a[1].name, "fle-win.zip");
+        assert!(a[1].digest.as_deref().unwrap().starts_with("sha256:53eedf"));
     }
 }
