@@ -23,6 +23,9 @@ const PAINT_MS = 80; // an answer that streams is drawn at most about 12 times a
 const CURSOR = '<span class="cursor"></span>';
 // The engine could not read the tool call the model wrote (llama.cpp: "does not match the expected … format").
 const BROKEN_CALL = /does not match the expected .*format|failed to parse tool call/i;
+// models whose tool call the engine could not read: they answer without tools from then on (until the page reloads),
+// so each later message does not cost a failed round first
+const brokenTools = new Set();
 
 async function loadImages(nodes) {
   for (const blob of usedImages(nodes)) {
@@ -179,7 +182,9 @@ export function mount(main, chatId) {
   };
 
   // Function declarations, not consts: the first render above runs before this point is reached.
-  function toolsActive() { return toolInfo.enabled && toolInfo.tools.length > 0 && caps.tools !== false; }
+  function toolsActive() {
+    return toolInfo.enabled && toolInfo.tools.length > 0 && caps.tools !== false && !brokenTools.has(store.engine?.model?.id);
+  }
   function infoFor(name) { return toolInfo.tools.find((t) => t.name === name); }
 
   // Saves run one after another: the first one creates the chat, so a second one must wait for its id.
@@ -779,8 +784,9 @@ export function mount(main, chatId) {
       if (e.name === "AbortError") asst.stopped = true;
       else if (useTools && BROKEN_CALL.test(e.message)) {
         // Small models often write a tool call the engine cannot read. Ask once more without tools instead of failing.
+        brokenTools.add(store.engine?.model?.id);
         Object.assign(asst, { content: "", reasoning: "",
-          note: "This model wrote a tool call the engine could not read, so it answered without tools." });
+          note: "Answered without tools: this model wrote a tool call the engine could not read. Tools stay off for it until the page reloads." });
         delete asst.tool_calls;
         delete asst.stats;
         clearTimeout(streaming.frame);
