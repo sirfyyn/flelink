@@ -45,6 +45,8 @@ size = 5216519072                      # optional, shown before the download
 [engine]
 prefer = ["fle"]       # engine ids in order; empty: the best for this machine
 strict = true          # only these may run it (the model needs FLE's expert offloading)
+min_version = "v1.2.3" # the oldest engine release the settings work with; the Studio refuses an older one with the reason
+
 
 [run]
 context = 65536                            # tokens; default: sized from free memory
