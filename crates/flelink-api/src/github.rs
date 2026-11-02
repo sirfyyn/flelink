@@ -182,6 +182,22 @@ impl Hub {
     }
 }
 
+/// The hub for the agent (FLE Durable: FLE_DURABLE_HUB_URL and FLE_DURABLE_HUB_HEADERS, src/hub.js): the same address and
+/// headers as the chat's `hub` server. Empty without a hub.
+pub fn agent_hub_env(home: &Path) -> Vec<(String, String)> {
+    let Ok(v) = serde_json::from_str::<Value>(&extra_mcp(home)) else {
+        return vec![];
+    };
+    let hub = &v["mcpServers"]["hub"];
+    let Some(url) = hub["url"].as_str() else {
+        return vec![];
+    };
+    vec![
+        ("FLE_DURABLE_HUB_URL".into(), url.to_string()),
+        ("FLE_DURABLE_HUB_HEADERS".into(), hub["headers"].to_string()),
+    ]
+}
+
 /// The MCP servers FLE Link adds to the user's own (ToolBox.extra): the hub, with its access token and the GitHub token
 /// for its GitHub plugin. Empty without a hub.
 pub fn extra_mcp(home: &Path) -> String {
@@ -251,6 +267,9 @@ mod tests {
             .save("http://127.0.0.1:8099/mcp", "hubtok")
             .unwrap();
         let x = extra_mcp(&home);
+        let a: std::collections::HashMap<_, _> = agent_hub_env(&home).into_iter().collect();
+        assert_eq!(a["FLE_DURABLE_HUB_URL"], "http://127.0.0.1:8099/mcp");
+        assert!(a["FLE_DURABLE_HUB_HEADERS"].contains("X-GitHub-Token"));
         assert!(
             x.contains("Bearer hubtok") && x.contains("X-GitHub-Token") && x.contains("8099/mcp"),
             "{x}"
