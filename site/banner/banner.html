@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Banners for READMEs and model cards that point to FLE Link, in the look of flelink.run.
-     Open with ?v=engine|model|any; render 2560×640 from a server in site/ (python3 -m http.server 8779), e.g.
+     Open with ?v=engine|model|agent|any; render 2560×640 from a server in site/ (python3 -m http.server 8779), e.g.
      chrome --headless --hide-scrollbars --window-size=2560,640 --screenshot=media/banner-any.png "http://127.0.0.1:8779/banner/banner.html?v=any"
      then sips -s format jpeg -s formatOptions 92 (media/banner-*.jpg are what READMEs and model cards show). -->
 <meta charset="utf-8">
@@ -60,6 +60,9 @@ const V = {
   model:  ["Run this model in <span class=grad>one command</span>",
            "Installs the FLE engine, checks the model fits your machine, serves an OpenAI-compatible API.",
            "flelink run fle-iq3-m"],
+  agent:  ["Run an agent <span class=grad>next to your model</span>",
+           "FLE Link starts FLE Durable on its Agent page with the model you run: always on, works from events.",
+           "curl -fsSL https://flelink.run/install.sh | sh"],
   any:    ["Run local models in <span class=grad>one command</span>",
            "Find this model in the Studio, see whether it fits before you download, and serve it.",
            "curl -fsSL https://flelink.run/install.sh | sh"],

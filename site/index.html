@@ -271,7 +271,27 @@ Claude Code  run in the terminal
   </div>
 </section>
 
-<section id="host">
+<section id="durable">
+  <div class="wrap two">
+    <div>
+      <p class="eyebrow">Agent · FLE Durable</p>
+      <h2>An agent that keeps running next to your model</h2>
+      <p>The Agent page starts <a href="https://github.com/sirfyyn/fle-durable">FLE Durable</a> with the model you run: a local agent that is always on and works from events instead of waiting for you to type. You plan things on its agenda (once, daily, on certain days, every few minutes), it plans its own follow-ups, and any tool can hand it an event by webhook.</p>
+      <p>Every event lands in one durable queue before the agent sees it, so a crash or a reboot neither loses one nor runs one twice. Only destructive steps wait for your approval; everything else it simply does. Open source, Apache-2.0, built on pi-durable.</p>
+    </div>
+<pre class="out"><span class="p">$</span> git clone https://github.com/sirfyyn/fle-durable
+<span class="p">$</span> cd fle-durable && npm ci --ignore-scripts
+
+Agent → Set up → Start
+
+<span class="p">$</span> curl -X POST http://127.0.0.1:8642/api/p/agent/events \
+    -H 'X-Agent-Key: …' \
+    -d '{"id":"ci-42","text":"Build 42 failed on main"}'
+{"ok":true,"id":"webhook:ci-42","queued":true}</pre>
+  </div>
+</section>
+
+<section class="band" id="host">
   <div class="wrap two">
     <div>
       <p class="eyebrow">Host mode</p>
@@ -288,7 +308,7 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
   </div>
 </section>
 
-<section class="band" id="tested">
+<section id="tested">
   <div class="wrap">
     <p class="eyebrow">Tested by breaking it</p>
     <h2>What happens when things go wrong</h2>
@@ -306,7 +326,7 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
   </div>
 </section>
 
-<section id="roadmap">
+<section class="band" id="roadmap">
   <div class="wrap">
     <p class="eyebrow">Roadmap</p>
     <h2>Open, and built to be changed</h2>
@@ -319,7 +339,7 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
   </div>
 </section>
 
-<section class="band" id="faq">
+<section id="faq">
   <div class="wrap faq">
     <p class="eyebrow">Questions</p>
     <h2>Before you install</h2>
@@ -339,6 +359,7 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
     <nav aria-label="Links">
       <a href="https://github.com/sirfyyn/flelink">Source</a>
       <a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a>
+      <a href="https://github.com/sirfyyn/fle-durable">FLE Durable</a>
       <a href="https://huggingface.co/sirfyyn">Models on Hugging Face</a>
     </nav>
     <nav aria-label="Legal">

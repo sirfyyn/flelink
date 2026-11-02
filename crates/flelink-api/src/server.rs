@@ -56,6 +56,8 @@ pub struct Studio {
     pub listen: Mutex<Value>,
     pub cache: Arc<crate::cachewatch::CacheWatch>,
     pub toolbox: crate::mcp::ToolBox,
+    /// FLE Durable next to the model (the agent plugin, agent.rs)
+    pub agent: crate::agent::Agent,
     /// the port this server listens on (for the sign-in's loopback redirect); set when it starts serving
     pub port: std::sync::atomic::AtomicU16,
     pub live: Live,
@@ -132,6 +134,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         listen: Mutex::new(json!({})),
         cache,
         toolbox: crate::mcp::ToolBox::new(&home),
+        agent: crate::agent::Agent::new(&home),
         port: std::sync::atomic::AtomicU16::new(0),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
@@ -418,7 +421,16 @@ fn guard(
                 head,
             ));
         }
+        // A webhook into the agent's queue comes from a tool, not from the page: it shows the agent's own key instead of the
+        // page token (a foreign page cannot set the header without a preflight this server never allows).
+        let webhook = *method == Method::POST
+            && path == "/api/p/agent/events"
+            && headers
+                .get("x-agent-key")
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|k| st.agent.webhook_ok(k));
         if (path.starts_with("/api/") || path.starts_with("/h/"))
+            && !webhook
             && !ct_eq(
                 headers
                     .get("x-fle-token")
@@ -1063,6 +1075,93 @@ impl Studio {
             .save(&data)
             .map_err(|e| ApiError(400, e.0))?;
         Ok(json!({"model": model, "profile": prof.public()}))
+    }
+
+    fn agent_settings(&self) -> (crate::agent::AgentSettings, bool) {
+        self.agent.settings()
+    }
+
+    /// Start the agent with the model the engine runs now (name and context window), and wait until it answers.
+    fn agent_start(&self) -> Result<(), String> {
+        let (s, _) = self.agent_settings();
+        let eng = self.engine.status();
+        let model = eng["model"]["name"].as_str().unwrap_or("").to_string();
+        let n_ctx = eng["n_ctx"].as_u64().unwrap_or(0);
+        let port = self.port.load(std::sync::atomic::Ordering::SeqCst);
+        self.agent.start(&s, port, &model, n_ctx)?;
+        self.agent.wait_ready(std::time::Duration::from_secs(30))
+    }
+
+    /// `agent.autostart`: start the agent once the server listens (in the background; a failure shows on the Agent page).
+    pub fn agent_autostart(self: &Arc<Self>) {
+        if !self.agent_settings().1 {
+            return;
+        }
+        let weak = Arc::downgrade(self);
+        let _ = std::thread::Builder::new()
+            .name("agent-autostart".into())
+            .spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                if let Some(st) = weak.upgrade() {
+                    if let Err(e) = st.agent_start() {
+                        eprintln!("[agent] autostart: {e}");
+                    }
+                }
+            });
+    }
+
+    /// `/api/p/agent/…`: status, start, stop, setup, the chat address, and the runner's agenda, queue, events, approvals.
+    fn agent_route(&self, method: &str, p: &str, r: &Req) -> Result<Value, ApiError> {
+        let rest = p
+            .strip_prefix("/api/p/agent")
+            .unwrap_or("")
+            .trim_start_matches('/');
+        let body = || -> Result<Map<String, Value>, ApiError> {
+            if r.body.is_empty() {
+                Ok(Map::new())
+            } else {
+                r.json(MAX_JSON)
+            }
+        };
+        let status = || {
+            let (s, auto) = self.agent_settings();
+            self.agent.status(&s, auto)
+        };
+        match (method, rest) {
+            ("GET", "" | "status") => Ok(status()),
+            ("POST", "start") => self
+                .agent_start()
+                .map(|_| status())
+                .map_err(|e| ApiError(400, e)),
+            ("POST", "stop") => {
+                self.agent.stop();
+                Ok(status())
+            }
+            ("POST", "restart") => {
+                self.agent.stop();
+                self.agent_start()
+                    .map(|_| status())
+                    .map_err(|e| ApiError(400, e))
+            }
+            ("POST", "setup") => {
+                self.agent
+                    .update_settings(&body()?)
+                    .map_err(|e| ApiError(400, e))?;
+                Ok(status())
+            }
+            ("POST", "chat") => self.agent.chat_url(),
+            _ => {
+                let (m, path) = crate::agent::proxied(method, rest)
+                    .ok_or_else(|| ApiError(404, "Not found".into()))?;
+                // FLE Durable records every decision through its token as the owner's; the page cannot name someone else
+                let b = if m == "POST" {
+                    Some(Value::Object(body()?))
+                } else {
+                    None
+                };
+                self.agent.call(m, &path, b.as_ref())
+            }
+        }
     }
 
     fn forge_route(
@@ -2302,6 +2401,7 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 .unwrap_or_default();
             st.plan_view(&model, body.get("profile"))
         }),
+        (m, _) if p == "/api/p/agent" || p.starts_with("/api/p/agent/") => return Some(st.agent_route(m, p, r)),
         (_, _) if p.starts_with("/api/p/") => Err(plugin_off(p)),
         ("GET", "/api/plugins") => Ok(json!({"api_version": 1, "plugins": builtin_plugins(), "error": ""})),
         ("POST", _) if plugin_toggle(p).is_some() => {
@@ -2773,7 +2873,12 @@ const STATIC_TYPES: [(&str, &str); 12] = [
 
 /// The built web page: a folder when one is given (tests, development), else the copy inside the binary.
 /// The plugins that are part of FLE Link (their pages live in web/plugins/<id>/): (id, title, summary).
-const BUILTIN_PLUGINS: [(&str, &str, &str); 3] = [
+const BUILTIN_PLUGINS: [(&str, &str, &str); 4] = [
+    (
+        "agent",
+        "Agent",
+        "FLE Durable next to your model: an always-on local agent that works from events and plans its own follow-ups.",
+    ),
     (
         "forge",
         "Forge",
@@ -2802,6 +2907,8 @@ fn builtin_plugins() -> Vec<Value> {
             // the Forge is a page of its own and has nothing to start with the page; the others are boot scripts
             let (page, boot) = if *id == "forge" {
                 (json!({"title": "Forge", "icon": "forge", "script": "forge.js", "path": "/forge", "nav": true}), Value::Null)
+            } else if *id == "agent" {
+                (json!({"title": "Agent", "icon": "spark", "script": "agent.js", "path": "/agent", "nav": true}), Value::Null)
             } else {
                 (Value::Null, json!("boot.js"))
             };
@@ -3357,6 +3464,7 @@ pub async fn serve_listener(
     if let Ok(a) = l.local_addr() {
         st.port.store(a.port(), std::sync::atomic::Ordering::SeqCst);
     }
+    st.agent_autostart();
     axum::serve(
         l,
         router(st).into_make_service_with_connect_info::<SocketAddr>(),

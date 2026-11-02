@@ -304,6 +304,7 @@ pub fn run(o: RunOptions) -> i32 {
         }
         .map_err(|e| e.to_string())?;
         println!("Stopping FLE Link …");
+        st.agent.stop();
         st.engine.shutdown();
         st.toolbox.mcp.close_all();
         st.hosts.shutdown();
@@ -403,6 +404,7 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
                 let _ = stop_rx.await;
             })
             .await;
+            st.agent.stop();
             st.engine.shutdown();
             st.toolbox.mcp.close_all();
             st.hosts.shutdown();
