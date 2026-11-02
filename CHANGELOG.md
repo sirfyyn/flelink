@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **DeepSeek-V4.1 ISTA on FLE v1.2.3:** the cache bonus only after layer 14, the CPU side scheduled asynchronously, two
+  requests at once again (v1.2.3 fixes the q8_0 abort; the one-slot workaround is gone). Recipes can name the oldest
+  engine they work with (`min_version`); the Studio refuses an older one with the reason, `flelink run` updates it.
+
 ## 0.1.1 (2026-11-02)
 
 - **Agent:** a new built-in page runs [FLE Durable](https://github.com/sirfyyn/fle-durable) next to your model, an always-on local agent that works from events: an

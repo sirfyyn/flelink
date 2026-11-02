@@ -102,7 +102,7 @@ pub struct EngineSpec {
 
 /// `v1.2.3` (or the folder of an installed engine that contains it, `fle-cuda-v1.2.3`) as numbers.
 pub fn engine_version(text: &str) -> Option<(u32, u32, u32)> {
-    let i = text.rfind(|c: char| c == 'v')?;
+    let i = text.rfind('v')?;
     let mut it = text[i + 1..]
         .split(|c: char| !c.is_ascii_digit() && c != '.')
         .next()?
