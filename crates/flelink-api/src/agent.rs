@@ -355,6 +355,8 @@ impl Agent {
             .env("FLE_DURABLE_HOST", "127.0.0.1")
             .env("FLE_DURABLE_PORT", port.to_string())
             .env("FLE_DURABLE_WORKSPACE", &work)
+            // the GitHub sign-in (github.rs): GH_TOKEN and git's credential for github.com, so the agent works in repos
+            .envs(crate::github::GitHub::new(self.dir.parent().unwrap_or(&self.dir)).env())
             .env(
                 "FLE_DURABLE_MODEL_URL",
                 format!("http://127.0.0.1:{studio_port}/v1"),

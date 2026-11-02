@@ -1522,6 +1522,19 @@ pub struct ToolBox {
     pub oauth: Arc<crate::oauth::OAuthManager>,
     known: Mutex<Map<String, Value>>,
     known_file: PathBuf,
+    /// servers FLE Link adds itself, as mcpServers JSON (the GitHub sign-in: github.rs); never written to settings
+    pub extra: Mutex<String>,
+}
+
+/// A server's settings as the list cache keeps them on disk: header values (a token) are left out.
+fn cache_spec(spec: &Value) -> Value {
+    let mut s = spec.clone();
+    if let Some(h) = s.get_mut("headers").and_then(Value::as_object_mut) {
+        for v in h.values_mut() {
+            *v = json!("***");
+        }
+    }
+    s
 }
 
 /// Why a call did not run: 404 (unknown tool) or 409 (needs approval).
@@ -1548,6 +1561,7 @@ impl ToolBox {
             frames: Frames::default(),
             known: Mutex::new(known),
             known_file,
+            extra: Mutex::new(String::new()),
         }
     }
 
@@ -1562,6 +1576,12 @@ impl ToolBox {
         let (mut servers, problems) = crate::tools::parse_servers(&text);
         if !(on("enabled") && on("mcp_enabled")) {
             servers = Map::new();
+        }
+        let extra = self.extra.lock().unwrap().clone();
+        if on("enabled") && !extra.is_empty() {
+            for (k, v) in crate::tools::parse_servers(&extra).0 {
+                servers.entry(k).or_insert(v); // a server of the user's own with the same name wins
+            }
         }
         let timeout = s
             .get("call_timeout")
@@ -1589,10 +1609,12 @@ impl ToolBox {
             tools.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
             let mut known = self.known.lock().unwrap();
             let entry = known.get(&server.name);
-            if entry.is_none_or(|e| e["spec"] != server.spec || e["tools"] != json!(tools)) {
+            if entry
+                .is_none_or(|e| e["spec"] != cache_spec(&server.spec) || e["tools"] != json!(tools))
+            {
                 known.insert(
                     server.name.clone(),
-                    json!({"spec": server.spec, "tools": tools}),
+                    json!({"spec": cache_spec(&server.spec), "tools": tools}),
                 );
                 let tmp = self.known_file.with_extension("tmp");
                 // only a cache; the next start simply has no earlier list when this fails
@@ -1605,7 +1627,7 @@ impl ToolBox {
         if st.status == "idle" || st.status == "connecting" {
             let known = self.known.lock().unwrap();
             if let Some(e) = known.get(&server.name) {
-                if e["spec"] == server.spec {
+                if e["spec"] == cache_spec(&server.spec) {
                     if let Some(t) = e["tools"].as_array() {
                         return (
                             t.iter()
