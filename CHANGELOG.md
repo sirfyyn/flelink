@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 (2026-11-02)
 
 - **The installers offer the desktop app:** on a machine with a screen `install.sh` and `install.ps1` ask whether to
   add the app too (`--app` / `--no-app`), checked against `SHA256SUMS`, which every release now carries for all its files.
