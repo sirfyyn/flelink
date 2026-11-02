@@ -34,7 +34,9 @@
 - **The installers offer the desktop app:** on a machine with a screen `install.sh` and `install.ps1` ask whether to
   add the app too (`--app` / `--no-app`), checked against `SHA256SUMS`, which every release now carries for all its files.
 - **DeepSeek-V4.1 with the hot experts in RAM:** recipe `deepseek-v41-ista` (decision 735: 22 GB expert cache, hot experts
-  locked in RAM after a profile from the first run, large batches); needs the FLE engine after v1.2.1. Recipes can name a
+  locked in RAM after a profile from the first run, large batches); needs the FLE engine after v1.2.1. 29.3 tok/s on one 32 GB
+  GPU with 120 GB RAM on tasks the profile has not seen; one request at a time, since FLE v1.2.2 aborts when two share the
+  q8_0 cache. Recipes can name a
   per-recipe profile file (`{profile}`) and a lock size from the memory (`{hot_mlock_gb}`); FLE Link raises the limit for
   locked memory before such an engine starts and says in the engine log when the system does not allow enough.
 
