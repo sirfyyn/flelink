@@ -102,15 +102,13 @@ export function icon(name, cls = "") {
     svg("path", { d: ICONS[name] || ICONS.info }));
 }
 
-// The FLE mark: nine experts, three of them active.
+// The FLE Link mark: nine experts on a plane, the three active for this token rise (site/logo-mark.svg). Its gradients
+// (fl-*) are defined once in the sidebar's svg in index.html.
+const MARK = `<ellipse cx="0.00" cy="6.50" rx="12.50" ry="7.20" fill="url(#fl-spill)"/> <ellipse cx="10.91" cy="25.40" rx="12.50" ry="7.20" fill="url(#fl-spill)"/> <ellipse cx="-10.91" cy="25.40" rx="12.50" ry="7.20" fill="url(#fl-spill)"/> <polygon points="-8.66,-4.00 0.00,1.00 0.00,10.00 -8.66,5.00" fill="url(#fl-side-l)"/> <polygon points="8.66,-4.00 0.00,1.00 0.00,10.00 8.66,5.00" fill="url(#fl-side-r)"/> <polygon points="0.00,-9.00 8.66,-4.00 0.00,1.00 -8.66,-4.00" fill="url(#fl-top)"/> <polygon points="0.00,-9.00 8.66,-4.00 0.00,1.00 -8.66,-4.00" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="0.5" stroke-linejoin="round"/> <polygon points="-10.91,6.30 -2.25,11.30 -10.91,16.30 -19.57,11.30" fill="#94a0b2" fill-opacity="0.16" stroke="#94a0b2" stroke-opacity="0.32" stroke-width="0.5"/> <polygon points="10.91,6.30 19.57,11.30 10.91,16.30 2.25,11.30" fill="#94a0b2" fill-opacity="0.16" stroke="#94a0b2" stroke-opacity="0.32" stroke-width="0.5"/> <polygon points="-21.82,12.60 -13.16,17.60 -21.82,22.60 -30.48,17.60" fill="#94a0b2" fill-opacity="0.16" stroke="#94a0b2" stroke-opacity="0.32" stroke-width="0.5"/> <polygon points="0.00,12.60 8.66,17.60 0.00,22.60 -8.66,17.60" fill="#94a0b2" fill-opacity="0.16" stroke="#94a0b2" stroke-opacity="0.32" stroke-width="0.5"/> <polygon points="21.82,12.60 30.48,17.60 21.82,22.60 13.16,17.60" fill="#94a0b2" fill-opacity="0.16" stroke="#94a0b2" stroke-opacity="0.32" stroke-width="0.5"/> <polygon points="-19.57,17.40 -10.91,22.40 -10.91,28.90 -19.57,23.90" fill="url(#fl-side-l)"/> <polygon points="-2.25,17.40 -10.91,22.40 -10.91,28.90 -2.25,23.90" fill="url(#fl-side-r)"/> <polygon points="-10.91,12.40 -2.25,17.40 -10.91,22.40 -19.57,17.40" fill="url(#fl-top)"/> <polygon points="-10.91,12.40 -2.25,17.40 -10.91,22.40 -19.57,17.40" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="0.5" stroke-linejoin="round"/> <polygon points="2.25,10.90 10.91,15.90 10.91,28.90 2.25,23.90" fill="url(#fl-side-l)"/> <polygon points="19.57,10.90 10.91,15.90 10.91,28.90 19.57,23.90" fill="url(#fl-side-r)"/> <polygon points="10.91,5.90 19.57,10.90 10.91,15.90 2.25,10.90" fill="url(#fl-top)"/> <polygon points="10.91,5.90 19.57,10.90 10.91,15.90 2.25,10.90" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="0.5" stroke-linejoin="round"/> <polygon points="0.00,25.20 8.66,30.20 0.00,35.20 -8.66,30.20" fill="#94a0b2" fill-opacity="0.16" stroke="#94a0b2" stroke-opacity="0.32" stroke-width="0.5"/> <polyline points="0.00,-4.00 10.91,10.90 -10.91,17.40" fill="none" stroke="url(#fl-link)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/> <circle cx="0.00" cy="-4.00" r="1.35" fill="#ffffff"/> <circle cx="10.91" cy="10.90" r="1.35" fill="#ffffff"/> <circle cx="-10.91" cy="17.40" r="1.35" fill="#ffffff"/>`;
 export function mark(size = 20) {
-  const cells = [[4.5, 4.5, 1], [13, 4.5, 0], [21.5, 4.5, 0], [4.5, 13, 0], [13, 13, 0], [21.5, 13, 1],
-    [4.5, 21.5, 0], [13, 21.5, 1], [21.5, 21.5, 0]];
-  return svg("svg", { viewBox: "0 0 32 32", width: size, height: size, "aria-hidden": "true" },
-    cells.map(([x, y, on]) => svg("rect", {
-      x, y, width: 6, height: 6, rx: 1.7,
-      fill: on ? "url(#brand-g)" : "currentColor", opacity: on ? 1 : 0.22,
-    })));
+  const el = svg("svg", { viewBox: "-34.48 -21.38 68.97 68.97", width: size, height: size, "aria-hidden": "true" });
+  el.innerHTML = MARK;
+  return el;
 }
 
 // ----------------------------------------------------------------------------------------------- formats
