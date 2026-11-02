@@ -58,6 +58,7 @@ pub struct Studio {
     pub toolbox: crate::mcp::ToolBox,
     /// FLE Durable next to the model (the agent plugin, agent.rs)
     pub agent: crate::agent::Agent,
+    pub github: crate::github::GitHub,
     /// the port this server listens on (for the sign-in's loopback redirect); set when it starts serving
     pub port: std::sync::atomic::AtomicU16,
     pub live: Live,
@@ -135,11 +136,14 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         cache,
         toolbox: crate::mcp::ToolBox::new(&home),
         agent: crate::agent::Agent::new(&home),
+        github: crate::github::GitHub::new(&home),
         port: std::sync::atomic::AtomicU16::new(0),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
         downloads,
     });
+    // a hub saved earlier (with the GitHub token for its plugin): among the chat's tools from the start
+    *studio.toolbox.extra.lock().unwrap() = crate::github::extra_mcp(&studio.opts.home);
     if std::env::var_os("FLE_NO_UPDATE").is_none_or(|v| v.is_empty()) {
         let weak = Arc::downgrade(&studio);
         let _ = std::thread::Builder::new()
@@ -2387,6 +2391,34 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             }
         }
         ("GET", "/api/engine") => Ok(st.engine.status()),
+        // the GitHub sign-in (github.rs): status without the token, save (checked with GitHub), remove
+        ("GET", "/api/github") => Ok(st.github.status()),
+        ("POST", "/api/github") => r.json(MAX_JSON).and_then(|body| {
+            let token = body.get("token").map(py_str).unwrap_or_default();
+            let api = std::env::var("FLE_GITHUB_API").unwrap_or_else(|_| "https://api.github.com".into());
+            let v = st.github.save(&token, &api).map_err(|(c, m)| ApiError(c, m))?;
+            *st.toolbox.extra.lock().unwrap() = crate::github::extra_mcp(&st.opts.home);
+            Ok(v)
+        }),
+        ("DELETE", "/api/github") => {
+            let v = st.github.remove();
+            *st.toolbox.extra.lock().unwrap() = crate::github::extra_mcp(&st.opts.home);
+            Ok(v)
+        }
+        // the MCP hub (github.rs Hub): the chat's tools come through its few meta tools
+        ("GET", "/api/hub") => Ok(crate::github::Hub::new(&st.opts.home).status()),
+        ("POST", "/api/hub") => r.json(MAX_JSON).and_then(|body| {
+            let url = body.get("url").map(py_str).unwrap_or_default();
+            let token = body.get("token").map(py_str).unwrap_or_default();
+            let v = crate::github::Hub::new(&st.opts.home).save(&url, &token).map_err(|(c, m)| ApiError(c, m))?;
+            *st.toolbox.extra.lock().unwrap() = crate::github::extra_mcp(&st.opts.home);
+            Ok(v)
+        }),
+        ("DELETE", "/api/hub") => {
+            let v = crate::github::Hub::new(&st.opts.home).remove();
+            *st.toolbox.extra.lock().unwrap() = crate::github::extra_mcp(&st.opts.home);
+            Ok(v)
+        }
         // the settings for coding agents and other apps (flelink connect); the page passes its own address and model
         ("GET", "/api/connect") => {
             let q = |k: &str| r.query.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();

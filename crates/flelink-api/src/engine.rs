@@ -88,6 +88,8 @@ struct State {
     health_path: String,
     api_key: String,
     reachable: bool,
+    /// when an attached server was last asked (refresh_attached); status() asks again when it is older than 5 s
+    checked: Option<std::time::Instant>,
     lines: VecDeque<(u64, f64, String)>,
     seq: u64,
     props: Value,
@@ -140,6 +142,7 @@ impl Engine {
             health_path: "/health".into(),
             api_key: String::new(),
             reachable: false,
+            checked: None,
             lines: VecDeque::new(),
             seq: 0,
             props: json!({}),
@@ -342,6 +345,7 @@ impl Engine {
             None
         };
         let mut s = self.st.lock().unwrap();
+        s.checked = Some(std::time::Instant::now());
         if s.state == "attached" {
             s.reachable = code == 200;
             if let Some(i) = info {
@@ -841,6 +845,17 @@ impl Engine {
     // ------------------------------------------------------------------ status
 
     pub fn status(&self) -> Value {
+        // an attached server: the live sampler asks only while a page watches; without one the answer would stay at
+        // the state of the last look (an engine that came back shown as "not answering")
+        let stale = {
+            let s = self.st.lock().unwrap();
+            s.state == "attached"
+                && s.checked
+                    .is_none_or(|t| t.elapsed() > std::time::Duration::from_secs(5))
+        };
+        if stale {
+            self.refresh_attached();
+        }
         let s = self.st.lock().unwrap();
         let starting = s.state == "starting";
         let mut progress = if matches!(s.state.as_str(), "ready" | "attached") {

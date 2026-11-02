@@ -21,6 +21,7 @@ text or skips the Python call, and asserts the intended behaviour on the Rust si
 | D11 | `doctor` keeps `auto` on a machine without NVIDIA GPU or with an upstream engine and reports the FLE checks as failures | `auto` becomes `off` there, like `flelink run` | `doctor` failed on every Mac and with every plain llama.cpp |
 | D17 | The desktop app serves on a free port | It takes 8642 first (as `flelink studio`) and a free port only when that is taken; `GET /api/connect` and `flelink connect` print the settings for Claude Code, Codex, OpenCode and pi | coding agents keep one address across restarts of the app |
 | D18 | The Studio leaves no trace of where it runs | It writes `<data>/studio.json` (address, page token, process; mode 0600) and removes it on exit; `flelink mcp` and `flelink connect` read it | an agent finds the app on whatever port it got and may make the changing requests the page makes |
+| D19 | No GitHub sign-in, no hub | `GET/POST/DELETE /api/github` and `/api/hub`, kept in `<data>/secrets/` (0600, never sent to the page); the hub joins the MCP servers as `hub` (ToolBox.extra, header values left out of the tool list cache); FLE Durable gets `GH_TOKEN` and a git credential for github.com | Max 02.11.: the model works in repos, tools through the FYOS hub |
 
 Gone from the list because Python fixed them itself (0.4.1): D1, a plan error with a hint was printed as a tuple; now the two
 sentences are joined, as here. D6 (the update panel) and the hosts list are plugins of the Python Studio now; the core, which is

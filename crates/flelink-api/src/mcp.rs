@@ -1522,6 +1522,19 @@ pub struct ToolBox {
     pub oauth: Arc<crate::oauth::OAuthManager>,
     known: Mutex<Map<String, Value>>,
     known_file: PathBuf,
+    /// servers FLE Link adds itself, as mcpServers JSON (the GitHub sign-in: github.rs); never written to settings
+    pub extra: Mutex<String>,
+}
+
+/// A server's settings as the list cache keeps them on disk: header values (a token) are left out.
+fn cache_spec(spec: &Value) -> Value {
+    let mut s = spec.clone();
+    if let Some(h) = s.get_mut("headers").and_then(Value::as_object_mut) {
+        for v in h.values_mut() {
+            *v = json!("***");
+        }
+    }
+    s
 }
 
 /// Why a call did not run: 404 (unknown tool) or 409 (needs approval).
@@ -1548,6 +1561,7 @@ impl ToolBox {
             frames: Frames::default(),
             known: Mutex::new(known),
             known_file,
+            extra: Mutex::new(String::new()),
         }
     }
 
@@ -1562,6 +1576,12 @@ impl ToolBox {
         let (mut servers, problems) = crate::tools::parse_servers(&text);
         if !(on("enabled") && on("mcp_enabled")) {
             servers = Map::new();
+        }
+        let extra = self.extra.lock().unwrap().clone();
+        if on("enabled") && !extra.is_empty() {
+            for (k, v) in crate::tools::parse_servers(&extra).0 {
+                servers.entry(k).or_insert(v); // a server of the user's own with the same name wins
+            }
         }
         let timeout = s
             .get("call_timeout")
@@ -1583,16 +1603,37 @@ impl ToolBox {
     /// (tools, stale): a ready server gives its own list (remembered); one still connecting gives the list it had last
     /// time, as long as its settings are the same.
     fn server_tools(&self, server: &McpServer) -> (Vec<Value>, bool) {
+        let (tools, stale) = self.server_tools_all(server);
+        (self.only_meta(server, tools), stale)
+    }
+
+    /// The hub FLE Link adds (`extra`, github.rs) shows the model only its meta tools (`hub__search_tools`,
+    /// `hub__call_tool`, …): a hub may also list every plugin's tools directly (the FYOS hub: about 130), which would fill
+    /// the prompt the hub exists to keep small. The rest stays reachable through hub__call_tool.
+    fn only_meta(&self, server: &McpServer, tools: Vec<Value>) -> Vec<Value> {
+        let ours = server.name == "hub" && !self.extra.lock().unwrap().is_empty();
+        if !ours {
+            return tools;
+        }
+        tools
+            .into_iter()
+            .filter(|t| t["name"].as_str().is_some_and(|n| n.starts_with("hub__")))
+            .collect()
+    }
+
+    fn server_tools_all(&self, server: &McpServer) -> (Vec<Value>, bool) {
         let st = server.state();
         if st.status == "ready" {
             let mut tools = st.tools.clone();
             tools.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
             let mut known = self.known.lock().unwrap();
             let entry = known.get(&server.name);
-            if entry.is_none_or(|e| e["spec"] != server.spec || e["tools"] != json!(tools)) {
+            if entry
+                .is_none_or(|e| e["spec"] != cache_spec(&server.spec) || e["tools"] != json!(tools))
+            {
                 known.insert(
                     server.name.clone(),
-                    json!({"spec": server.spec, "tools": tools}),
+                    json!({"spec": cache_spec(&server.spec), "tools": tools}),
                 );
                 let tmp = self.known_file.with_extension("tmp");
                 // only a cache; the next start simply has no earlier list when this fails
@@ -1605,7 +1646,7 @@ impl ToolBox {
         if st.status == "idle" || st.status == "connecting" {
             let known = self.known.lock().unwrap();
             if let Some(e) = known.get(&server.name) {
-                if e["spec"] == server.spec {
+                if e["spec"] == cache_spec(&server.spec) {
                     if let Some(t) = e["tools"].as_array() {
                         return (
                             t.iter()
@@ -1695,7 +1736,8 @@ impl ToolBox {
                 } else {
                     json!({"remote": false})
                 };
-                json!({"name": sv.name, "status": st.status, "error": st.error, "tools": st.tools.len(),
+                let shown = self.only_meta(sv, st.tools.clone()).len();
+                json!({"name": sv.name, "status": st.status, "error": st.error, "tools": shown,
                     "transport": sv.spec["transport"], "trusted": trusted.contains(&sv.name),
                     "info": st.info["name"].as_str().unwrap_or(""), "auth": auth, "legacy_sse": sv.legacy_sse()})
             })
