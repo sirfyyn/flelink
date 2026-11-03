@@ -32,7 +32,7 @@ webhooks, your messages), and FLE Link starts it with your model on the Agent pa
 | | |
 |---|---|
 | **66 s** | from nothing to the first answer on Linux with an NVIDIA card |
-| **92 s** | the same on an 8 GB M2 MacBook, model download included |
+| **68 s** | the same on an 8 GB M2 MacBook, model download included (FLE Link 0.1.3, fresh home, 3 Nov 2026) |
 | **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp |
 | **29.1 tok/s** | DeepSeek-V4.1-Flash (232 GiB) on the same 32 GB GPU, hot experts locked in RAM (`flelink run deepseek-v41-ista`); two requests at once about 39 tok/s together |
 
