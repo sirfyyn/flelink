@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A practical test you can compare:** `flelink bench --task pagoda` measures a real answer (a three.js scene, up to
+  8000 tokens) at temperature 0 without thinking, through any `/v1`: decode and prompt speed, length, whether the answer is
+  complete, and the machine and server build in the result file. `--answers DIR` keeps the scenes.
+
 - **A recipe that needs a newer FLE updates the engine itself in the Studio too:** starting it installs the newer
   release (progress on the Engine page) and starts the recipe once it is in, like `flelink run`. Before, the Studio
   refused with "Update the engine on the Engine page".

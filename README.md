@@ -149,6 +149,21 @@ Codex (`~/.codex/config.toml`): `[mcp_servers.flelink]` with `command = "flelink
 `"mcp": {"flelink": {"type": "local", "command": ["flelink", "mcp"]}}`. Tools: `status`, `system`, `recipes`,
 `library`, `download`, `downloads`, `load`, `stop`, `requests`, `log`, `settings`, `connect`, `ask`.
 
+## A practical test you can compare
+
+Tokens per second on a short paragraph say little about a real answer. `flelink bench --task pagoda` sends a real task
+(a voxel pagoda in three.js, one HTML file, the prompt of the DeepSeek numbers above) at temperature 0 without a thinking
+phase, to any OpenAI-compatible server: the engine, the Studio's `/v1` (its token is taken from the running Studio), or
+another runtime.
+
+```bash
+flelink bench --task pagoda --url http://127.0.0.1:8080 --runs 3 --answers ./answers --output pagoda.json
+```
+
+Each run reports decode and prompt speed from the server's own timings, the answer's length and whether it is complete
+(the HTML ends before the token limit of 8000). The result file names the machine (CPU, RAM, GPUs), the server build and
+the model file, so two people can compare their files; `--answers` keeps each scene to open in a browser.
+
 ## Demo mode: record the real Studio
 
 For videos and demos the Studio can take its steps from outside, done the way a person would: `flelink studio --demo` (the
