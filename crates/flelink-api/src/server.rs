@@ -73,6 +73,82 @@ pub struct ApiError(pub u16, pub String);
 
 pub type Ctx = Arc<Studio>;
 
+/// The words of recipe_start's refusal when the installed FLE is older than the recipe's `min_version`.
+const NEEDS_NEWER: &str = "needs FLE ";
+
+/// A recipe start that updates the engine itself when the recipe needs a newer FLE (as `flelink run` does): the newer
+/// release goes into Downloads like an install from the Engine page, and the recipe starts once it is in. Anything else
+/// recipe_start says is passed on as it is.
+pub fn recipe_start_updating(st: &Ctx, id: &str) -> Result<Value, ApiError> {
+    let m = match st.recipe_start(id) {
+        Err(ApiError(409, m)) if m.contains(NEEDS_NEWER) && m.contains(" or newer.") => m,
+        r => return r,
+    };
+    let info = st.sysinfo();
+    let (os, arch) = crate::engines::os_arch();
+    // the variant of the engine in use (its build), else the first FLE build that fits this machine
+    let mine = st
+        .engines
+        .installed()
+        .into_iter()
+        .filter(|e| e["kind"] == "fle")
+        .map(|e| e["variant"].as_str().unwrap_or("").to_string())
+        .next();
+    let fits: Vec<String> = crate::engines::variants(&info, os, &arch)
+        .iter()
+        .filter_map(|v| v["id"].as_str().map(str::to_string))
+        .filter(|v| v.starts_with("fle"))
+        .collect();
+    let Some(variant) = mine
+        .filter(|v| fits.contains(v))
+        .or_else(|| fits.first().cloned())
+    else {
+        return Err(ApiError(409, m));
+    };
+    let job = st.engines.install(&variant, &info).map_err(|e| match e {
+        EngineError::Runtime(x) => ApiError(409, format!("{m} ({x})")),
+        EngineError::Network(x) => ApiError(502, format!("{m} Could not reach GitHub: {x}")),
+        EngineError::NotFound => ApiError(409, m.clone()),
+    })?;
+    let (job_id, tag) = (
+        job["id"].as_str().unwrap_or("").to_string(),
+        job["meta"]["tag"].as_str().unwrap_or("").to_string(),
+    );
+    let (st2, id2, tag2) = (st.clone(), id.to_string(), tag.clone());
+    let _ = std::thread::Builder::new()
+        .name("recipe-update".into())
+        .spawn(move || {
+            let t = std::time::Instant::now();
+            while t.elapsed() < std::time::Duration::from_secs(6 * 3600) {
+                let state = st2
+                    .downloads
+                    .list()
+                    .into_iter()
+                    .find(|j| j["id"].as_str() == Some(job_id.as_str()))
+                    .map(|j| j["state"].as_str().unwrap_or("").to_string());
+                match state.as_deref() {
+                    Some("failed" | "cancelled") | None => return,
+                    // the download is done; the engine counts once it is unpacked and registered
+                    Some("done")
+                        if st2
+                            .engines
+                            .installed()
+                            .iter()
+                            .any(|e| e["tag"].as_str() == Some(tag2.as_str())) =>
+                    {
+                        let _ = st2.recipe_start(&id2);
+                        return;
+                    }
+                    _ => {}
+                }
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+        });
+    let title = m.split(NEEDS_NEWER).next().unwrap_or("").trim().to_string();
+    Ok(json!({"installing": true, "job": job,
+              "message": format!("{title} needs a newer FLE engine: FLE Link installs {tag} now (progress on the Engine page) and starts the recipe when it is in")}))
+}
+
 fn make_token() -> String {
     let mut b = [0u8; 24];
     getrandom::getrandom(&mut b).expect("random bytes");
@@ -1883,7 +1959,7 @@ impl Studio {
                 return Err(ApiError(
                     409,
                     format!(
-                        "{} needs FLE {min} or newer. Update the engine on the Engine page (Engines, Update), then start again.",
+                        "{} {NEEDS_NEWER}{min} or newer. Update the engine on the Engine page (Engines, Update), then start again.",
                         r.title
                     ),
                 ));
@@ -2870,7 +2946,7 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
         ("POST", _) if recipe_download_id(p).is_some() => {
             st.recipe_download(recipe_download_id(p).unwrap())
         }
-        ("POST", _) if recipe_start_id(p).is_some() => st.recipe_start(recipe_start_id(p).unwrap()),
+        ("POST", _) if recipe_start_id(p).is_some() => recipe_start_updating(st, recipe_start_id(p).unwrap()),
         ("GET", "/api/hf/search") => {
             st.hf_search(r.query.get("q").and_then(|v| v.as_str()).unwrap_or(""))
         }
