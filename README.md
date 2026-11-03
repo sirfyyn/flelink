@@ -34,7 +34,7 @@ webhooks, your messages), and FLE Link starts it with your model on the Agent pa
 | **66 s** | from nothing to the first answer on Linux with an NVIDIA card |
 | **68 s** | the same on an 8 GB M2 MacBook, model download included (FLE Link 0.1.3, fresh home, 3 Nov 2026) |
 | **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp |
-| **29.1 tok/s** | DeepSeek-V4.1-Flash (232 GiB) on the same 32 GB GPU, hot experts locked in RAM (`flelink run deepseek-v41-ista`); two requests at once about 39 tok/s together |
+| **31.6 tok/s** | DeepSeek-V4.1-Flash (232 GiB) on the same 32 GB GPU, exact, experts in a 90 GB RAM store (`flelink run deepseek-v41-ista`, FLE v1.2.4); with the DSpark draft 41.9 |
 
 ## Install
 
@@ -77,7 +77,7 @@ Toolkit on the host; not tested yet). Built and smoke-tested with every release 
 | Model | Size | Measured | Notes |
 |---|---|---|---|
 | [Qwen3.8-Flash-Next · FLE](https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF) | 125B MoE, 88.9 GB | decode **91 tok/s** (Strata 74, llama.cpp 36) | one 32 GB RTX PRO 4500, 120 GB RAM, same machine for all three (6 Oct 2026); smaller than Unsloth IQ4_XS at the same KL divergence |
-| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, IQ2_XXS 232 GiB | decode **29.1 tok/s** (two rounds of three tasks the expert profile has not seen: 29.1 and 29.0); two requests at once 19.3 and 19.6 tok/s, about 39 together | `flelink run deepseek-v41-ista`; one 32 GB RTX PRO 4500, 120 GB RAM, 22 GB expert cache, 60 GB hot experts locked in RAM, after a warm-up, no CPU pinning, rest from NVMe (2 Nov 2026); FLE engine v1.2.3 (v1.2.2 with one slot: 29.3). With the [DSpark draft](https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF) (`deepseek-v41-ista-dspark`): 23.2 tok/s on 1 Nov with an earlier setting |
+| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, IQ2_XXS 232 GiB | decode **31.6 tok/s** through FLE Link on a 3100-token three.js answer, its prompt in 2.5 s; FLE's own release: 33.3 tok/s on such answers (n=6), 31.5 on prompts the expert profile has not seen (n=5) | `flelink run deepseek-v41-ista`; exact (no cache bias), one 32 GB RTX PRO 4500, 120 GB RAM, 22 GB expert cache on the card, 90 GB RAM expert store (needs about 90 GB free RAM and an unlimited memlock limit), prefill windows, FLE engine v1.2.4 (3 Nov 2026). With the [DSpark draft](https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF) (`deepseek-v41-ista-dspark`, lossless at temperature 0): 41.9 tok/s (one run, FLE release). `deepseek-v41-ista-iq1m`: a smaller quant, not yet measured on v1.2.4 |
 
 Small models such as Llama 3.2 1B run on any laptop and are in the built-in catalog (`flelink models`). Any other GGUF on
 Hugging Face can be searched, checked for fit and downloaded from the Studio's Models page.
