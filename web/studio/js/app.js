@@ -353,6 +353,7 @@ async function start() {
   await bootPlugins(false);
   route();
   tick();
+  import("./demo.js").then((m) => m.startDemo()).catch(() => {});
 }
 
 start();

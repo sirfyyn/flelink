@@ -345,7 +345,19 @@ impl Engines {
         } else {
             format!("tags/{tag}")
         };
-        http_json(&format!("{}/{repo}/releases/{tail}", self.inner.github_api))
+        let r = http_json(&format!("{}/{repo}/releases/{tail}", self.inner.github_api));
+        // 403/429 (60 API requests an hour per address without sign-in): the release page and its checksums instead,
+        // the same way the CLI installs (flelink-core engines.rs). Only against GitHub itself, not a test server.
+        match r {
+            Err(Network(ref m))
+                if (m == "Forbidden" || m == "Too Many Requests")
+                    && self.inner.github_api == GITHUB_API =>
+            {
+                let t = (!tag.is_empty() && tag != "latest").then_some(tag);
+                flelink_core::engines::release_page_json(repo, t).map_or(r, Ok)
+            }
+            r => r,
+        }
     }
 
     /// Which release assets an install would download (a readable reason if none fits).

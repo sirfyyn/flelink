@@ -1,0 +1,71 @@
+id = "deepseek-v41-ista-iq1m"
+title = "DeepSeek-V4.1-Flash ISTA IQ1_M (FLE, the fast way, less exact)"
+note = "A smaller quant for speed: 42.3 tok/s decode on one 32 GB GPU with 120 GB RAM (n=6, 39.1 to 45.6; 3 Nov 2026, before the prefill windows), with the expert-cache bonus on every layer and 80 GB of hot experts locked in RAM. It answers less exactly than IQ2_XXS (KL divergence about 0.13 against it): for speed, not for quality. Needs FLE v1.2.4, permission to lock memory and about 225 GB on a fast NVMe."
+
+[model]
+repo = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"
+files = [
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00001-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00002-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00003-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00004-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00005-of-00006.gguf",
+  "DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
+]
+size = 231316485152
+
+[model.save_as]
+"DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf" = "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00006-of-00006.gguf"
+
+[model.sha256]
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00001-of-00006.gguf" = "3e8ddd11441edd4bc19bacaef5dbe38818af2cbdf0820fb70f1d2d851fcc192a"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00002-of-00006.gguf" = "be4ceb1caf1bed28e886860cf6a52adc8f5ca9eb0d2098ade39bb4179d48b323"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00003-of-00006.gguf" = "758c66ba65236e8ce0820c21a7b6f9b2947681df8cc509f672a77722e8191b9a"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00004-of-00006.gguf" = "04a5bea2b38eb576f49efc19c0a677768d6e2a8ea5772d72fb6cb79e1733a212"
+"DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00005-of-00006.gguf" = "7c8dbee99890f05dbc420eba6f44393f5228d06248fe61e1ae8ed002449c7549"
+"DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf" = "3dac4c54893ad7aa89103c0028500eadc78e74112cef3a2930a97e67dc9fb4f3"
+
+[engine]
+prefer = ["fle"]
+strict = true
+# v1.2.4: pool and prefill windows; no RAM store here, the hot experts are locked in RAM (needs permission to lock memory)
+min_version = "v1.2.4"
+
+[run]
+context = 16384
+# -t: physical cores only (SMT threads made it much slower)
+args = [
+  "--jinja", "-ngl", "99", "-cmoe", "-t", "{physical_cores}", "-ctk", "q8_0", "-ctv", "q8_0",
+  "-fit", "on", "--fit-target", "1115", "--moe-expert-cache-inserts", "1", "-b", "4096", "-ub", "4096",
+]
+
+unset_env = ["FLE_MOE_ADMIT_FREQ", "FLE_MOE_EVICT_OLDEST", "FLE_MOE_OBS_MAXTOK", "FLE_MOE_PROFILE_SAVE_SEC",
+  "FLE_CKPT_TAIL", "FLE_MTP_VOCAB_N", "FLE_MTP_PENALTIES", "FLE_SLOT_EARLY_SAVE", "FLE_CACHE_GUARD_SLOT"]
+
+[run.env]
+FLE_MC_OVERLAP = "1"
+FLE_MMAP_NO_RANDOM = "1"
+FLE_MOE_CACHE_BIAS = "0.1"
+FLE_MOE_CACHE_BUDGET_FIT = "1"
+FLE_MOE_CACHE_BUDGET_MIB = "22000"
+FLE_MOE_FUSED_CPU = "1"
+FLE_MOE_HOT_BIAS = "0.05"
+FLE_MOE_HOT_MLOCK_GB = "80"
+FLE_MOE_POOL = "1"
+FLE_MOE_PROFILE = "{profile}"
+FLE_MOE_SHARE_EVERY = "8000"
+FLE_MOE_WILLNEED_NOW = "1"
+FLE_PREFILL_WINDOW = "16"
+FLE_PREFILL_WINDOW_MAX = "2047"
+FLE_SCHED_ASYNC_CPU = "1"
+FLE_UBATCH_LEND = "1"
+FLE_UBATCH_PREFETCH = "1"
+FLE_UBATCH_PREFETCH_SLOTS = "3"
+
+# where it was measured, not a determined minimum
+[requires]
+ram_gib = 120
+vram_gib = 32
+
+[chat]
+thinking = false

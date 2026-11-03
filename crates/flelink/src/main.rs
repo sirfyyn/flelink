@@ -1,3 +1,4 @@
+mod demo;
 mod mcp;
 mod tui;
 
@@ -119,6 +120,9 @@ enum Cmd {
         /// serve the page from this folder instead of the copy inside the binary
         #[arg(long, value_name = "DIR", hide = true)]
         web_dir: Option<std::path::PathBuf>,
+        /// demo mode: the page takes steps from `flelink demo` (for recordings of the real Studio)
+        #[arg(long)]
+        demo: bool,
     },
     /// A pairing code for another FLE Link (valid 10 minutes, one use); the host side of Remote access
     PairCode,
@@ -188,6 +192,57 @@ enum Cmd {
         model: String,
         question: Vec<String>,
     },
+    /// Drive a Studio started with --demo (chat, page, preview, wait) and record the screen, for videos
+    Demo {
+        #[command(subcommand)]
+        what: DemoCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum DemoCmd {
+    /// type a message into the chat and send it, as a person would
+    Chat {
+        text: String,
+        #[arg(long)]
+        max_tokens: Option<u32>,
+        #[arg(long)]
+        temperature: Option<f64>,
+        /// wait until the answer is finished
+        #[arg(long)]
+        wait: bool,
+        /// milliseconds per typed character (default 12)
+        #[arg(long)]
+        typing_ms: Option<u64>,
+    },
+    /// open a page of the Studio (/, /engine, /models, /settings …)
+    Page { path: String },
+    /// press Preview on the last answer that has a web page
+    Preview,
+    /// start a new chat
+    New,
+    /// scroll the page (pixels, negative = up)
+    Scroll { dy: i64 },
+    /// wait until the page has done every step and no answer is being written (max seconds, default 1800)
+    Wait { max: Option<u64> },
+    /// demo mode on or off, queue, whether an answer is being written
+    Status,
+    /// record the screen with the system's recorder: `start FILE [--window]`, `stop`
+    Record {
+        #[command(subcommand)]
+        what: RecordCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum RecordCmd {
+    Start {
+        file: std::path::PathBuf,
+        /// only the focused window (Hyprland), else the whole screen
+        #[arg(long)]
+        window: bool,
+    },
+    Stop,
 }
 
 /// Colours on stderr only for a terminal and only without NO_COLOR.
@@ -584,15 +639,42 @@ fn run() -> Result<()> {
             no_browser,
             attach,
             web_dir,
-        }) => exit(flelink_api::run::run(flelink_api::run::RunOptions {
-            home,
-            host,
-            no_tls,
-            port,
-            no_browser,
-            attach: attach.unwrap_or_default(),
-            web_dir,
-        })),
+            demo,
+        }) => exit({
+            if demo {
+                std::env::set_var("FLE_DEMO", "1");
+            }
+            flelink_api::run::run(flelink_api::run::RunOptions {
+                home,
+                host,
+                no_tls,
+                port,
+                no_browser,
+                attach: attach.unwrap_or_default(),
+                web_dir,
+            })
+        }),
+        Some(Cmd::Demo { what }) => {
+            let r = match what {
+                DemoCmd::Chat { text, max_tokens, temperature, wait, typing_ms } => demo::step(serde_json::json!({
+                    "aktion": "chat", "text": text, "max_tokens": max_tokens, "temperature": temperature, "tippen_ms": typing_ms
+                }))
+                .and_then(|_| if wait { demo::wait(std::time::Duration::from_secs(1800)) } else { Ok(()) }),
+                DemoCmd::Page { path } => demo::step(serde_json::json!({"aktion": "seite", "pfad": path})),
+                DemoCmd::Preview => demo::step(serde_json::json!({"aktion": "vorschau"})),
+                DemoCmd::New => demo::step(serde_json::json!({"aktion": "neu"})),
+                DemoCmd::Scroll { dy } => demo::step(serde_json::json!({"aktion": "scroll", "dy": dy})),
+                DemoCmd::Wait { max } => demo::wait(std::time::Duration::from_secs(max.unwrap_or(1800))),
+                DemoCmd::Status => demo::status(),
+                DemoCmd::Record { what: RecordCmd::Start { file, window } } => demo::record_start(&file, window),
+                DemoCmd::Record { what: RecordCmd::Stop } => demo::record_stop(),
+            };
+            if let Err(e) = r {
+                eprintln!("flelink demo: {e:#}");
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         Some(Cmd::PairCode) => {
             let c = flelink_api::remote::Clients::new(&home).new_code();
             println!(

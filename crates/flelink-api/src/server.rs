@@ -64,6 +64,8 @@ pub struct Studio {
     pub live: Live,
     /// the server listens beyond this machine (host mode); set by the starter
     pub lan: std::sync::atomic::AtomicBool,
+    /// demo mode: the page takes steps from outside (demo.rs; off unless --demo / FLE_DEMO=1)
+    pub demo: crate::demo::Demo,
 }
 
 /// An error the page shows as `{"error": {"message": ...}}`.
@@ -123,6 +125,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         library: Mutex::new(Library::new(&home)),
         engines,
         lan: std::sync::atomic::AtomicBool::new(lan),
+        demo: crate::demo::Demo::new(false),
         live: Live::new(engine.clone(), 1.0),
         bench: crate::bench::Bench::new(engine.clone(), &home),
         tuner: crate::tuner::Tuner::new(&home),
@@ -1526,6 +1529,7 @@ impl Studio {
                 draft: None,
                 fallback: String::new(),
                 health: String::new(),
+                ready_log: String::new(),
             }
         };
         for (k, v) in &e.env {
@@ -1913,6 +1917,10 @@ impl Studio {
                 None => plan.env.push((k, v)),
             }
         }
+        r.drop_unset(&mut plan.env);
+        if let Some(l) = &r.run.ready_log {
+            plan.ready_log = l.clone();
+        }
         plan.notes.push(format!("Recipe {}", r.id));
         self.engine.start(plan).map_err(engine_err)?;
         // the recipe's chat defaults become the chat settings; what it does not say stays as it was
@@ -1922,6 +1930,9 @@ impl Studio {
         }
         if !r.chat.system.is_empty() {
             chat.insert("system_prompt".into(), json!(r.chat.system));
+        }
+        if let Some(m) = r.chat.max_tokens {
+            chat.insert("max_tokens".into(), json!(m));
         }
         if r.chat.temperature.is_some() || r.chat.top_p.is_some() {
             chat.insert("sampling".into(), json!("custom"));
@@ -2371,6 +2382,12 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             Ok(json!({"ok": true}))
         }
         ("GET", "/api/live/requests") => Ok(st.live.requests()),
+        // demo mode (demo.rs): the status, a step from outside, and the page asking for its next step
+        ("GET", "/api/demo") => Ok(st.demo.status()),
+        ("POST", "/api/demo") => r
+            .json(MAX_JSON)
+            .and_then(|body| st.demo.push(&Value::Object(body)).map_err(|e| ApiError(409, e))),
+        ("POST", "/api/demo/next") => r.json(MAX_JSON).map(|body| st.demo.next(body.get("busy").and_then(Value::as_bool))),
         ("GET", "/api/live") => {
             let since = r
                 .query

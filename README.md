@@ -149,6 +149,23 @@ Codex (`~/.codex/config.toml`): `[mcp_servers.flelink]` with `command = "flelink
 `"mcp": {"flelink": {"type": "local", "command": ["flelink", "mcp"]}}`. Tools: `status`, `system`, `recipes`,
 `library`, `download`, `downloads`, `load`, `stop`, `requests`, `log`, `settings`, `connect`, `ask`.
 
+## Demo mode: record the real Studio
+
+For videos and demos the Studio can take its steps from outside, done the way a person would: `flelink studio --demo` (the
+desktop app: `FLE_DEMO=1`), then
+
+```bash
+flelink demo record start pagoda.mp4 --window    # the system's screen recorder (wf-recorder, ffmpeg x11grab, screencapture)
+flelink demo chat "Code a voxel pagoda in three.js" --max-tokens 8000 --temperature 0 --wait
+flelink demo page /engine                        # the requests list with tokens and speed
+flelink demo preview                             # Preview on the last answer with a web page
+flelink demo record stop
+```
+
+The page types the message, sends it and shows the answer as it streams, with the live numbers. Without `--demo` the page
+does not ask for steps at all. A step is one of a few fixed actions (`chat`, `page`, `preview`, `new`, `scroll`) with plain
+values; nothing runs code.
+
 ## Recipes
 
 A recipe is one TOML file: model, engine, start values, chat defaults, and optionally a draft model for speculative decoding.

@@ -105,6 +105,27 @@ impl Checked {
         ))
     }
 
+    /// A file already read once with this checksum and unchanged since (same size and time), whatever its name.
+    fn known(&self, sha: &str) -> Option<PathBuf> {
+        self.map.iter().find_map(|(k, v)| {
+            if v.as_str() != Some(sha) {
+                return None;
+            }
+            let path = PathBuf::from(k.rsplitn(3, '|').nth(2)?);
+            (Self::key(&path).as_deref() == Some(k.as_str())).then_some(path)
+        })
+    }
+
+    fn remember(&mut self, p: &Path, sha: &str) {
+        if let Some(key) = Self::key(p) {
+            self.map.insert(key, json!(sha));
+            if let Some(d) = self.file.parent() {
+                let _ = std::fs::create_dir_all(d);
+            }
+            let _ = std::fs::write(&self.file, Value::Object(self.map.clone()).to_string());
+        }
+    }
+
     fn sha(&mut self, p: &Path, say: &mut dyn FnMut(Event)) -> Option<String> {
         let key = Self::key(p)?;
         if let Some(s) = self.map.get(&key).and_then(Value::as_str) {
@@ -163,6 +184,16 @@ fn find(
     if let Some(sha) = &x.sha256 {
         if let Some(b) = ollama_blob(sha) {
             return Some(b);
+        }
+    }
+    // the checksum decides, not the name: a file read once with this SHA-256 (another recipe's copy) is the same file
+    if let Some(sha) = &x.sha256 {
+        let dest_real = dest.canonicalize().ok();
+        if let Some(p) = checked
+            .known(sha)
+            .filter(|p| p.canonicalize().ok() != dest_real)
+        {
+            return Some(p);
         }
     }
     let dest_real = dest.canonicalize().ok();
@@ -247,6 +278,22 @@ pub fn adopt_fetches(
         if !names.contains(&local_name) {
             names.push(local_name);
         }
+        // the same file (same SHA-256) that another recipe keeps under its own name, e.g. a part two quants share
+        if let Some(sha) = &x.sha256 {
+            for other in crate::recipe::builtin().iter().flat_map(|r| r.fetches()) {
+                if other.sha256.as_deref() == Some(sha.as_str()) {
+                    let n = other
+                        .local
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    if !names.contains(&n) {
+                        names.push(n);
+                    }
+                }
+            }
+        }
         if let Some(found) = find(&x, &names, &idx, &dest, &mut checked, say) {
             match link(&found, &dest) {
                 Ok(()) => {
@@ -266,8 +313,41 @@ pub fn adopt_fetches(
     out
 }
 
+/// Note the checksum of a file FLE Link just downloaded and verified, so a later recipe finds it by its SHA-256 under
+/// any name (two quants that share a part).
+pub fn remember_checked(home: &Path, path: &Path, sha: &str) {
+    Checked::open(home).remember(path, sha);
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_file_checked_once_is_found_by_its_checksum_under_any_name() {
+        let dir = std::env::temp_dir().join(format!("flelink-sha-{}", std::process::id()));
+        let home = dir.join("home");
+        let models = home.join("models");
+        let other = models.join("q-a").join("shared-part-00006.gguf");
+        std::fs::create_dir_all(other.parent().unwrap()).unwrap();
+        std::fs::write(&other, b"the same bytes").unwrap();
+        let sha = hex::encode(sha2::Sha256::digest(b"the same bytes"));
+        super::remember_checked(&home, &other, &sha);
+        let x = crate::recipe::Fetch {
+            repo: "o/r".into(),
+            revision: "main".into(),
+            file: "Engram.gguf".into(),
+            local: PathBuf::from("q-b/other-name-00006.gguf"),
+            sha256: Some(sha.clone()),
+            size: 14,
+        };
+        let got = adopt_fetches(vec![x], &home, &models, &mut |_| {});
+        assert_eq!(got.len(), 1, "linked although the name differs");
+        assert_eq!(
+            std::fs::read(models.join("q-b/other-name-00006.gguf")).unwrap(),
+            b"the same bytes"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use super::*;
 
     #[test]

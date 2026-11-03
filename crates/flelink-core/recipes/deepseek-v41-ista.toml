@@ -1,6 +1,6 @@
 id = "deepseek-v41-ista"
 title = "DeepSeek-V4.1-Flash ISTA IQ2_XXS (FLE, hot experts in RAM)"
-note = "On one 32 GB GPU with 120 GB RAM (RTX PRO 4500), on three tasks the expert profile has not seen, after a warm-up: 29.1 tok/s through FLE Link on FLE v1.2.3 (two rounds, 29.1 and 29.0; the FLE engine measured 29.7 to 31.7 with the same settings, its runs spread by about 2 tok/s), and two requests at once at about 19.5 tok/s each, 39 together (2 Nov 2026). ISTA's GSQ-RCO quant with FLE's host-side expert settings: a 22 GB GPU expert cache, the hot experts locked in RAM (memory minus 60 GiB, at most 75) after a profile from the first run, and large batches. Needs FLE v1.2.3 or newer and permission to lock memory (FLE Link says so in the engine log when the system does not allow it). The expert cache bonus (0.1, only after layer 14) changes the output a little (KL divergence +0.003 over the noise); set FLE_MOE_CACHE_BIAS to 0 for the exact output (26.8 tok/s). No draft model: with this cache it does not help any more. About 255 GB on a fast NVMe."
+note = "On one 32 GB GPU with 120 GB RAM (RTX PRO 4500), exact (no cache bonus): 33.3 tok/s decode on a three.js scene of 3000 tokens (n=6, 32.9 to 33.9), 31.5 on short prompts (n=5, 30.8 to 31.5); 59-token prompts read in about 1.4 s (prefill windows of 16 tokens, about 45 tok/s at every length). Through FLE Link: 31.1 tok/s on a 3583-token answer (n=1). Strata 0.2.9 on the same task: 37.1 direct, 36.5 through FLE Link (3 Nov 2026). FLE 1.2.4 keeps 90 GB of experts in a RAM store that the usage profile fills at start (about 18 s; ready after that), the rest is read from NVMe. Needs FLE v1.2.4 or newer and about 255 GB on a fast NVMe."
 
 [model]
 repo = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"
@@ -28,8 +28,8 @@ size = 248834257920
 [engine]
 prefer = ["fle"]
 strict = true
-# CACHE_BIAS_LAYERS and SCHED_ASYNC_CPU are new in v1.2.3, which also serves two requests at once without the q8_0 abort
-min_version = "v1.2.3"
+# v1.2.4: RAM expert store (FLE_MOE_STORE_*), pool, prefill windows; exact (no cache bonus: with the store it costs speed)
+min_version = "v1.2.4"
 
 [run]
 context = 16384
@@ -39,24 +39,30 @@ args = [
   "-fit", "on", "--fit-target", "1115", "--moe-expert-cache-inserts", "1", "-b", "4096", "-ub", "4096",
 ]
 
+unset_env = ["FLE_MOE_ADMIT_FREQ", "FLE_MOE_EVICT_OLDEST", "FLE_MOE_OBS_MAXTOK", "FLE_MOE_PROFILE_SAVE_SEC", "FLE_MOE_CACHE_BIAS",
+  "FLE_CKPT_TAIL", "FLE_MTP_VOCAB_N", "FLE_MTP_PENALTIES", "FLE_SLOT_EARLY_SAVE", "FLE_CACHE_GUARD_SLOT"]
+ready_log = "[fle-store] warm start"
+
 [run.env]
+FLE_HC_FUSED = "1"
+FLE_MC_OVERLAP = "1"
+FLE_MMAP_NO_RANDOM = "1"
 FLE_MOE_CACHE_BUDGET_FIT = "1"
 FLE_MOE_CACHE_BUDGET_MIB = "22000"
+FLE_MOE_FUSED_CPU = "1"
+FLE_MOE_POOL = "1"
 FLE_MOE_PROFILE = "{profile}"
-FLE_MOE_HOT_MLOCK_GB = "{hot_mlock_gb}"
-FLE_MMAP_NO_RANDOM = "1"
+FLE_MOE_STORE_ASYNC = "1"
+FLE_MOE_STORE_GB = "90"
+FLE_MOE_STORE_UPLOAD = "1"
 FLE_MOE_WILLNEED_NOW = "1"
-FLE_MC_OVERLAP = "1"
-# the cache bonus only on the layers after 14 (Procyon E4, 2 Nov 2026: KL +0.003 over the noise); the CPU side scheduled
-# asynchronously
-FLE_MOE_CACHE_BIAS = "0.1"
-FLE_MOE_CACHE_BIAS_LAYERS = "0-14:0"
+FLE_PREFILL_LEAN = "1"
+FLE_PREFILL_WINDOW = "16"
+FLE_PREFILL_WINDOW_MAX = "2047"
 FLE_SCHED_ASYNC_CPU = "1"
 FLE_UBATCH_LEND = "1"
 FLE_UBATCH_PREFETCH = "1"
 FLE_UBATCH_PREFETCH_SLOTS = "3"
-FLE_PREFILL_LEAN = "1"
-FLE_HC_FUSED = "1"
 
 # where it was measured, not a determined minimum
 [requires]

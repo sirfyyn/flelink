@@ -112,6 +112,18 @@ fn release(repo: &str, tag: Option<&str>) -> Result<Release> {
     bail!("GitHub answered {code} for {url}")
 }
 
+/// [`release_from_page`] in the API's shape (`tag_name`, `assets` with `name`, `browser_download_url`, `digest`), for the
+/// Studio's engine install when GitHub's API refuses (403/429).
+pub fn release_page_json(repo: &str, tag: Option<&str>) -> Result<serde_json::Value> {
+    let r = release_from_page(repo, tag)?;
+    let assets: Vec<serde_json::Value> = r
+        .assets
+        .iter()
+        .map(|a| serde_json::json!({"name": a.name, "browser_download_url": a.browser_download_url, "digest": a.digest}))
+        .collect();
+    Ok(serde_json::json!({"tag_name": r.tag_name, "assets": assets}))
+}
+
 /// A release without the API: the tag from `/releases/latest` (it redirects to `/releases/tag/<tag>`), the files and
 /// their SHA-256 from the release's `SHA256SUMS`, or, when a release has none (upstream llama.cpp), from the asset list
 /// GitHub shows on the release page (`/releases/expanded_assets/<tag>`, every file with its sha256 digest).

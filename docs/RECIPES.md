@@ -55,6 +55,9 @@ args = ["--cache-reuse", "256"]            # appended after the automatic argume
                                            # in args and env also {profile}: <models>/profiles/<id>.prof (a file the
                                            # engine keeps between starts), {hot_mlock_gb}: memory minus 60 GiB, at most 75
 env = { FLE_MOE_CACHE_BIAS = "0.002" }     # overrides the automatic environment
+unset_env = ["FLE_MOE_ADMIT_FREQ"]        # automatic values FLE Link would set that this recipe does not want
+profile = "/data/profiles/measured.prof"   # a usage profile to start from (copied to {profile} the first time)
+ready_log = "[fle-store] warm start"       # ready only once the engine log shows this line (after the health check)
 
 [requires]             # shown to people; the fit check uses model.size
 ram_gib = 100
@@ -66,6 +69,7 @@ thinking = false
 tools = false
 temperature = 0.6
 top_p = 0.95
+max_tokens = 8000      # answer length limit (0 = no limit)
 ```
 
 Built-in recipes with a draft model or engine flags of their own are TOML files in `crates/flelink-core/recipes/`

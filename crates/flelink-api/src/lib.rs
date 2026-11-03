@@ -6,6 +6,7 @@ pub mod bench;
 pub mod cachewatch;
 pub mod catalog;
 pub mod chats;
+pub mod demo;
 pub mod downloads;
 pub mod engine;
 pub mod engines;
