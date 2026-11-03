@@ -66,6 +66,7 @@ thinking = false
 tools = false
 temperature = 0.6
 top_p = 0.95
+max_tokens = 8000      # answer length limit (0 = no limit)
 ```
 
 Built-in recipes with a draft model or engine flags of their own are TOML files in `crates/flelink-core/recipes/`

@@ -159,6 +159,9 @@ pub struct ChatSpec {
     pub temperature: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
+    /// answer length limit for the chat (Settings → Answer length limit; 0 = no limit)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
 }
 
 fn main_rev() -> String {

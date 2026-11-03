@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Demo mode** (`flelink studio --demo`, `FLE_DEMO=1` for the app): `flelink demo chat|page|preview|new|scroll|wait` drives
+  the real Studio from outside, the way a person would, and `flelink demo record start|stop` records the screen with the
+  system's recorder. For videos of the Studio without a browser automation.
+- **Recipes can set the chat's answer length** (`[chat] max_tokens`), like temperature and thinking.
 - **Says what it does when something gets in the way:** a download that picks up an earlier one says "Resuming the
   download … already here", a checked file says so, and when port 8080 is taken the engine's new port is named
   (all three ran silently before; seen while recording the video on 3 Nov 2026).
