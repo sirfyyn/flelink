@@ -19,6 +19,7 @@ pub mod orphans;
 pub mod plan;
 pub mod plugin;
 pub mod policy;
+pub mod praxis;
 pub mod recipe;
 pub mod report;
 pub mod serve;

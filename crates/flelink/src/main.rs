@@ -408,6 +408,13 @@ struct BenchArgs {
     warmup: i64,
     #[arg(long, default_value_t = 600.0)]
     timeout: f64,
+    /// a practical test instead of the short prompt: a real task at temperature 0 without thinking, with a check
+    /// that the answer is complete and the machine in the result (pagoda: three.js scene, up to 8000 tokens)
+    #[arg(long, value_name = "NAME")]
+    task: Option<String>,
+    /// with --task: keep each answer in DIR (pagoda-1.html, …)
+    #[arg(long, value_name = "DIR")]
+    answers: Option<String>,
     /// write the JSON result to a file
     #[arg(long, value_name = "FILE")]
     output: Option<String>,
@@ -427,6 +434,9 @@ struct BenchArgs {
 
 fn run_bench(a: BenchArgs) -> Result<i32> {
     use flelink_core::{bench, FleError};
+    if let Some(id) = &a.task {
+        return run_praxis(&a, id);
+    }
     let mut prompt = a.prompt.clone();
     if let Some(f) = &a.prompt_file {
         prompt = std::fs::read_to_string(f)
@@ -504,6 +514,39 @@ fn run_bench(a: BenchArgs) -> Result<i32> {
             0
         },
     )
+}
+
+/// `flelink bench --task NAME`: a practical test (flelink-core praxis.rs). Runs default to 3 like the speed test; the
+/// warm-up is a short count, not a whole answer.
+fn run_praxis(a: &BenchArgs, id: &str) -> Result<i32> {
+    use flelink_core::{praxis, FleError};
+    if a.compare.is_some() || a.baseline.is_some() {
+        return Err(FleError::new(
+            "--task measures one server; --compare and --baseline belong to the speed test.",
+            "Run --task once per server and compare the two result files.",
+        )
+        .into());
+    }
+    let t = praxis::task(id)?;
+    let p = praxis::Params {
+        url: a.url.clone(),
+        model: a.model_name.clone(),
+        runs: a.runs.max(1) as u32,
+        warmup: a.warmup > 0,
+        timeout: a.timeout.max(1800.0),
+        answers: a.answers.as_ref().map(std::path::PathBuf::from),
+    };
+    let r = praxis::run(&p, t)?;
+    if let Some(o) = &a.output {
+        std::fs::write(o, serde_json::to_string_pretty(&r)?)
+            .map_err(|e| FleError::new(format!("Cannot write {o}: {e}"), "Check the path."))?;
+    }
+    if a.json {
+        println!("{}", serde_json::to_string_pretty(&r)?);
+    } else {
+        print!("{}", praxis::result_text(&r));
+    }
+    Ok(0)
 }
 
 fn run_config(config: Option<String>, json: bool, action: ConfigAction) -> Result<()> {
