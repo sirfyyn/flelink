@@ -13,9 +13,19 @@ function Get-Text([string]$Url) {
   return [string]$c
 }
 if (-not $Base) {
-  $rel = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
-  if (-not $rel) { throw "no release found in $Repo yet" }
-  $Base = "https://github.com/$Repo/releases/download/$($rel.tag_name)"
+  # the newest release from the redirect of /releases/latest (no API: its hourly limit runs out on shared networks)
+  $tag = $null
+  try {
+    $r = Invoke-WebRequest "https://github.com/$Repo/releases/latest" -Method Head -UseBasicParsing
+    $u = if ($r.BaseResponse.ResponseUri) { $r.BaseResponse.ResponseUri.AbsoluteUri } else { $r.BaseResponse.RequestMessage.RequestUri.AbsoluteUri }
+    if ($u -match '/releases/tag/([^/?#]+)') { $tag = $Matches[1] }
+  } catch { }
+  if (-not $tag) {
+    $rel = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
+    if ($rel) { $tag = $rel.tag_name }
+  }
+  if (-not $tag) { throw "no release found in $Repo yet" }
+  $Base = "https://github.com/$Repo/releases/download/$tag"
 }
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw "no build for $($env:PROCESSOR_ARCHITECTURE) yet (Windows x64 only)" }
 $file = 'flelink-x86_64-pc-windows-msvc.zip'

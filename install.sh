@@ -48,7 +48,10 @@ elif have shasum;  then sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 else die "sha256sum or shasum is needed to check the download"; fi
 
 if [ -z "$BASE" ]; then
-  tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
+  # the newest release from the redirect of /releases/latest (no API: its 60 requests an hour per address run out on
+  # shared networks), the API only when that gives nothing
+  tag="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null | sed -n 's|.*/releases/tag/\([^/?#]*\).*|\1|p')"
+  [ -n "$tag" ] || tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
   [ -n "$tag" ] || die "no release found in $REPO yet"
   BASE="https://github.com/$REPO/releases/download/$tag"
 fi
