@@ -107,7 +107,7 @@ export function mount(main) {
     // a plugin engine is installed from its release the first time, which the start request waits for
     const action = r.downloaded ? h("button", { class: "btn primary sm", onclick: async (ev) => {
           const b = ev.currentTarget; b.disabled = true;
-          try { await withEngine(() => post(`/api/recipes/${encodeURIComponent(r.id)}/start`, {})); await refreshState(); toast(`Starting ${r.title}`); navigate("/"); }
+          try { const res = await withEngine(() => post(`/api/recipes/${encodeURIComponent(r.id)}/start`, {})); await refreshState(); if (res && res.installing) { toast(res.message); navigate("/engine"); } else { toast(`Starting ${r.title}`); navigate("/"); } }
           catch (e) { toast(e.message, "bad"); }
           finally { b.disabled = false; }
         } }, icon("play", "sm"), "Start")

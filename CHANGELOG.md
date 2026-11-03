@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **A recipe that needs a newer FLE updates the engine itself in the Studio too:** starting it installs the newer
+  release (progress on the Engine page) and starts the recipe once it is in, like `flelink run`. Before, the Studio
+  refused with "Update the engine on the Engine page".
+
 ## 0.1.4 (2026-11-03)
 
 - **DeepSeek-V4.1 ISTA on FLE v1.2.4** (`min_version v1.2.4`, older engines are refused with the reason): the RAM

@@ -564,7 +564,12 @@ fn an_engine_install_matches_the_python_studio() {
         leftovers(&hp),
         "archives are removed after the install"
     );
-    both("install again", "POST", "/api/engines/install", Some(&body));
+    let (a, b) = both("install again", "POST", "/api/engines/install", Some(&body));
+    // the second install unpacks again in the background: wait for it, or the check below can meet the folder mid-swap
+    // (seen on macOS CI, 3 Nov 2026: "No file at …/llama-server")
+    if a.status == 200 && b.status == 200 {
+        finish("bOK again", &job_id, &a, &b);
+    }
     // the check of a binary
     let bin = |h: &Path| format!("{}/engines/{id}/build/bin/llama-server", h.display());
     for (what, path_of) in [
