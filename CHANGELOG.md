@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 (2026-11-03)
 
 - **DeepSeek-V4.1 ISTA on FLE v1.2.3:** the cache bonus only after layer 14, the CPU side scheduled asynchronously, two
   requests at once again (v1.2.3 fixes the q8_0 abort; the one-slot workaround is gone). Recipes can name the oldest
@@ -9,6 +9,13 @@
   tools do not slow the model down.
 - **GitHub sign-in:** a token in Settings, checked with GitHub and kept private; the agent works in your repos with it
   (`git`, `gh`), and the hub's GitHub plugin gets it.
+- **Measured:** DeepSeek-V4.1 ISTA through FLE Link on FLE v1.2.3: 29.1 tok/s for one request, two at once about 39
+  tok/s together (one 32 GB GPU, 120 GB RAM).
+- **Engines install without GitHub's API** when its hourly limit is used up (a shared address): the release page and its
+  `SHA256SUMS` give the files and checksums.
+- **An attached server that comes back** no longer stays "not answering" when no page is open.
+- **The chat sees only the hub's meta tools**, not every plugin tool a hub may list (136 on the FYOS hub); Settings shows
+  whether the hub answers.
 
 ## 0.1.1 (2026-11-02)
 
