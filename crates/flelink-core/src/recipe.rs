@@ -725,7 +725,7 @@ temperature = 0.2
             "an own build is not refused"
         );
         let r = find(std::path::Path::new("/nonexistent"), "deepseek-v41-ista").unwrap();
-        assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.3"));
+        assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.4"));
     }
 
     #[test]
@@ -923,7 +923,7 @@ temperature = 0.2
     }
 
     #[test]
-    fn the_hot_lock_recipe_fills_profile_and_lock_size() {
+    fn the_ista_recipe_uses_the_expert_store_and_waits_for_it() {
         let r = builtin()
             .into_iter()
             .find(|r| r.id == "deepseek-v41-ista")
@@ -939,11 +939,13 @@ temperature = 0.2
             models.join("profiles").is_dir(),
             "the profile folder is made"
         );
-        let gib = crate::system::detect(&models).ram_bytes >> 30;
-        assert_eq!(
-            env["FLE_MOE_HOT_MLOCK_GB"],
-            gib.saturating_sub(60).min(75).to_string()
+        // v1.2.4: the RAM expert store replaces the locked hot experts; exact, and ready only once the store is warm
+        assert_eq!(env["FLE_MOE_STORE_GB"], "90");
+        assert!(
+            !env.contains_key("FLE_MOE_HOT_MLOCK_GB") && !env.contains_key("FLE_MOE_CACHE_BIAS")
         );
+        assert!(r.run.unset_env.iter().any(|k| k == "FLE_MOE_CACHE_BIAS"));
+        assert_eq!(r.run.ready_log.as_deref(), Some("[fle-store] warm start"));
         assert!(r.run_args(&models).windows(2).any(|w| w == ["-ub", "4096"]));
         let _ = std::fs::remove_dir_all(&models);
     }
