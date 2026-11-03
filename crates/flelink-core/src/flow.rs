@@ -272,6 +272,26 @@ fn start_with(
     srv.wait_ready(Duration::from_secs(900), &mut |l| {
         emit(Event::Log(l.to_string()))
     })?;
+    // a recipe can ask for a log line before it counts as ready (an expert store that fills after the server is up)
+    if let Some(want) = r.run.ready_log.as_deref() {
+        emit(Event::Step(format!(
+            "Warming up (waiting for \u{201c}{want}\u{201d} in the log)"
+        )));
+        let t0 = std::time::Instant::now();
+        loop {
+            let log = std::fs::read_to_string(&srv.log).unwrap_or_default();
+            if log.contains(want) {
+                break;
+            }
+            if t0.elapsed() > Duration::from_secs(900) {
+                anyhow::bail!("the engine log never showed \u{201c}{want}\u{201d} (15 min)");
+            }
+            if let Some(st) = srv.child.try_wait()? {
+                anyhow::bail!("the engine stopped while warming up ({st})");
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+    }
     emit(Event::Ready {
         base: srv.base.clone(),
         engine: engine_label.into(),

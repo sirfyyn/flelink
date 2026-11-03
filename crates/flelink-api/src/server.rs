@@ -1529,6 +1529,7 @@ impl Studio {
                 draft: None,
                 fallback: String::new(),
                 health: String::new(),
+                ready_log: String::new(),
             }
         };
         for (k, v) in &e.env {
@@ -1915,6 +1916,10 @@ impl Studio {
                 Some(e) => e.1 = v,
                 None => plan.env.push((k, v)),
             }
+        }
+        r.drop_unset(&mut plan.env);
+        if let Some(l) = &r.run.ready_log {
+            plan.ready_log = l.clone();
         }
         plan.notes.push(format!("Recipe {}", r.id));
         self.engine.start(plan).map_err(engine_err)?;

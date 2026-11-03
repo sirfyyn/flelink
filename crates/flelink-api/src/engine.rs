@@ -99,6 +99,8 @@ struct State {
     exit_code: Option<i32>,
     started: f64,
     ready_at: f64,
+    /// the recipe's ready_log line was seen in this start's log (or none is asked for)
+    ready_log_seen: bool,
     load_total: u64,
     load_read: u64,
     rss: Option<u64>,
@@ -152,6 +154,7 @@ impl Engine {
             exit_code: None,
             started: 0.0,
             ready_at: 0.0,
+            ready_log_seen: false,
             load_total: 0,
             load_read: 0,
             rss: None,
@@ -502,6 +505,7 @@ impl Engine {
             s.proc = Some((gen, pid, handle.clone()));
             s.started = now();
             s.ready_at = 0.0;
+            s.ready_log_seen = false;
             s.load_total = total;
             s.load_read = 0;
             s.rss = None;
@@ -586,6 +590,22 @@ impl Engine {
                 s.rss = rss;
             }
             if self.health() == 200 {
+                // a recipe can ask for a log line before it counts as ready (an expert store that fills after start)
+                {
+                    let mut s = self.st.lock().unwrap();
+                    let want = s
+                        .plan
+                        .as_ref()
+                        .map(|(_, p)| p.ready_log.clone())
+                        .unwrap_or_default();
+                    if !want.is_empty() && !s.ready_log_seen {
+                        s.phase =
+                            format!("Warming up (waiting for \u{201c}{want}\u{201d} in the log)");
+                        drop(s);
+                        std::thread::sleep(Duration::from_millis(500));
+                        continue;
+                    }
+                }
                 let props = self.get_json("/props").unwrap_or(json!({}));
                 let mut s = self.st.lock().unwrap();
                 if s.proc.as_ref().map(|p| p.0) == Some(gen) && s.state == "starting" {
@@ -745,6 +765,16 @@ impl Engine {
         }
         let low = line.to_lowercase();
         let mut s = self.st.lock().unwrap();
+        if !s.ready_log_seen {
+            let want = s
+                .plan
+                .as_ref()
+                .map(|(_, p)| p.ready_log.clone())
+                .unwrap_or_default();
+            if !want.is_empty() && line.contains(&want) {
+                s.ready_log_seen = true;
+            }
+        }
         let rx = rx(s.plan.as_ref().map_or("", |(_, p)| p.engine.as_str()));
         if s.state == "starting" {
             if let Some((_, phase)) = rx.phases.iter().find(|(n, _)| low.contains(n)) {

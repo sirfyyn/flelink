@@ -6,6 +6,10 @@
   the real Studio from outside, the way a person would, and `flelink demo record start|stop` records the screen with the
   system's recorder. For videos of the Studio without a browser automation.
 - **Recipes can set the chat's answer length** (`[chat] max_tokens`), like temperature and thinking.
+- **Recipes for measured settings:** `[run] unset_env` drops automatic values FLE Link would set, `[run] profile` brings
+  a usage profile so the first start is warm, and `[run] ready_log` makes FLE Link wait for a log line (an expert store
+  that fills after the server is up) before it says ready. Found in a benchmark through FLE Link on 3 Nov 2026: without the
+  profile FLE started cold, and "ready" came before the 90 GB expert store was filled.
 - **Says what it does when something gets in the way:** a download that picks up an earlier one says "Resuming the
   download … already here", a checked file says so, and when port 8080 is taken the engine's new port is named
   (all three ran silently before; seen while recording the video on 3 Nov 2026).

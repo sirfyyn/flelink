@@ -135,6 +135,18 @@ pub struct RunSpec {
     /// Environment for the engine; overrides the automatic values.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
+    /// Automatic environment values FLE Link would set that this recipe does not want (names), e.g. a measured
+    /// setting that runs without FLE Link's expert-cache defaults.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unset_env: Vec<String>,
+    /// A usage profile to start from (absolute path): copied to `{profile}` when this recipe has none yet, so the
+    /// first start is warm instead of cold.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// A line the engine log must show before the engine counts as ready (after its health check answers), e.g.
+    /// "[fle-store] warm start" when a RAM expert store fills after the server is up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ready_log: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -253,6 +265,31 @@ impl Recipe {
             if !gguf_path(to) || to.contains('/') || to.contains('\\') {
                 bail!(
                     "recipe {}: model.save_as '{to}' must be a plain .gguf file name",
+                    self.id
+                );
+            }
+        }
+        let env_name = |k: &str| {
+            k.chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        };
+        if let Some(k) = self.run.unset_env.iter().find(|k| !env_name(k)) {
+            bail!(
+                "recipe {}: run.unset_env '{k}' is not an environment name",
+                self.id
+            );
+        }
+        if let Some(pf) = &self.run.profile {
+            if !Path::new(pf).is_absolute() || pf.contains("..") {
+                bail!("recipe {}: run.profile must be an absolute path", self.id);
+            }
+        }
+        if let Some(l) = &self.run.ready_log {
+            if l.trim().is_empty() || l.len() > 200 {
+                bail!(
+                    "recipe {}: run.ready_log must be a short, non-empty text",
                     self.id
                 );
             }
@@ -380,6 +417,10 @@ impl Recipe {
             if let Some(d) = p.parent() {
                 let _ = std::fs::create_dir_all(d);
             }
+            // a recipe that brings a profile starts warm the first time (never over one the engine already saved)
+            if let Some(src) = self.run.profile.as_deref().filter(|_| !p.exists()) {
+                let _ = std::fs::copy(src, &p);
+            }
             t = t.replace("{profile}", &p.to_string_lossy());
         }
         if t.contains("{hot_mlock_gb}") {
@@ -490,6 +531,12 @@ impl Recipe {
                 None => plan.env.push((k, v)),
             }
         }
+        self.drop_unset(&mut plan.env);
+    }
+
+    /// Remove the automatic values the recipe does not want (`run.unset_env`); its own `run.env` stays.
+    pub fn drop_unset(&self, env: &mut Vec<(String, String)>) {
+        env.retain(|(k, _)| !self.run.unset_env.contains(k) || self.run.env.contains_key(k));
     }
 }
 
@@ -679,6 +726,66 @@ temperature = 0.2
         );
         let r = find(std::path::Path::new("/nonexistent"), "deepseek-v41-ista").unwrap();
         assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.3"));
+    }
+
+    #[test]
+    fn a_recipe_drops_automatic_values_brings_a_profile_and_names_a_ready_line() {
+        let dir = std::env::temp_dir().join(format!("flelink-recipe-run-{}", std::process::id()));
+        let models = dir.join("models");
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("measured.prof");
+        std::fs::write(&src, b"profile").unwrap();
+        let text = EXAMPLE.replace(
+            "env = { FLE_MOE_CACHE_BIAS = \"0.002\" }",
+            &format!(
+                "env = {{ FLE_MOE_CACHE_BIAS = \"0.002\", FLE_MOE_PROFILE = \"{{profile}}\", FLE_MOE_OBS_MAXTOK = \"4\" }}\n\
+                 unset_env = [\"FLE_MOE_ADMIT_FREQ\", \"FLE_MOE_OBS_MAXTOK\"]\nprofile = \"{}\"\nready_log = \"[fle-store] warm start\"",
+                src.display()
+            ),
+        );
+        let r = Recipe::parse(&text, "test").unwrap();
+        let mut plan = crate::plan::Plan {
+            env: vec![
+                ("FLE_MOE_ADMIT_FREQ".into(), "2000".into()),
+                ("FLE_MOE_EVICT_OLDEST".into(), "32".into()),
+            ],
+            args: vec!["-c".into(), "8192".into()],
+            port: 1,
+            ctx: 8192,
+        };
+        r.apply(&mut plan, &models);
+        let keys: Vec<&str> = plan.env.iter().map(|(k, _)| k.as_str()).collect();
+        assert!(
+            !keys.contains(&"FLE_MOE_ADMIT_FREQ"),
+            "an automatic value the recipe unsets is gone"
+        );
+        assert!(keys.contains(&"FLE_MOE_EVICT_OLDEST"), "the others stay");
+        assert!(
+            keys.contains(&"FLE_MOE_OBS_MAXTOK"),
+            "a value the recipe sets itself stays, though it is listed"
+        );
+        assert_eq!(
+            std::fs::read(r.profile_path(&models)).unwrap(),
+            b"profile",
+            "the profile was copied in"
+        );
+        assert_eq!(r.run.ready_log.as_deref(), Some("[fle-store] warm start"));
+        // a saved profile is never overwritten by the recipe's
+        std::fs::write(r.profile_path(&models), b"saved").unwrap();
+        r.apply(&mut plan, &models);
+        assert_eq!(std::fs::read(r.profile_path(&models)).unwrap(), b"saved");
+        // checks
+        assert!(Recipe::parse(
+            &EXAMPLE.replace("context = 65536", "context = 65536\nprofile = \"rel.prof\""),
+            "t"
+        )
+        .is_err());
+        assert!(Recipe::parse(
+            &EXAMPLE.replace("context = 65536", "context = 65536\nunset_env = [\"A B\"]"),
+            "t"
+        )
+        .is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

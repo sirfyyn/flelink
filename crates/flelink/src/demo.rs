@@ -71,7 +71,7 @@ pub fn wait(max: Duration) -> Result<()> {
     std::thread::sleep(Duration::from_secs(2));
     while t.elapsed() < max {
         let s = call("GET", "/api/demo", None)?;
-        if s["page_seen_s"].as_f64().map_or(true, |x| x > 10.0) {
+        if s["page_seen_s"].as_f64().is_none_or(|x| x > 10.0) {
             bail!("no Studio page has asked for steps in the last 10 s (is the app or the page open?)");
         }
         if s["busy"] == false && s["queue"] == 0 {
