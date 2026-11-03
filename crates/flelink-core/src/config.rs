@@ -79,6 +79,15 @@ pub fn config_path(explicit: Option<&str>) -> PathBuf {
     {
         return expand_home(&e);
     }
+    // a data folder of its own (FLE_HOME, e.g. a test home or Docker) keeps its own settings too, so it never reads or
+    // changes the user's ~/.config/fle/config.toml (seen on 3 Nov 2026: a test home shared the global file)
+    if let Some(h) = std::env::var("FLE_HOME")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        return expand_home(&h).join("config.toml");
+    }
     let root = match std::env::var("XDG_CONFIG_HOME")
         .ok()
         .map(|s| s.trim().to_string())
