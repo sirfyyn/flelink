@@ -198,8 +198,9 @@ fn start_with(
                 total: t,
             })
         })?;
-        if sha.is_some() {
+        if let Some(s) = sha {
             emit(Event::Step("Checked: the file matches its SHA-256".into()));
+            crate::locate::remember_checked(home, &path, s);
         }
     }
     let path = r.main_file(home);

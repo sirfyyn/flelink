@@ -6,6 +6,9 @@
   the real Studio from outside, the way a person would, and `flelink demo record start|stop` records the screen with the
   system's recorder. For videos of the Studio without a browser automation.
 - **Recipes can set the chat's answer length** (`[chat] max_tokens`), like temperature and thinking.
+- **The checksum decides, not the name:** a file FLE Link has read once (or downloaded and verified) is found again by
+  its SHA-256 under any name, so two recipes that share a part (the DeepSeek Engram file of IQ2_XXS and IQ1_M) keep one
+  copy instead of downloading 110 GB twice.
 - **Recipes for measured settings:** `[run] unset_env` drops automatic values FLE Link would set, `[run] profile` brings
   a usage profile so the first start is warm, and `[run] ready_log` makes FLE Link wait for a log line (an expert store
   that fills after the server is up) before it says ready. Found in a benchmark through FLE Link on 3 Nov 2026: without the
