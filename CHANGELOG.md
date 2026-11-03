@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 (2026-11-03)
 
 - **Upstream llama.cpp installs without GitHub's API too:** its releases have no `SHA256SUMS`, so when the hourly API
   limit is used up FLE Link reads the files and their sha256 from the release page instead. Before, a first run on a
