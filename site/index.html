@@ -117,11 +117,11 @@
           <h3>DeepSeek-V4.1-Flash-1017</h3>
           <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO IQ2_XXS by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 232 GiB</p>
         </header>
-        <div class="big-num">29.1 <span>tok/s through FLE Link, hot experts in RAM; two requests about 39 together</span></div>
+        <div class="big-num">31.6 <span>tok/s through FLE Link, exact, experts in a RAM store; 41.9 with the DSpark draft</span></div>
         <ul class="flag-list">
-          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 22 GB expert cache on the card, 60 GB of hot experts locked in RAM, the rest read from NVMe; decode after a warm-up, no CPU pinning, two rounds of three tasks the expert profile has not seen (29.1 and 29.0), two requests at once 19.3 and 19.6, FLE engine v1.2.3 (2 Nov 2026)</li>
+          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 22 GB expert cache on the card, 90 GB expert store in RAM, prefill windows, exact (no cache bias); a 3100-token three.js answer at 31.6 tok/s, its prompt in 2.5 s, FLE engine v1.2.4 (3 Nov 2026). FLE's own release: 33.3 tok/s on such answers (n=6)</li>
           <li><b>One command</b> <code>flelink run deepseek-v41-ista</code> installs the FLE engine, profiles the experts on the first run and uses copies of the model already on your disk</li>
-          <li><b>With the DSpark draft model</b> <code>deepseek-v41-ista-dspark</code>: 23.2 tok/s (1 Nov, an earlier engine and cache setting)</li>
+          <li><b>With the DSpark draft model</b> <code>deepseek-v41-ista-dspark</code>: 41.9 tok/s, lossless at temperature 0 (one run, FLE release)</li>
           <li><b>Today</b> it also runs through FLE Link on llama.cpp b11870 or newer</li>
         </ul>
       </article>
