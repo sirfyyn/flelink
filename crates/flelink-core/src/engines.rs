@@ -113,7 +113,8 @@ fn release(repo: &str, tag: Option<&str>) -> Result<Release> {
 }
 
 /// A release without the API: the tag from `/releases/latest` (it redirects to `/releases/tag/<tag>`), the files and
-/// their SHA-256 from the release's `SHA256SUMS`.
+/// their SHA-256 from the release's `SHA256SUMS`, or, when a release has none (upstream llama.cpp), from the asset list
+/// GitHub shows on the release page (`/releases/expanded_assets/<tag>`, every file with its sha256 digest).
 fn release_from_page(repo: &str, tag: Option<&str>) -> Result<Release> {
     let c = client()?;
     let tag = match tag {
@@ -131,12 +132,21 @@ fn release_from_page(repo: &str, tag: Option<&str>) -> Result<Release> {
     };
     let base = format!("https://github.com/{repo}/releases/download/{tag}");
     let sums = c.get(format!("{base}/SHA256SUMS")).send()?;
-    if !sums.status().is_success() {
-        bail!("no SHA256SUMS in release {tag}");
-    }
-    let assets = parse_sums(&sums.text()?, &base);
+    let assets = if sums.status().is_success() {
+        parse_sums(&sums.text()?, &base)
+    } else {
+        let page = c
+            .get(format!(
+                "https://github.com/{repo}/releases/expanded_assets/{tag}"
+            ))
+            .send()?;
+        if !page.status().is_success() {
+            bail!("no SHA256SUMS and no asset list in release {tag}");
+        }
+        parse_expanded(&page.text()?, repo, &tag)
+    };
     if assets.is_empty() {
-        bail!("SHA256SUMS of {tag} names no files");
+        bail!("release {tag} names no files with a checksum");
     }
     Ok(Release {
         tag_name: tag,
@@ -161,6 +171,36 @@ fn parse_sums(text: &str, base: &str) -> Vec<Asset> {
             })
         })
         .collect()
+}
+
+/// The asset list of a release page: each download link `/<repo>/releases/download/<tag>/<name>` with the first
+/// `sha256:<hex>` after it (before the next link). Files without a digest are left out, so nothing unchecked is installed.
+fn parse_expanded(html: &str, repo: &str, tag: &str) -> Vec<Asset> {
+    let prefix = format!("href=\"/{repo}/releases/download/{tag}/");
+    let mut out: Vec<Asset> = Vec::new();
+    let mut rest = html;
+    while let Some(i) = rest.find(&prefix) {
+        rest = &rest[i + prefix.len()..];
+        let Some(end) = rest.find('"') else { break };
+        let name = &rest[..end];
+        let block = &rest[end..rest[end..].find(&prefix).map_or(rest.len(), |j| end + j)];
+        let sha = block
+            .find("sha256:")
+            .and_then(|k| block.get(k + 7..k + 7 + 64));
+        let ok = |n: &str| !n.is_empty() && !n.contains('/') && !n.contains("..");
+        if let Some(sha) = sha.filter(|h| h.chars().all(|c| c.is_ascii_hexdigit())) {
+            if ok(name) && !out.iter().any(|a| a.name == name) {
+                out.push(Asset {
+                    name: name.to_string(),
+                    browser_download_url: format!(
+                        "https://github.com/{repo}/releases/download/{tag}/{name}"
+                    ),
+                    digest: Some(format!("sha256:{}", sha.to_lowercase())),
+                });
+            }
+        }
+    }
+    out
 }
 
 /// The engine archive of a variant for this platform (crate::assets), the newest CUDA build when there are several.
@@ -564,5 +604,37 @@ mod sums_tests {
         assert_eq!(a[0].browser_download_url, "https://github.com/o/r/releases/download/v1.2.3/fle-d90513f3-bin-ubuntu-cuda-12.8-x64.tar.gz");
         assert_eq!(a[1].name, "fle-win.zip");
         assert!(a[1].digest.as_deref().unwrap().starts_with("sha256:53eedf"));
+    }
+
+    #[test]
+    fn the_release_page_gives_files_with_their_digest() {
+        // shape of github.com/<repo>/releases/expanded_assets/<tag>: link, then the digest (shown more than once)
+        let h = "a".repeat(64);
+        let k = "B".repeat(64);
+        let html = format!(
+            "<a href=\"/ggml-org/llama.cpp/releases/download/b1/llama-b1-bin-macos-arm64.zip\">x</a>\
+             <span>sha256:{h}</span><clipboard-copy value=\"sha256:{h}\">\
+             <a href=\"/ggml-org/llama.cpp/releases/download/b1/no-digest.zip\">y</a>\
+             <a href=\"/ggml-org/llama.cpp/releases/download/b1/llama-b1-bin-win-cpu-x64.zip\">z</a><span>sha256:{k}</span>\
+             <a href=\"/ggml-org/llama.cpp/archive/refs/tags/b1.zip\">source</a>"
+        );
+        let a = parse_expanded(&html, "ggml-org/llama.cpp", "b1");
+        assert_eq!(a.len(), 2, "the file without a digest is left out");
+        assert_eq!(a[0].name, "llama-b1-bin-macos-arm64.zip");
+        assert_eq!(a[0].browser_download_url, "https://github.com/ggml-org/llama.cpp/releases/download/b1/llama-b1-bin-macos-arm64.zip");
+        assert_eq!(a[0].digest.as_deref(), Some(format!("sha256:{h}").as_str()));
+        assert_eq!(
+            a[1].digest.as_deref(),
+            Some(format!("sha256:{}", "b".repeat(64)).as_str())
+        );
+    }
+
+    /// Live: the upstream release page without the API (`cargo test -p flelink-core -- --ignored page_live`).
+    #[test]
+    #[ignore]
+    fn page_live_upstream_llama_cpp() {
+        let r = release_from_page("ggml-org/llama.cpp", Some("b11540")).unwrap();
+        assert!(r.assets.len() > 20, "{} files", r.assets.len());
+        assert!(r.assets.iter().any(|a| a.name.contains("macos-arm64")));
     }
 }

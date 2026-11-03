@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Upstream llama.cpp installs without GitHub's API too:** its releases have no `SHA256SUMS`, so when the hourly API
+  limit is used up FLE Link reads the files and their sha256 from the release page instead. Before, a first run on a
+  shared address stopped with "GitHub answered 403" (seen on a fresh Mac, 3 Nov 2026).
+- **Installers** take the newest tag from the `/releases/latest` redirect, the API only as a fallback.
+
 ## 0.1.2 (2026-11-03)
 
 - **DeepSeek-V4.1 ISTA on FLE v1.2.3:** the cache bonus only after layer 14, the CPU side scheduled asynchronously, two
