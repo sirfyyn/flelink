@@ -313,6 +313,12 @@ pub fn adopt_fetches(
     out
 }
 
+/// Note the checksum of a file FLE Link just downloaded and verified, so a later recipe finds it by its SHA-256 under
+/// any name (two quants that share a part).
+pub fn remember_checked(home: &Path, path: &Path, sha: &str) {
+    Checked::open(home).remember(path, sha);
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -384,10 +390,4 @@ mod tests {
         assert!(!c.map.is_empty());
         let _ = std::fs::remove_dir_all(&tmp);
     }
-}
-
-/// Note the checksum of a file FLE Link just downloaded and verified, so a later recipe finds it by its SHA-256 under
-/// any name (two quants that share a part).
-pub fn remember_checked(home: &Path, path: &Path, sha: &str) {
-    Checked::open(home).remember(path, sha);
 }
