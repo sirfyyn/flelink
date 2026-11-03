@@ -447,7 +447,16 @@ fn the_engine_matches_the_python_studio() {
 
     // 1. a good start, then a stop
     let (a0, b0) = start("ok", "FAKE_MODE=ok");
-    same("ok just started", &a0, &b0);
+    // the start's answer is a snapshot while the fake engine already writes its log: which lines each side has read by
+    // then (phase, cache) is a race between two processes, so only the state and the fields themselves are compared
+    assert_eq!(a0["state"], b0["state"], "ok just started: state");
+    let keys = |v: &Value| {
+        v.as_object()
+            .map(|o| o.keys().cloned().collect::<Vec<_>>())
+            .unwrap_or_default()
+    };
+    assert_eq!(keys(&a0), keys(&b0), "ok just started: fields");
+    n.set(n.get() + 1);
     let (a, b) = settle("ok ready", &["ready"], "draft acceptance");
     same("ok ready", &a, &b);
     assert_eq!(a["state"], "ready");

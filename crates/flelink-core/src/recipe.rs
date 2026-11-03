@@ -740,7 +740,7 @@ temperature = 0.2
             "env = { FLE_MOE_CACHE_BIAS = \"0.002\" }",
             &format!(
                 "env = {{ FLE_MOE_CACHE_BIAS = \"0.002\", FLE_MOE_PROFILE = \"{{profile}}\", FLE_MOE_OBS_MAXTOK = \"4\" }}\n\
-                 unset_env = [\"FLE_MOE_ADMIT_FREQ\", \"FLE_MOE_OBS_MAXTOK\"]\nprofile = \"{}\"\nready_log = \"[fle-store] warm start\"",
+                 unset_env = [\"FLE_MOE_ADMIT_FREQ\", \"FLE_MOE_OBS_MAXTOK\"]\nprofile = '{}'\nready_log = \"[fle-store] warm start\"",
                 src.display()
             ),
         );
