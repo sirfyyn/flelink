@@ -1,7 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.1.4 (2026-11-03)
 
+- **DeepSeek-V4.1 ISTA on FLE v1.2.4** (`min_version v1.2.4`, older engines are refused with the reason): the RAM
+  expert store (90 GB), the CPU pool and the prefill windows, exact (no cache bias). FLE Link waits for the store's warm
+  start before it says ready. Measured through FLE Link on one 32 GB GPU with 120 GB RAM: a 3100-token three.js answer at
+  **31.6 tok/s**, its 59-token prompt in 2.5 s (16.4 s before the windows). FLE's release measures 33.3 tok/s on the same
+  kind of answer (n=6).
+- **Two more DeepSeek recipes:** `deepseek-v41-ista-dspark` with the DSpark drafter (lossless at temperature 0; 41.9
+  tok/s in FLE's release, one run) and `deepseek-v41-ista-iq1m`, a smaller quant (faster, less exact; not yet measured on
+  v1.2.4). The cache-bonus recipe is gone: the bonus slows the store down.
+- **The Studio installs engines without GitHub's API too:** when the hourly API limit is used up, the Engine page reads
+  the release page and its checksums, like the CLI (it stopped with "Could not reach GitHub: Forbidden").
+- **The chat hides a stray `</think>`** at the start of an answer without thinking.
 - **Demo mode** (`flelink studio --demo`, `FLE_DEMO=1` for the app): `flelink demo chat|page|preview|new|scroll|wait` drives
   the real Studio from outside, the way a person would, and `flelink demo record start|stop` records the screen with the
   system's recorder. For videos of the Studio without a browser automation.
