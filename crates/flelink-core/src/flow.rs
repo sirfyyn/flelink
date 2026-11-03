@@ -168,7 +168,18 @@ fn start_with(
         } else {
             String::new()
         };
-        emit(Event::Step(format!("Downloading {what}{size}")));
+        // say it in words when an earlier download is picked up (seen on 3 Nov: the bar started at 45 % without a word)
+        let have = std::fs::metadata(crate::download::part_path(&path))
+            .map(|m| m.len())
+            .unwrap_or(0);
+        if have > 0 {
+            emit(Event::Step(format!(
+                "Resuming the download of {what}: {} already here",
+                system::gib(have)
+            )));
+        } else {
+            emit(Event::Step(format!("Downloading {what}{size}")));
+        }
         let url = format!(
             "https://huggingface.co/{}/resolve/{}/{}",
             x.repo, x.revision, f
@@ -187,6 +198,9 @@ fn start_with(
                 total: t,
             })
         })?;
+        if sha.is_some() {
+            emit(Event::Step("Checked: the file matches its SHA-256".into()));
+        }
     }
     let path = r.main_file(home);
     emit(Event::Step("Choosing settings for this machine".into()));
@@ -241,6 +255,13 @@ fn start_with(
         }
     };
     r.apply(&mut pl, &home.join("models"));
+    // the engine port: 8080, or the next free one when something else holds it (and then say so)
+    if pl.port != 8080 {
+        emit(Event::Step(format!(
+            "Port 8080 is taken, so the engine uses port {}",
+            pl.port
+        )));
+    }
     let command = pl.command_line(&program);
     emit(Event::Step(format!(
         "Starting the engine (context {} tokens)",

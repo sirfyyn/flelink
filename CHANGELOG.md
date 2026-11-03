@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Says what it does when something gets in the way:** a download that picks up an earlier one says "Resuming the
+  download … already here", a checked file says so, and when port 8080 is taken the engine's new port is named
+  (all three ran silently before; seen while recording the video on 3 Nov 2026).
+- **A data folder of its own keeps its own settings:** with `FLE_HOME` set, the config is `<FLE_HOME>/config.toml`
+  instead of `~/.config/fle/config.toml` (`--config` and `FLE_CONFIG` still win). A test home or a container no longer
+  reads or changes the user's settings.
+
 ## 0.1.3 (2026-11-03)
 
 - **Upstream llama.cpp installs without GitHub's API too:** its releases have no `SHA256SUMS`, so when the hourly API

@@ -130,6 +130,16 @@ fn once(
     Ok(false)
 }
 
+/// Where an unfinished download of `dest` lies (`<name>.<ext>.part`).
+pub fn part_path(dest: &Path) -> std::path::PathBuf {
+    dest.with_extension(format!(
+        "{}part",
+        dest.extension()
+            .map(|e| format!("{}.", e.to_string_lossy()))
+            .unwrap_or_default()
+    ))
+}
+
 /// Download `url` to `dest`, resuming from `dest.part`, verifying SHA-256 when known. `progress(done, total)`.
 /// A connection that breaks or stalls on the way is picked up again where it stopped, up to five times in a row.
 pub fn fetch(
@@ -142,12 +152,7 @@ pub fn fetch(
         return Ok(());
     }
     fs::create_dir_all(dest.parent().context("no parent")?)?;
-    let part = dest.with_extension(format!(
-        "{}part",
-        dest.extension()
-            .map(|e| format!("{}.", e.to_string_lossy()))
-            .unwrap_or_default()
-    ));
+    let part = part_path(dest);
     let mut have = part.metadata().map(|m| m.len()).unwrap_or(0);
     let mut hasher = Sha256::new();
     if have > 0 && sha256.is_some() {
