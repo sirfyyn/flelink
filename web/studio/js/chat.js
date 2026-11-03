@@ -920,7 +920,8 @@ export function mount(main, chatId) {
           m.content = t[3];
           if (!t[2] && !s.thinking) { s.thinking = true; s.thinkStart = s.thinkStart || now; }
         } else {
-          m.content = s.raw;
+          // without thinking mode some engines still open the answer with a bare closing tag (FLE 1.2.4, 3 Nov 2026)
+          m.content = s.raw.replace(/^\s*<\/think>\s*/, "");
         }
       }
       if (s.thinking && m.content.trim()) {
