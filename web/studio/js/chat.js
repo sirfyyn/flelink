@@ -2,7 +2,7 @@
 // and the live panel with the engine's numbers.
 
 import { get, hostUrl, post, put, streamChat, upload } from "./api.js";
-import { emit, engineModelName, engineUp, modelMenuProviders, navigate, on, refreshChats, store, topbar, withEngine } from "./app.js";
+import { emit, engineModelName, engineUp, modelMenuProviders, navigate, on, refreshChats, refreshState, store, topbar, withEngine } from "./app.js";
 import { attachmentsEl, createAttach } from "./attach.js";
 import { attachmentBlock, buildRequest, estimateRequest, estimateTokens, usedImages } from "./chat-request.js";
 import { addChild, ensureTree, indexOf, newId, pathOf, removeBranch, siblingsOf, switchTo } from "./chat-tree.js";
@@ -369,17 +369,76 @@ export function mount(main, chatId) {
         h("div", { style: { marginTop: "8px" } }, h("a", { href: "/engine", "data-link": true }, "Open the engine log")))));
     }
     const last = first;
-    box.append(h("div", { class: "steps" },
-      step(1, hasModel ? "done" : "now", "Get a model", hasModel ? `${models.length} in your library` : "Pick an FLE quant that fits your memory, or any GGUF from Hugging Face.",
-        hasModel ? null : h("a", { class: "btn primary", href: "/models", "data-link": true }, icon("download"), "Choose a model")),
-      step(2, hasModel ? "now" : "", "Load it", hasModel ? last.name : "FLE Link picks the launch settings for your GPU and RAM.",
-        hasModel ? h("button", { class: "btn primary", onclick: () => loadModel(last.id) }, icon("play"), "Load") : null),
-      step(3, "", "Chat", "Ask anything. Nothing leaves this computer.", null)));
-    if (!hasModel) {
-      box.append(h("p", { class: "small muted" }, "Already running a llama-server somewhere? ",
-        h("a", { href: "/engine?connect", "data-link": true }, "Connect to it"), " instead."));
+    if (hasModel) {
+      box.append(h("div", { class: "steps" },
+        step(1, "done", "Get a model", `${models.length} in your library`, null),
+        step(2, "now", "Load it", last.name, h("button", { class: "btn primary", onclick: () => loadModel(last.id) }, icon("play"), "Load")),
+        step(3, "", "Chat", "Ask anything. Nothing leaves this computer.", null)));
+    } else {
+      box.append(startChoices());
     }
     return box;
+  }
+
+  // The first run: three ways to a model (Max 04.11.2026). A model that fits, one already on this machine (found in the
+  // places FLE Link searches, or in a folder the person names), or a server that already runs.
+  function startChoices() {
+    const st = store.state || {};
+    // the recipes FLE Link knows, smallest that fit first (they come with engine and settings)
+    const recBox = h("div", { class: "stack", style: { gap: "6px" } });
+    get("/api/recipes").then((r) => {
+      const list = (r.recipes || r || []).filter((x) => ["good", "tight"].includes(x.fit?.verdict) && !x.downloaded)
+        .sort((a, b) => (a.fit?.verdict === "good" ? 0 : 1) - (b.fit?.verdict === "good" ? 0 : 1) || (a.size || 0) - (b.size || 0)).slice(0, 2);
+      clear(recBox, list.map((x) => h("div", { class: "row between", style: { gap: "10px" } },
+        h("div", { style: { minWidth: 0 } }, h("div", { class: "small" }, x.title),
+          h("div", { class: "small faint" }, `${fmt.bytes(x.size)}${x.fit?.verdict === "tight" ? " · tight fit" : ""}`)),
+        h("button", { class: "btn sm primary", onclick: async () => {
+          try { await post(`/api/recipes/${encodeURIComponent(x.id)}/download`, {}); toast(`Downloading ${x.title}`); navigate("/models"); }
+          catch (e) { toast(e.message, "bad"); }
+        } }, icon("download", "sm"), "Download"))));
+    }).catch(() => {});
+    const foundBox = h("div", { class: "stack", style: { gap: "6px" } }, h("div", { class: "small muted" }, "Looking on this computer…"));
+    const folder = h("input", { class: "input mono", placeholder: "A folder with GGUF files, e.g. ~/models" });
+    const use = async (f) => {
+      try {
+        const m = await post("/api/models/add", { path: f.path });
+        await refreshState();
+        await loadModel(m.id || (store.state.models || []).find((x) => x.path === f.path)?.id);
+      } catch (e) { toast(e.message, "bad", 7000); }
+    };
+    const showFound = async () => {
+      try {
+        const r = await get("/api/models/found");
+        const list = (r.found || []).slice(0, 6);
+        clear(foundBox, list.length ? list.map((f) => h("div", { class: "row between", style: { gap: "10px" } },
+          h("div", { style: { minWidth: 0 } }, h("div", { class: "mono small", style: { overflowWrap: "anywhere" } }, f.name),
+            h("div", { class: "small faint" }, `${fmt.bytes(f.size)} · ${f.where}`)),
+          h("button", { class: "btn sm", onclick: () => use(f) }, icon("play", "sm"), "Use"))) :
+          h("div", { class: "small muted" }, "Nothing found in the models folder, the Hugging Face cache, LM Studio or Ollama. Name a folder below."));
+      } catch (e) { clear(foundBox, h("div", { class: "small muted" }, e.message)); }
+    };
+    const addFolder = async () => {
+      if (!folder.value.trim()) return;
+      try {
+        await post("/api/models/folders", { path: folder.value.trim() });
+        folder.value = "";
+        toast("FLE Link searches this folder from now on", "good");
+        showFound();
+      } catch (e) { toast(e.message, "bad", 7000); }
+    };
+    folder.addEventListener("keydown", (e) => { if (e.key === "Enter") addFolder(); });
+    showFound();
+    const card = (ic, title, sub, ...body) => h("div", { class: "card stack start-choice" },
+      h("div", { class: "card-head" }, icon(ic), h("div", { class: "grow" }, h("h3", null, title), h("p", null, sub))), ...body);
+    return h("div", { class: "start-choices" },
+      card("download", "Download a model that fits", "Picked for this computer's memory; every file is checked before use.",
+        recBox,
+        h("a", { class: "btn", href: "/models", "data-link": true }, "All models")),
+      card("models", "Use models you already have", "FLE Link looks in the models folder, the Hugging Face cache, LM Studio and Ollama.",
+        foundBox,
+        h("div", { class: "row", style: { gap: "6px" } }, folder, h("button", { class: "btn", onclick: addFolder }, icon("plus", "sm"), "Add folder"))),
+      card("link", "Use a server that already runs", "Any llama.cpp or FLE server on this computer or the network.",
+        h("a", { class: "btn", href: "/engine?connect", "data-link": true }, "Connect to it")));
   }
 
   function step(n, cls, titleText, sub, action) {

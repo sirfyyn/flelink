@@ -12,6 +12,7 @@ pub mod engine;
 pub mod engines;
 pub mod flaghelp;
 pub mod forge;
+pub mod found;
 pub mod gguf;
 pub mod github;
 pub mod hf;

@@ -2445,6 +2445,24 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             let models = st.library.lock().unwrap().scan(&st.models_dir());
             Ok(json!({"models": models, "extras": st.extras_view()}))
         }
+        // the first-run view: models already on this machine, and folders to search (found.rs)
+        ("GET", "/api/models/found") => {
+            let lib = st.library.lock().unwrap().scan(&st.models_dir());
+            let known: std::collections::HashSet<std::path::PathBuf> = lib
+                .iter()
+                .filter_map(|m| m["path"].as_str())
+                .map(|p| std::path::Path::new(p).canonicalize().unwrap_or_else(|_| p.into()))
+                .collect();
+            let dirs: Vec<String> =
+                crate::found::extra_dirs(&st.opts.home).iter().map(|d| d.display().to_string()).collect();
+            Ok(json!({"found": crate::found::found(&st.opts.home, &st.models_dir(), &known), "folders": dirs}))
+        }
+        ("POST", "/api/models/folders") => r.json(MAX_JSON).and_then(|body| {
+            let path = body.get("path").and_then(Value::as_str).unwrap_or("");
+            crate::found::add_dir(&st.opts.home, path)
+                .map(|d| json!({"ok": true, "folder": d.display().to_string()}))
+                .map_err(|e| ApiError(400, e))
+        }),
         ("POST", "/api/models/add") => r.json(MAX_JSON).and_then(|body| {
             let path = body
                 .get("path")
