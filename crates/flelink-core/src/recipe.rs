@@ -726,7 +726,7 @@ temperature = 0.2
             "an own build is not refused"
         );
         let r = find(std::path::Path::new("/nonexistent"), "deepseek-v41-ista").unwrap();
-        assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.4"));
+        assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.5"));
     }
 
     #[test]
