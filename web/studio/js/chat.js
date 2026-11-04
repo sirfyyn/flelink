@@ -10,6 +10,7 @@ import { createStreamRenderer, renderMarkdown } from "./md.js";
 import { host as appHost, canPickFolder, pickFolder, replaceMessages, swapNode } from "./app-bridge.js";
 import { showAppNow, toolCardEl, waitForApproval } from "./tools-ui.js";
 import { clear, confirmDialog, copyText, debounce, fmt, h, icon, mark, meter, openMenu, ring, sparkline, stateBadge, toast, countTo } from "./ui.js";
+import { loopGuardOn, repeatsItself } from "./loop-guard.js";
 
 const SUGGESTIONS = [
   ["Explain mixture-of-experts", "and why only a few experts run for each token"],
@@ -978,6 +979,16 @@ export function mount(main, chatId) {
     toast(`Tools of “${name}” run without asking from now on. Settings → Tools can take that back.`, "info", 7000);
   }
 
+  // a model that repeats itself without end: stop it once the end of its text is one piece over and over (loop-guard.js)
+  function guardLoop(s, m, text) {
+    if (!loopGuardOn() || s.looped || text.length - (s.guardAt || 0) < 400) return;
+    s.guardAt = text.length;
+    if (!repeatsItself(text)) return;
+    s.looped = true;
+    m.note = "Stopped: the model was repeating itself. Ask again, or rephrase; Settings → Appearance can turn this check off.";
+    s.ctrl.abort();
+  }
+
   function onChunk(chunk) {
     const s = streaming;
     if (!s) return;
@@ -989,6 +1000,7 @@ export function mount(main, chatId) {
       if (!s.tFirst) s.tFirst = now;
       if (!s.thinking && !m.content) { s.thinking = true; s.thinkStart = now; }
       m.reasoning += delta.reasoning_content;
+      guardLoop(s, m, m.reasoning);
     }
     if (delta.content) {
       if (!s.tFirst) s.tFirst = now;
@@ -1006,6 +1018,7 @@ export function mount(main, chatId) {
           m.content = s.raw.replace(/^\s*<\/think>\s*/, "");
         }
       }
+      guardLoop(s, m, m.content || m.reasoning);
       if (s.thinking && m.content.trim()) {
         s.thinking = false;
         m.think_s = (now - s.thinkStart) / 1000;
