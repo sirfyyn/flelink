@@ -100,6 +100,33 @@ export function mount(main) {
         h("div", { class: "small" }, "Skipped: ", data.problems.join(" · "))) : null);
   }
 
+  // why a recipe does not fit, in numbers this machine can be compared with ("measured with 120 GB RAM; this one has 16")
+  function fitWhy(fit) {
+    if (!fit || !["too_big", "tight"].includes(fit.verdict)) return null;
+    if (fit.advice) return h("div", { class: "fit-line small" }, icon("info", "sm"), h("span", null, fit.advice));
+    const d = fit.detail || {};
+    const sys = store.state?.system || {};
+    const ram = Math.round((sys.memory?.total || 0) / 2 ** 30);
+    const vram = Math.max(0, ...(sys.gpus || []).map((g) => g.memory_total || 0)) / 2 ** 30;
+    const parts = [];
+    if (d.ram_gib) parts.push(`${d.ram_gib} GB RAM`);
+    if (d.vram_gib) parts.push(`a ${d.vram_gib} GB GPU`);
+    if (!parts.length) return null;
+    const unified = (sys.gpus || []).some((g) => g.unified);
+    const have = unified ? `${ram} GB RAM shared with the GPU` : vram ? `${ram} GB RAM and a ${Math.round(vram)} GB GPU` : `${ram} GB RAM and no separate GPU`;
+    return h("div", { class: "fit-line small" }, icon("info", "sm"),
+      h("span", null, `Measured with ${parts.join(" and ")}; this computer has ${have}.`));
+  }
+
+  // a long note (measurements, setup) shows its first sentence; the rest unfolds
+  function noteBlock(note) {
+    if (!note) return null;
+    const cut = note.search(/[.:;]\s/);
+    if (note.length < 160 || cut < 20) return h("p", { class: "small muted" }, note);
+    return h("details", { class: "note small muted" }, h("summary", null, note.slice(0, cut + 1), " ", h("span", { class: "faint" }, "more")),
+      h("p", null, note.slice(cut + 2)));
+  }
+
   function recipeCard(r) {
     const [cls, label] = FIT[r.fit?.verdict] || ["", ""];
     const job = store.downloads.find((d) => d.meta?.recipe === r.id && !["done", "cancelled"].includes(d.state));
@@ -126,7 +153,8 @@ export function mount(main) {
       h("div", { class: "row wrap" }, h("b", null, r.title),
         r.source && r.source !== "builtin" ? h("span", { class: "tag", title: r.source }, r.source.startsWith("plugin") ? r.source.split(":")[0] : "yours") : null,
         label ? h("span", { class: `pill ${cls}` }, label) : null),
-      r.note ? h("p", { class: "small muted" }, r.note) : null,
+      fitWhy(r.fit),
+      noteBlock(r.note),
       h("div", { class: "small faint mono" }, r.repo, r.engine?.length ? ` · ${r.engine.join(", ")}${r.strict ? " only" : ""}` : "", r.context ? ` · ${fmt.tokens(r.context)} context` : ""),
       h("div", { class: "row wrap" }, action,
         h("button", { class: "btn ghost sm", title: "Run it from a terminal with these settings",
@@ -240,7 +268,10 @@ export function mount(main) {
         h("span", null, `${fmt.bytes(job.bytes_done)} of ${fmt.bytes(job.bytes_total)}`),
         job.state === "downloading" && job.speed ? h("span", null, `${fmt.bytes(job.speed)}/s`) : null,
         job.state === "downloading" && remaining ? h("span", null, `about ${fmt.dur(remaining)} left at this speed`) : null),
-      job.error ? h("div", { class: `callout ${job.state === "failed" ? "bad" : "warn"}` }, icon("alert", "sm"), h("div", { class: "small" }, job.error)) : null);
+      job.error ? h("div", { class: `callout ${job.state === "failed" ? "bad" : "warn"}` }, icon("alert", "sm"), h("div", { class: "small" }, job.error,
+        // a full drive: the way out right in the message (the download resumes where it stopped once there is room)
+        /disk space/i.test(job.error) ? h("div", { style: { marginTop: "4px" } }, h("a", { href: "/settings#folder", "data-link": true }, "Use a folder on another drive"),
+          " · free some space, then Resume") : null)) : null);
   }
 
   async function act(job, what) {

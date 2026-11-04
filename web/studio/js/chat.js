@@ -369,7 +369,9 @@ export function mount(main, chatId) {
     box.append(
       h("div", { class: "hero-mark", style: { width: "44px", height: "44px" } }, mark(44)),
       // the model this machine has, not a showcase model that may not fit it
-      h("h2", null, "Run ", h("span", { class: "grad" }, hasModel ? first.name : "a language model"), " on your own machine"),
+      // one sentence for the translations (i18n.js, data-i18n): {…} is the highlighted part, so each language keeps its word order
+      hasModel ? h("h2", null, "Run ", h("span", { class: "grad" }, first.name), " on your own machine")
+        : h("h2", { "data-i18n": "Run {a language model} on your own machine" }, "Run ", h("span", { class: "grad" }, "a language model"), " on your own machine"),
       h("p", { class: "lead" }, "FLE Link downloads a model, picks the engine and the settings that fit your hardware, and shows what the engine is doing while you chat."));
     if (e.state === "crashed") {
       box.append(h("div", { class: "callout bad" }, icon("alert"), h("div", null,

@@ -2,6 +2,10 @@
 // number or a path in them are in DE_PATTERNS. Missing entries stay English, so a new English text never breaks a page.
 export const DE = {
   "Choose…": "Wählen …",
+  "Run {a language model} on your own machine": "Starte {ein Sprachmodell} auf deinem eigenen Rechner",
+  "Use a folder on another drive": "Einen Ordner auf einer anderen Platte nehmen",
+  "· free some space, then Resume": "· etwas Platz schaffen, dann Fortsetzen",
+  "more": "mehr",
   // navigation and frame
   "Chat": "Chat", "Models": "Modelle", "Engine": "Engine", "Settings": "Einstellungen", "Lab": "Labor",
   "Experiments": "Experimente", "Expert cache": "Expertencache", "Agent": "Agent", "Forge": "Forge",
@@ -195,6 +199,9 @@ export const DE = {
 
 // texts with a number, a size or a path in them
 export const DE_PATTERNS = [
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM shared with the GPU\.$/, "Gemessen mit $1 GB RAM und einer $2-GB-GPU; dieser Rechner hat $3 GB RAM, die er mit der GPU teilt."],
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM and a (\d+) GB GPU\.$/, "Gemessen mit $1 GB RAM und einer $2-GB-GPU; dieser Rechner hat $3 GB RAM und eine $4-GB-GPU."],
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM and no separate GPU\.$/, "Gemessen mit $1 GB RAM und einer $2-GB-GPU; dieser Rechner hat $3 GB RAM und keine eigene GPU."],
   [/^Download (\d[\d.,]* [KMGT]?B)$/, "Herunterladen ($1)"],
   [/^(\d+) runs?$/, (m, n) => `${n} ${n === "1" ? "Lauf" : "Läufe"}`],
   [/^(\d+) minutes$/, "$1 Minuten"], [/^(\d+) hours$/, "$1 Stunden"],

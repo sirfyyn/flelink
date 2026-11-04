@@ -2,6 +2,10 @@
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
   "Choose…": "선택…",
+  "Run {a language model} on your own machine": "내 컴퓨터에서 {언어 모델}을 실행하세요",
+  "Use a folder on another drive": "다른 드라이브의 폴더 사용",
+  "· free some space, then Resume": "· 공간을 확보한 뒤 다시 시작",
+  "more": "더 보기",
   "Chat": "채팅",
   "Models": "모델",
   "Engine": "엔진",
@@ -251,6 +255,8 @@ export const T = {
 };
 
 export const P = [
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM shared with the GPU\.$/, "$1 GB RAM과 $2 GB GPU에서 측정했습니다. 이 컴퓨터는 GPU와 공유하는 $3 GB RAM입니다."],
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM and a (\d+) GB GPU\.$/, "$1 GB RAM과 $2 GB GPU에서 측정했습니다. 이 컴퓨터는 $3 GB RAM과 $4 GB GPU입니다."],
   [/^Download (\d[\d.,]* [KMGT]?B)$/, "내려받기 ($1)"],
   [/^(\d+) runs?$/, "$1회"],
   [/^(\d+) minutes$/, "$1분"],

@@ -2,6 +2,10 @@
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
   "Choose…": "選択…",
+  "Run {a language model} on your own machine": "自分のマシンで{言語モデル}を動かそう",
+  "Use a folder on another drive": "別のドライブのフォルダーを使う",
+  "· free some space, then Resume": "· 空きを作ってから再開",
+  "more": "詳しく",
   "Chat": "チャット",
   "Models": "モデル",
   "Engine": "エンジン",
@@ -251,6 +255,8 @@ export const T = {
 };
 
 export const P = [
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM shared with the GPU\.$/, "$1 GB RAM と $2 GB GPU で計測。このコンピューターは GPU と共有の $3 GB RAM です。"],
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM and a (\d+) GB GPU\.$/, "$1 GB RAM と $2 GB GPU で計測。このコンピューターは $3 GB RAM と $4 GB GPU です。"],
   [/^Download (\d[\d.,]* [KMGT]?B)$/, "ダウンロード（$1）"],
   [/^(\d+) runs?$/, "$1 回"],
   [/^(\d+) minutes$/, "$1 分"],
