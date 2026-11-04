@@ -1,6 +1,7 @@
 // Korean for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Choose…": "선택…",
   "Run {a language model} on your own machine": "내 컴퓨터에서 {언어 모델}을 실행하세요",
   "Use a folder on another drive": "다른 드라이브의 폴더 사용",
   "· free some space, then Resume": "· 공간을 확보한 뒤 다시 시작",

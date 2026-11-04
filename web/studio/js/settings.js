@@ -5,6 +5,7 @@ import { applyTheme, on, refreshPlugins, refreshState, settingsSections, store, 
 import { toolsSection, stopToolsPolling } from "./settings-tools.js";
 import { clear, fmt, h, icon, toast } from "./ui.js";
 import { LANGUAGES, chosenLanguage, setLanguage } from "./i18n.js";
+import { canPickFolder, pickFolder } from "./app-bridge.js";
 
 // The names of the plugins that ship with FLE Link, for the list when one is off (its own title is not known then).
 const BUNDLED = { forge: "Forge", updater: "Updates", remote: "Remote access", recorder: "Recorder", switch: "Model switcher" };
@@ -138,7 +139,9 @@ export function mount(main) {
   function models(s) {
     const dir = h("input", { class: "input mono", value: s.models_dir });
     const el = section("folder", "Models folder", "Where downloads go and where FLE Link looks for GGUF files. A drive with more room is fine.",
-      h("div", { class: "row" }, dir, h("button", { class: "btn", onclick: async () => { if (await save({ models_dir: dir.value.trim() })) refreshState(); } }, "Save")),
+      h("div", { class: "row" },
+        canPickFolder() ? h("button", { class: "btn", onclick: async () => { const p = await pickFolder("Models folder"); if (p) dir.value = p; } }, icon("folder", "sm"), "Choose…") : null,
+        dir, h("button", { class: "btn", onclick: async () => { if (await save({ models_dir: dir.value.trim() })) refreshState(); } }, "Save")),
       h("span", { class: "small faint" }, `Changing it moves nothing; models already in the new folder show up in the library. ${fmt.bytes(store.state.system?.disk_free)} free there now.`));
     el.id = "folder";
     // "use another folder" from the first-run view lands here

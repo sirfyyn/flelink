@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **The app picks folders like any app:** "Add folder" on the first run and the models folder in Settings get a
+  "Choose…" button that opens the system's folder picker (the app allows its page this one call and nothing else). In a
+  browser the text field stays.
 - **Clearer model cards:** a recipe that does not fit says why in numbers ("measured with 120 GB RAM and a 32 GB GPU;
   this computer has 8 GB RAM shared with the GPU"), a long note shows its first sentence and unfolds the rest, and a
   download that stops for lack of disk space offers a folder on another drive. The first-run headline is one sentence

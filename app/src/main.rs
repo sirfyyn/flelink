@@ -36,6 +36,7 @@ fn kill_children_with_me() {}
 fn main() {
     kill_children_with_me();
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let server = flelink_api::run::start_embedded(None, None)?;
             let url = server.url.clone();

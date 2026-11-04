@@ -1,6 +1,7 @@
 // Spanish for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Choose…": "Elegir…",
   "Run {a language model} on your own machine": "Ejecuta {un modelo de lenguaje} en tu propio equipo",
   "Use a folder on another drive": "Usar una carpeta en otro disco",
   "· free some space, then Resume": "· libera espacio y luego Reanudar",

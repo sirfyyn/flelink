@@ -1,6 +1,7 @@
 // The German words of the Studio (i18n.js). Keys are the English texts exactly as the page shows them; texts with a
 // number or a path in them are in DE_PATTERNS. Missing entries stay English, so a new English text never breaks a page.
 export const DE = {
+  "Choose…": "Wählen …",
   "Run {a language model} on your own machine": "Starte {ein Sprachmodell} auf deinem eigenen Rechner",
   "Use a folder on another drive": "Einen Ordner auf einer anderen Platte nehmen",
   "· free some space, then Resume": "· etwas Platz schaffen, dann Fortsetzen",

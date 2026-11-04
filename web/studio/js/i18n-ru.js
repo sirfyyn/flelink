@@ -1,6 +1,7 @@
 // Russian for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Choose…": "Выбрать…",
   "Run {a language model} on your own machine": "Запустите {языковую модель} на своём компьютере",
   "Use a folder on another drive": "Выбрать папку на другом диске",
   "· free some space, then Resume": "· освободите место и нажмите «Продолжить»",

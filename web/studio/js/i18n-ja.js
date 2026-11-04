@@ -1,6 +1,7 @@
 // Japanese for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Choose…": "選択…",
   "Run {a language model} on your own machine": "自分のマシンで{言語モデル}を動かそう",
   "Use a folder on another drive": "別のドライブのフォルダーを使う",
   "· free some space, then Resume": "· 空きを作ってから再開",
