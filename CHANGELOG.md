@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A simpler first look:** the sidebar shows Chat, Models, Engine and Settings; Experiments, Expert cache and the plugin
+  pages (Agent, Forge) sit in "Lab", folded until opened. Without a model the chat hides its Thinking, Tools and Sampling
+  chips and the Engine page its tuner. The live numbers explain themselves on hover (drafts accepted, expert cache hits,
+  prompt reading, slots).
 - **Clearer words:** `flelink bench --task` says "Nothing answers at …" when no server runs, `flelink ask` without a
   question says so before loading the model (and reads one from a pipe), `flelink recipes` keeps its columns with long
   ids, and the DeepSeek recipe's title and note name the RAM expert store and the FLE Link number on v1.2.4.

@@ -206,6 +206,15 @@ svg.i.lg { width: 22px; height: 22px; }
 .nav a:hover { background: var(--soft); color: var(--text); }
 .nav a.active { background: var(--soft-2); color: var(--text); }
 .nav a .badge { margin-left: auto; }
+/* "Lab": the pages for measuring and building, folded until opened */
+.nav .nav-group {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border: 0; border-radius: 9px; background: none; cursor: pointer;
+  color: var(--muted); font: inherit; font-weight: 500; text-align: left;
+}
+.nav .nav-group:hover { background: var(--soft); color: var(--text); }
+.nav .nav-group .grow { flex: 1; }
+.nav a.sub { padding-left: 26px; }
 
 .side-section { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 0;
   font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }

@@ -232,10 +232,13 @@ export function topbar(title, ...right) {
 // ----------------------------------------------------------------------------------------------- sidebar
 
 // Experiments (/lab): speed test, A/B/A; its quality card hides itself while the server answers 501 for it.
-const NAV = [
-  ["/", "chat", "Chat"], ["/models", "models", "Models"], ["/engine", "engine", "Engine"],
-  ["/lab", "lab", "Experiments"], ["/cache", "grid", "Expert cache"], ["/settings", "settings", "Settings"],
-];
+// The first four are what everyone needs; the rest (measuring, the expert cache, plugin pages like Agent and Forge) sits in
+// "Lab", folded until opened (or while one of its pages is open), so a first look shows chat, models, engine, settings.
+const NAV = [["/", "chat", "Chat"], ["/models", "models", "Models"], ["/engine", "engine", "Engine"]];
+const LAB = [["/lab", "lab", "Experiments"], ["/cache", "grid", "Expert cache"]];
+const SETTINGS = ["/settings", "settings", "Settings"];
+const LAB_KEY = "fle.nav.lab";
+let labOpen = (() => { try { return localStorage.getItem(LAB_KEY) === "1"; } catch { return false; } })();
 
 let navKey = "";
 function renderNav() {
@@ -245,15 +248,20 @@ function renderNav() {
   // The live poll calls this every few seconds on /models and /engine; rebuilding the links there
   // replaced the link under a pressed mouse button and the click got lost.
   const pages = store.plugins.filter((p) => p.loaded && p.page && p.page.nav !== false).map((p) => [p.page.path || `/p/${p.id}`, p.page.icon, p.page.title]);
-  const key = `${path} ${activeDl} ${pages.map((p) => p[0]).join(",")}`;
+  const lab = [...LAB, ...pages];
+  const isActive = (href) => (href === "/" ? path === "/" || path.startsWith("/c/") : path.startsWith(href));
+  const inLab = lab.some(([href]) => isActive(href));
+  const key = `${path} ${activeDl} ${pages.map((p) => p[0]).join(",")} ${labOpen}`;
   if (key === navKey && nav.childElementCount) return;
   navKey = key;
-  const items = [...NAV.slice(0, -1), ...pages, NAV[NAV.length - 1]]; // plugin pages go above Settings
-  clear(nav, items.map(([href, ic, label]) => {
-    const active = href === "/" ? path === "/" || path.startsWith("/c/") : path.startsWith(href);
-    return h("a", { href, "data-link": true, class: active ? "active" : "" }, icon(ic), label,
-      ic === "models" && activeDl ? h("span", { class: "badge", title: "Downloads running" }, activeDl) : null);
-  }));
+  const link = ([href, ic, label]) => h("a", { href, "data-link": true, class: isActive(href) ? "active" : "" }, icon(ic), label,
+    ic === "models" && activeDl ? h("span", { class: "badge", title: "Downloads running" }, activeDl) : null);
+  const open = labOpen || inLab;
+  const toggle = h("button", { class: `nav-group${open ? " open" : ""}`, "aria-expanded": String(open),
+    title: "Measuring, the expert cache, the agent and building your own quants",
+    onclick: () => { labOpen = !open; try { localStorage.setItem(LAB_KEY, labOpen ? "1" : "0"); } catch {} renderNav(); } },
+    icon("lab"), "Lab", h("span", { class: "grow" }), icon(open ? "down" : "chevron", "sm"));
+  clear(nav, ...NAV.map(link), toggle, ...(open ? lab.map((x) => { const a = link(x); a.classList.add("sub"); return a; }) : []), link(SETTINGS));
 }
 
 function chatGroup(ts) {
