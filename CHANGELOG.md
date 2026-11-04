@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.5 (2026-11-04)
 
+- **DeepSeek recipes read prompts in windows of 8 tokens instead of 16:** with 16, FLE v1.2.4 sends each window down a
+  per-expert CUDA path that computes a repeated null slot with a real expert's row, so prompts came out slightly wrong
+  (nothing crashed; found in FLE's code review, fixed in FLE v1.2.5). With 8 every window stays on the path that computes
+  correctly, at practically the same speed (59 tokens in 1.56 s instead of 1.45 s). Update to get it.
 - **A recipe runs the engine as it would run by hand:** the Studio no longer adds the model's suggested sampling
   (`--temp`, `--top-p`, `--top-k`, `--min-p`, `--presence-penalty`) or a large prompt cache in RAM (`--cache-ram`) to a
   recipe's command, and a flag the recipe sets appears once. Those sampling flags were the server's defaults for every
