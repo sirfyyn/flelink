@@ -67,6 +67,7 @@
         <div><dt>68 s</dt><dd>the same on an 8 GB M2 MacBook, model download included</dd></div>
         <div><dt>91 tok/s</dt><dd>a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp</dd></div>
       </dl>
+      <p class="fine"><b>Best performance measured on Linux.</b> The speed figures on this page were measured on Linux; macOS and Windows run the same recipes.</p>
     </div>
 
     <figure class="term" aria-label="A first run of FLE Link, recorded on an M2 MacBook">
@@ -109,7 +110,7 @@
           <div class="bar v74"><span>Strata</span><b>74 tok/s</b></div>
           <div class="bar v36"><span>llama.cpp</span><b>36 tok/s</b></div>
         </div>
-        <p class="fine">Decode, median over six tasks, same machine and model: one 32 GB RTX PRO 4500, 120 GB RAM, 16 cores (6 Oct 2026). Smaller than Unsloth's IQ4_XS at the same KL divergence to BF16. Prefill (reading long prompts) was where FLE trailed in this run; it has been reworked since, and new numbers follow when they are measured the same way.</p>
+        <p class="fine">Decode, median over six tasks, same machine and model: one 32 GB RTX PRO 4500, 120 GB RAM, 16 cores, Linux (6 Oct 2026). Smaller than Unsloth's IQ4_XS at the same KL divergence to BF16. Prefill (reading long prompts) was where FLE trailed in this run; it has been reworked since, and new numbers follow when they are measured the same way.</p>
       </article>
       <article class="flag">
         <header>
@@ -119,7 +120,7 @@
         </header>
         <div class="big-num">31.6 <span>tok/s through FLE Link, exact, experts in a RAM store; 41.9 with the DSpark draft</span></div>
         <ul class="flag-list">
-          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 22 GB expert cache on the card, 90 GB expert store in RAM, prefill windows, exact (no cache bias); a 3100-token three.js answer at 31.6 tok/s, its prompt in 2.5 s, FLE engine v1.2.4 (3 Nov 2026). FLE's own release: 33.3 tok/s on such answers (n=6)</li>
+          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 22 GB expert cache on the card, 90 GB expert store in RAM, prefill windows, exact (no cache bias); a 3100-token three.js answer at 31.6 tok/s, its prompt in 2.5 s, FLE engine v1.2.4, Linux (3 Nov 2026). FLE's own release: 33.3 tok/s on such answers (n=6)</li>
           <li><b>One command</b> <code>flelink run deepseek-v41-ista</code> installs the FLE engine, profiles the experts on the first run and uses copies of the model already on your disk</li>
           <li><b>With the DSpark draft model</b> <code>deepseek-v41-ista-dspark</code>: 41.9 tok/s, lossless at temperature 0 (one run, FLE release)</li>
           <li><b>Faster, less exact</b> <code>deepseek-v41-ista-iq1m</code>: the IQ1_M quant at 42.3 tok/s (n=6, before the prefill windows), KL divergence about 0.13 against IQ2_XXS</li>
