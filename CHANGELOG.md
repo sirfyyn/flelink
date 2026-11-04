@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A model that repeats itself is stopped:** a 2-bit model sometimes writes the same passage over and over (reports of 100k
+  tokens). Chat now notices it in the text as it arrives (a piece of 12 to 480 characters five times in a row, at least 400
+  characters) and stops the answer with a note. It reads text only, so no engine setting changes and an answer that does
+  not loop is never touched. Settings → Appearance → Repeat check turns it off (kept in this browser).
 - **DeepSeek recipes for FLE v1.2.5** (the engine is out: 49.8 / 50.8 / 50.6 tok/s on three runs, the same text each time):
   a fixed GPU cache (no uploads while decoding), a read-only usage profile, so a start gives the same answer, and for the
   DSpark recipe five draft tokens, a 15.5 GB expert cache and `FLE_DRAFT_UBATCH=512`. The recipes ask for engine v1.2.5, which
