@@ -332,6 +332,8 @@ export function mount(main) {
   // ------------------------------------------------------------------------------------------- start settings
 
   function renderLaunch(force = false) {
+    // the tuner measures a model; with none chosen yet it only adds a card to read past
+    if (boxes.best) boxes.best.hidden = !sel.model;
     if (!force && typingIn(boxes.launch)) return; // do not rebuild the form under the cursor
     const st = settings();
     const L = st.launch || {};
@@ -936,6 +938,11 @@ export function mount(main) {
   unsub.push(on("downloads", () => { if (store.downloads.some((d) => d.kind === "engine")) renderEngines(); }));
   renderMode();
   applyMode();
+  // "Connect to it" from the chat: the address form lives in the advanced view
+  if (new URLSearchParams(location.search).has("connect")) {
+    setMode("advanced");
+    requestAnimationFrame(() => boxes.attach.scrollIntoView({ block: "center" }));
+  }
   const bestCard = mountBest(boxes.best, {
     model: () => sel.model,
     profile: () => sel.profile,

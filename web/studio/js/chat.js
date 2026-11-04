@@ -377,7 +377,7 @@ export function mount(main, chatId) {
       step(3, "", "Chat", "Ask anything. Nothing leaves this computer.", null)));
     if (!hasModel) {
       box.append(h("p", { class: "small muted" }, "Already running a llama-server somewhere? ",
-        h("a", { href: "/engine", "data-link": true }, "Connect to it"), " instead."));
+        h("a", { href: "/engine?connect", "data-link": true }, "Connect to it"), " instead."));
     }
     return box;
   }
@@ -473,7 +473,7 @@ export function mount(main, chatId) {
       h("span", null, h("b", null, fmt.int(s.predicted_n)), " tokens"),
     ];
     if (s.prefill && s.prompt_n) parts.push(h("span", null, "prefill ", h("b", null, fmt.rate(s.prefill)), " tok/s"));
-    if (s.accept !== null && s.accept !== undefined) parts.push(h("span", null, "MTP ", h("b", null, fmt.pct(s.accept))));
+    if (s.accept !== null && s.accept !== undefined) parts.push(h("span", { title: "Share of drafted tokens the model kept" }, "drafts ", h("b", null, fmt.pct(s.accept))));
     if (s.ttft_ms) parts.push(h("span", null, "first token ", h("b", null, fmt.dur(s.ttft_ms / 1000))));
     if (s.total_s) parts.push(h("span", null, h("b", null, fmt.dur(s.total_s))));
     return h("div", { class: "stats", title: "Measured by the engine for this answer" }, parts);
@@ -594,6 +594,8 @@ export function mount(main, chatId) {
     clear(toolsChip, icon("wrench", "sm"), caps.tools === false ? "Tools: not in this model" : !toolInfo.enabled ? "Tools off" :
       toolInfo.connecting && !count ? "Tools: connecting…" : `Tools · ${count}`);
     attach.button.disabled = !up;
+    // without a model the chips would describe a chat that cannot happen yet
+    for (const chip of [thinkChip, toolsChip, sampChip]) chip.hidden = !up;
 
     const { used, nctx, exact } = contextUse();
     if (nctx && (used || exact)) {
@@ -1077,12 +1079,14 @@ export function mount(main, chatId) {
       sparkline(hist.map((x) => x.decode ?? null), { color: "var(--accent)", id: "dec" }),
       h("div", { class: "sub" }, perAnswer ? "Average of each finished answer, last two minutes" : "Tokens per second while answering, last two minutes")));
     tiles.push(h("div", { class: "tile" },
-      h("div", { class: "k" }, h("span", null, "Prompt reading (prefill)")),
+      h("div", { class: "k", title: "How fast the model reads your message and the chat so far before it starts to answer" }, h("span", null, "Prompt reading (prefill)")),
       h("div", { class: "v" }, countTo("live-prefill", prefill, fmt.rate), h("small", null, "tok/s")),
       sparkline(hist.map((x) => x.prefill ?? null), { color: "var(--violet)", id: "pre" })));
     tiles.push(h("div", { class: "tile" }, h("div", { class: "rings" },
-      ring(accept, { color: "var(--cyan)", label: "MTP drafts accepted" }),
-      ring(fle ? cacheHit : null, { color: "var(--fuchsia)", label: fle ? "Expert cache hits" : "Expert cache (FLE only)" }))));
+      ring(accept, { color: "var(--cyan)", label: "Drafts accepted",
+        help: "The model guesses a few tokens ahead and checks them; this is the share it kept. Higher is faster. Empty: the model drafts nothing." }),
+      ring(fle ? cacheHit : null, { color: "var(--fuchsia)", label: fle ? "Expert cache hits" : e.state === "attached" ? "Expert cache (not reported)" : "Expert cache (FLE only)",
+        help: "How often the GPU already had the expert a token needed, instead of reading it from RAM. Higher is faster. Only the FLE engine has this cache." }))));
 
     const gpus = lastS.gpus || [];
     if (gpus.length) {
@@ -1098,7 +1102,7 @@ export function mount(main, chatId) {
     const memTile = h("div", { class: "tile gpu" });
     if (lastS.ram_total) memTile.append(meter("System RAM", lastS.ram_used, lastS.ram_total));
     if (lastS.engine_mem) memTile.append(h("div", { class: "row between small" }, h("span", null, "Engine process"), h("span", { class: "muted num" }, fmt.mem(lastS.engine_mem))));
-    if (lastS.slots) memTile.append(h("div", { class: "row between small" }, h("span", null, "Slots busy"), h("span", { class: "muted num" }, `${lastS.slots_busy || 0} of ${lastS.slots}`)));
+    if (lastS.slots) memTile.append(h("div", { class: "row between small" }, h("span", { title: "How many requests the engine is answering at once, of how many it can" }, "Slots busy"), h("span", { class: "muted num" }, `${lastS.slots_busy || 0} of ${lastS.slots}`)));
     if (meta.totals?.generated) memTile.append(h("div", { class: "row between small" }, h("span", null, "Generated since start"), h("span", { class: "muted num" }, `${fmt.int(meta.totals.generated)} tokens`)));
     tiles.push(memTile);
     if (meta.metrics_available === false) {

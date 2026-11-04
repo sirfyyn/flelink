@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A simpler first look:** the sidebar shows Chat, Models, Engine and Settings; Experiments, Expert cache and the plugin
+  pages (Agent, Forge) sit in "Lab", folded until opened. Without a model the chat hides its Thinking, Tools and Sampling
+  chips and the Engine page its tuner. The live numbers explain themselves on hover (drafts accepted, expert cache hits,
+  prompt reading, slots).
 - **Share on GitHub:** `flelink bench --task pagoda --share` and the Forge's "Share on GitHub" open a discussion in
   sirfyyn/flelink (Benchmarks, Community quants) with the result filled in: the machine, the server build, every run, or
   the portable recipe with its check. You read it and post it with your own account; FLE Link uploads nothing. A post too

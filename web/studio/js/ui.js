@@ -310,11 +310,11 @@ export function sparkline(values, { color = "var(--accent)", max = null, height 
 }
 
 // Ring gauge for a share between 0 and 1.
-export function ring(value, { color = "var(--cyan)", label = "" } = {}) {
+export function ring(value, { color = "var(--cyan)", label = "", help = "" } = {}) {
   const r = 30;
   const c = 2 * Math.PI * r;
   const v = value === null || value === undefined ? null : Math.max(0, Math.min(1, value));
-  return h("div", { class: "ring" },
+  return h("div", { class: "ring", title: help || null },
     svg("svg", { viewBox: "0 0 74 74", role: "img", "aria-label": `${label}: ${v === null ? "no data" : Math.round(v * 100) + " %"}` },
       svg("circle", { class: "track", cx: 37, cy: 37, r, fill: "none", "stroke-width": 7 }),
       v === null ? null : svg("circle", {
