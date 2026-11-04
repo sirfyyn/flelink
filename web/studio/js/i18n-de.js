@@ -219,3 +219,6 @@ export const DE_PATTERNS = [
   [/^Last checked: (.+)\. FLE Link is up to date\.$/, "Zuletzt geprüft: $1. FLE Link ist aktuell."],
   [/^Stored in (.+)\. Start settings for the engine live on the Engine page\.$/, "Gespeichert in $1. Die Starteinstellungen der Engine stehen auf der Engine-Seite."],
 ];
+
+export const T = DE;
+export const P = DE_PATTERNS;

@@ -1,8 +1,13 @@
-// German for the Studio (Max 04.11.2026: things that stop a beginner, number 9). The page keeps writing English; this
-// layer swaps the texts it shows for German as they appear (text nodes and the title, placeholder and aria-label
+// The Studio in other languages (Max 04.11.2026: German, French, Spanish, Chinese, Japanese, Korean, Russian). The page
+// keeps writing English; this layer swaps the texts it shows for the chosen language as they appear (text nodes and the title, placeholder and aria-label
 // attributes), so no page has to know about languages. Chat messages, code, logs and inputs are never touched.
 // The language follows the browser unless one is picked in Settings (kept in this browser only).
-import { DE, DE_PATTERNS } from "./i18n-de.js";
+// the languages there are, in their own words (the Settings list); each has i18n-<code>.js with T (texts) and P (patterns)
+export const LANGUAGES = [["en", "English"], ["de", "Deutsch"], ["fr", "Français"], ["es", "Español"], ["zh", "中文"],
+  ["ja", "日本語"], ["ko", "한국어"], ["ru", "Русский"]];
+const CODES = LANGUAGES.map(([c]) => c);
+let DICT = {};
+let PATTERNS = [];
 
 const KEY = "fle.lang";
 const SKIP = "pre, code, textarea, input, .msg, .markdown, .mono, .log, [data-no-i18n]";
@@ -11,8 +16,9 @@ const ATTRS = ["title", "placeholder", "aria-label"];
 export function language() {
   let pick = "auto";
   try { pick = localStorage.getItem(KEY) || "auto"; } catch { /* storage blocked */ }
-  if (pick === "en" || pick === "de") return pick;
-  return (navigator.language || "en").toLowerCase().startsWith("de") ? "de" : "en";
+  if (CODES.includes(pick)) return pick;
+  const nav = (navigator.language || "en").toLowerCase().slice(0, 2);
+  return CODES.includes(nav) ? nav : "en";
 }
 
 export function chosenLanguage() {
@@ -27,9 +33,9 @@ export function setLanguage(v) {
 function translate(text) {
   const t = text.trim();
   if (!t) return null;
-  const hit = DE[t];
+  const hit = DICT[t];
   if (hit !== undefined) return text.replace(t, hit);
-  for (const [re, to] of DE_PATTERNS) {
+  for (const [re, to] of PATTERNS) {
     if (re.test(t)) return text.replace(t, t.replace(re, to));
   }
   return null;
@@ -69,10 +75,15 @@ function walk(root) {
   }
 }
 
-export function startI18n() {
+export async function startI18n() {
   const lang = language();
   document.documentElement.lang = lang;
-  if (lang !== "de") return;
+  if (lang === "en") return;
+  try {
+    const m = await import(`./i18n-${lang}.js`);
+    DICT = m.T;
+    PATTERNS = m.P;
+  } catch { return; } // a missing file: English
   walk(document.body);
   new MutationObserver((list) => {
     for (const m of list) {
