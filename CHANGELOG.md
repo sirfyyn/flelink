@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.6 (2026-11-04)
 
 - **A model that repeats itself is stopped:** a 2-bit model sometimes writes the same passage over and over (reports of 100k
   tokens). Chat now notices it in the text as it arrives (a piece of 12 to 480 characters five times in a row, at least 400
