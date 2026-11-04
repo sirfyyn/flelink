@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **DeepSeek recipes for FLE v1.2.5** (the engine is out: 49.8 / 50.8 / 50.6 tok/s on three runs, the same text each time):
+  a fixed GPU cache (no uploads while decoding), a read-only usage profile, so a start gives the same answer, and for the
+  DSpark recipe five draft tokens, a 15.5 GB expert cache and `FLE_DRAFT_UBATCH=512`. The recipes ask for engine v1.2.5, which
+  FLE Link installs by itself on the first start. The speed through FLE Link is measured next; until then the numbers on
+  flelink.run stay those of v1.2.4.
 - **Forge: optimize for my usage.** In Forge → Recipe (quantize), a card takes FLE's usage profile of a recipe, the GPU
   expert cache and the quant you run now, and plans the expert type per layer and role: layers the cache serves keep
   more bits, layers read on the CPU fewer, at the reference's error. It shows what each plan reads on the CPU per token
