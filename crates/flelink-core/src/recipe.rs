@@ -726,7 +726,7 @@ temperature = 0.2
             "an own build is not refused"
         );
         let r = find(std::path::Path::new("/nonexistent"), "deepseek-v41-ista").unwrap();
-        assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.4"));
+        assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.5"));
     }
 
     #[test]
@@ -948,6 +948,9 @@ temperature = 0.2
         assert!(r.run.unset_env.iter().any(|k| k == "FLE_MOE_CACHE_BIAS"));
         assert_eq!(r.run.ready_log.as_deref(), Some("[fle-store] warm start"));
         assert!(r.run_args(&models).windows(2).any(|w| w == ["-ub", "4096"]));
+        // v1.2.5: a fixed GPU cache and a profile that is only read, so the same start gives the same answer
+        assert_eq!(env["FLE_MOE_PROFILE_READONLY"], "1");
+        assert!(r.run_args(&models).windows(2).any(|w| w == ["--moe-expert-cache-inserts", "0"]));
         let _ = std::fs::remove_dir_all(&models);
     }
 
