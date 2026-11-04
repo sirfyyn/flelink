@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **The Studio in German:** with a German browser (or Settings → Appearance → Language) the pages a beginner sees are in
+  German: the first-run view, chat, models, engine, settings and the hints. Chat messages, code, logs and model
+  descriptions stay as they are; a text without a translation stays English.
 - **Fewer things that stop a first try:** the macOS app is signed ad hoc (Apple Silicon opens it instead of calling it
   damaged; the installer avoids every warning, flelink.run says what a browser download asks); loading shows the time
   left; the Thinking chip says "No thinking in this model" for models without one; on a small machine the fit rule keeps

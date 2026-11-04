@@ -4,6 +4,7 @@ import { del, get, post } from "./api.js";
 import { applyTheme, on, refreshPlugins, refreshState, settingsSections, store, topbar } from "./app.js";
 import { toolsSection, stopToolsPolling } from "./settings-tools.js";
 import { clear, fmt, h, icon, toast } from "./ui.js";
+import { chosenLanguage, setLanguage } from "./i18n.js";
 
 // The names of the plugins that ship with FLE Link, for the list when one is off (its own title is not known then).
 const BUNDLED = { forge: "Forge", updater: "Updates", remote: "Remote access", recorder: "Recorder", switch: "Model switcher" };
@@ -128,7 +129,10 @@ export function mount(main) {
 
   function look(s) {
     return section("spark", "Appearance", "",
-      seg([["system", "Like the system"], ["dark", "Dark"], ["light", "Light"]], s.theme, (v) => save({ theme: v }, true)));
+      seg([["system", "Like the system"], ["dark", "Dark"], ["light", "Light"]], s.theme, (v) => save({ theme: v }, true)),
+      // the language is kept in this browser (i18n.js); the page reloads in it
+      h("label", { class: "field" }, h("span", null, "Language"),
+        seg([["auto", "Like the browser"], ["en", "English"], ["de", "Deutsch"]], chosenLanguage(), (v) => setLanguage(v))));
   }
 
   function models(s) {
