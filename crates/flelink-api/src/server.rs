@@ -66,6 +66,8 @@ pub struct Studio {
     pub lan: std::sync::atomic::AtomicBool,
     /// demo mode: the page takes steps from outside (demo.rs; off unless --demo / FLE_DEMO=1)
     pub demo: crate::demo::Demo,
+    /// recipes whose files on this machine are being checked in the background before they start
+    pub checking: Mutex<std::collections::HashSet<String>>,
 }
 
 /// An error the page shows as `{"error": {"message": ...}}`.
@@ -80,6 +82,32 @@ const NEEDS_NEWER: &str = "needs FLE ";
 /// release goes into Downloads like an install from the Engine page, and the recipe starts once it is in. Anything else
 /// recipe_start says is passed on as it is.
 pub fn recipe_start_updating(st: &Ctx, id: &str) -> Result<Value, ApiError> {
+    // copies on this machine that were never checked are read whole for their SHA-256 (120 GB: over a minute): that
+    // happens in the background, and the recipe starts when they match, instead of the request waiting for it
+    if let Ok(r) = flelink_core::recipe::find(&st.opts.home, id) {
+        if flelink_core::locate::needs_reading(&r, &st.opts.home, &st.models_dir()) {
+            if st.checking.lock().unwrap().insert(id.to_string()) {
+                let (st2, id2) = (st.clone(), id.to_string());
+                let _ = std::thread::Builder::new()
+                    .name("recipe-check".into())
+                    .spawn(move || {
+                        flelink_core::locate::adopt(
+                            &r,
+                            &st2.opts.home,
+                            &st2.models_dir(),
+                            &mut |_| {},
+                        );
+                        st2.checking.lock().unwrap().remove(&id2);
+                        let _ = recipe_start_updating(&st2, &id2);
+                    });
+            }
+            let title = flelink_core::recipe::find(&st.opts.home, id)
+                .map(|r| r.title)
+                .unwrap_or_default();
+            return Ok(json!({"checking": true,
+                "message": format!("FLE Link checks the copies of {title} already on this machine (their SHA-256) and starts it when they match")}));
+        }
+    }
     let m = match st.recipe_start(id) {
         Err(ApiError(409, m)) if m.contains(NEEDS_NEWER) && m.contains(" or newer.") => m,
         r => return r,
@@ -202,6 +230,7 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         engines,
         lan: std::sync::atomic::AtomicBool::new(lan),
         demo: crate::demo::Demo::new(false),
+        checking: Mutex::new(std::collections::HashSet::new()),
         live: Live::new(engine.clone(), 1.0),
         bench: crate::bench::Bench::new(engine.clone(), &home),
         tuner: crate::tuner::Tuner::new(&home),
