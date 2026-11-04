@@ -18,6 +18,7 @@ pub mod plan;
 pub mod reap;
 pub mod recipe;
 pub mod tools;
+pub mod usage;
 pub mod verify;
 
 use serde_json::{json, Value};

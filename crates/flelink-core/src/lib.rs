@@ -24,6 +24,7 @@ pub mod recipe;
 pub mod report;
 pub mod serve;
 pub mod server;
+pub mod share;
 pub mod sidecars;
 pub mod system;
 
