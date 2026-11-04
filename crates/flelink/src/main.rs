@@ -417,6 +417,10 @@ struct BenchArgs {
     /// with --task: keep each answer in DIR (pagoda-1.html, …)
     #[arg(long, value_name = "DIR")]
     answers: Option<String>,
+    /// with --task: open a GitHub discussion (sirfyyn/flelink, Benchmarks) with the result filled in; you read it and post
+    /// it yourself, FLE Link uploads nothing
+    #[arg(long)]
+    share: bool,
     /// write the JSON result to a file
     #[arg(long, value_name = "FILE")]
     output: Option<String>,
@@ -547,6 +551,31 @@ fn run_praxis(a: &BenchArgs, id: &str) -> Result<i32> {
         println!("{}", serde_json::to_string_pretty(&r)?);
     } else {
         print!("{}", praxis::result_text(&r));
+    }
+    if a.share {
+        let (title, body) = flelink_core::share::bench_post(&r);
+        let sh = flelink_core::share::discussion(flelink_core::share::BENCHMARKS, &title, &body);
+        if let Some(text) = &sh.paste {
+            let f = std::env::temp_dir().join("flelink-share.md");
+            std::fs::write(&f, text)?;
+            eprintln!(
+                "The result is too long for a link: paste {} into the form.",
+                f.display()
+            );
+        }
+        eprintln!("Share it (you read it and post it yourself): {}", sh.url);
+        let opener = if cfg!(target_os = "macos") {
+            "open"
+        } else if cfg!(windows) {
+            "explorer"
+        } else {
+            "xdg-open"
+        };
+        let _ = std::process::Command::new(opener)
+            .arg(&sh.url)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
     }
     Ok(0)
 }

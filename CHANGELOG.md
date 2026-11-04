@@ -6,6 +6,14 @@
   pages (Agent, Forge) sit in "Lab", folded until opened. Without a model the chat hides its Thinking, Tools and Sampling
   chips and the Engine page its tuner. The live numbers explain themselves on hover (drafts accepted, expert cache hits,
   prompt reading, slots).
+- **Share on GitHub:** `flelink bench --task pagoda --share` and the Forge's "Share on GitHub" open a discussion in
+  sirfyyn/flelink (Benchmarks, Community quants) with the result filled in: the machine, the server build, every run, or
+  the portable recipe with its check. You read it and post it with your own account; FLE Link uploads nothing. A post too
+  long for a link goes to the clipboard.
+- **Forge, quants cut to your own use (first part):** reads an FLE usage profile, rewrites it for a new quant, and
+  plans the bits per layer and role from the profile and your GPU cache budget: layers whose experts the cache serves keep
+  more bits, layers read on the CPU fewer, at the error of a reference quant. The plan already keeps a type per expert for
+  the split expert tensors FLE plans next. The page and the build follow.
 - **Clearer words:** `flelink bench --task` says "Nothing answers at …" when no server runs, `flelink ask` without a
   question says so before loading the model (and reads one from a pipe), `flelink recipes` keeps its columns with long
   ids, and the DeepSeek recipe's title and note name the RAM expert store and the FLE Link number on v1.2.4.
