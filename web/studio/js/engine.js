@@ -938,6 +938,11 @@ export function mount(main) {
   unsub.push(on("downloads", () => { if (store.downloads.some((d) => d.kind === "engine")) renderEngines(); }));
   renderMode();
   applyMode();
+  // "Connect to it" from the chat: the address form lives in the advanced view
+  if (new URLSearchParams(location.search).has("connect")) {
+    setMode("advanced");
+    requestAnimationFrame(() => boxes.attach.scrollIntoView({ block: "center" }));
+  }
   const bestCard = mountBest(boxes.best, {
     model: () => sel.model,
     profile: () => sel.profile,

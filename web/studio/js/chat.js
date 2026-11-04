@@ -377,7 +377,7 @@ export function mount(main, chatId) {
       step(3, "", "Chat", "Ask anything. Nothing leaves this computer.", null)));
     if (!hasModel) {
       box.append(h("p", { class: "small muted" }, "Already running a llama-server somewhere? ",
-        h("a", { href: "/engine", "data-link": true }, "Connect to it"), " instead."));
+        h("a", { href: "/engine?connect", "data-link": true }, "Connect to it"), " instead."));
     }
     return box;
   }
@@ -473,7 +473,7 @@ export function mount(main, chatId) {
       h("span", null, h("b", null, fmt.int(s.predicted_n)), " tokens"),
     ];
     if (s.prefill && s.prompt_n) parts.push(h("span", null, "prefill ", h("b", null, fmt.rate(s.prefill)), " tok/s"));
-    if (s.accept !== null && s.accept !== undefined) parts.push(h("span", null, "MTP ", h("b", null, fmt.pct(s.accept))));
+    if (s.accept !== null && s.accept !== undefined) parts.push(h("span", { title: "Share of drafted tokens the model kept" }, "drafts ", h("b", null, fmt.pct(s.accept))));
     if (s.ttft_ms) parts.push(h("span", null, "first token ", h("b", null, fmt.dur(s.ttft_ms / 1000))));
     if (s.total_s) parts.push(h("span", null, h("b", null, fmt.dur(s.total_s))));
     return h("div", { class: "stats", title: "Measured by the engine for this answer" }, parts);
@@ -1085,7 +1085,7 @@ export function mount(main, chatId) {
     tiles.push(h("div", { class: "tile" }, h("div", { class: "rings" },
       ring(accept, { color: "var(--cyan)", label: "Drafts accepted",
         help: "The model guesses a few tokens ahead and checks them; this is the share it kept. Higher is faster. Empty: the model drafts nothing." }),
-      ring(fle ? cacheHit : null, { color: "var(--fuchsia)", label: fle ? "Expert cache hits" : "Expert cache (FLE only)",
+      ring(fle ? cacheHit : null, { color: "var(--fuchsia)", label: fle ? "Expert cache hits" : e.state === "attached" ? "Expert cache (not reported)" : "Expert cache (FLE only)",
         help: "How often the GPU already had the expert a token needed, instead of reading it from RAM. Higher is faster. Only the FLE engine has this cache." }))));
 
     const gpus = lastS.gpus || [];
