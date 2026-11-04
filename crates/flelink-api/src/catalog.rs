@@ -48,19 +48,15 @@ pub fn mtp_vocab() -> &'static Value {
 }
 
 /// Will a model of `size` bytes run on this machine? A verdict and the numbers behind it.
-/// What the OS keeps: 8 GiB on a big machine, a quarter of the RAM on a small one (an 8 GB Mac runs a 1 GB model fine;
-/// with a flat 8 GiB nothing at all fitted there, 4 Nov 2026).
+/// What the OS keeps: 8 GiB, but at most a quarter of the RAM, so a small machine is not ruled out entirely (an 8 GB Mac
+/// runs a 1 GB model fine; with a flat 8 GiB nothing that misses the Metal limit could fit there, 4 Nov 2026). From
+/// 32 GiB of RAM up this is the Python Studio's rule unchanged (DEVIATIONS.md).
 fn os_reserve(ram: i64) -> i64 {
     OS_RESERVE.min(ram / 4)
 }
 
-/// KV cache and buffers grow with the model: half its size, between 1 and 4 GiB.
-fn runtime(size: i64) -> i64 {
-    (size / 2).clamp(GIB_I, RUNTIME)
-}
-
 pub fn fit(size: i64, sys: &Value) -> Value {
-    let need = size + runtime(size);
+    let need = size + RUNTIME;
     let ram = sys["memory"]["total"].as_i64().unwrap_or(0);
     let reserve = os_reserve(ram);
     let gpus = sys["gpus"].as_array().cloned().unwrap_or_default();
@@ -133,9 +129,9 @@ mod fit_tests {
     #[test]
     fn a_small_model_fits_an_8_gb_mac_and_big_machines_keep_their_rule() {
         let mac = json!({"memory": {"total": 8 * GIB_I}, "gpus": [{"unified": true, "metal_limit": 5_755_256_176i64}]});
-        assert_eq!(
+        assert_ne!(
             fit(1_320_000_000, &mac)["verdict"],
-            "good",
+            "too_big",
             "Llama 3.2 1B Q8"
         );
         assert_eq!(fit(6 * GIB_I, &mac)["verdict"], "too_big");

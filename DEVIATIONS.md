@@ -50,3 +50,9 @@ engine log: `FLE Link: …` where the Python Studio writes `FLE Studio: …` (th
 `find_engine` looks at the explicit path, then `FLE_ENGINE`, then the engines FLE Link installed itself, and only then at a
 `llama-server` on the PATH. The Python helper looks at the PATH before its own installs, so a Homebrew llama.cpp would win
 over the engine the program chose and checked.
+
+## D13: the system reserve of the fit rule on small machines
+
+`catalog::fit` keeps at most a quarter of the RAM for the OS (`min(8 GiB, RAM/4)`); the Python Studio always keeps 8 GiB.
+On an 8 GB Mac that left nothing, so Llama 3.2 1B Q8 (1.3 GB) was "too big" while `flelink models` said it fits. From
+32 GiB of RAM up both give the same verdict; the catalog test machines all have more, so the comparison stays exact.

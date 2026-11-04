@@ -4,7 +4,7 @@
 
 [package]
 name = "flelink-app"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 license = "MIT"
 description = "FLE Link, the desktop app"
