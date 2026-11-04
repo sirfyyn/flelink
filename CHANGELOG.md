@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **A failed start says why, with a number:** FLE v1.2.5 and later print `[fle-status-error]` with a code before they stop.
+  FLE Link shows it in plain words, for example "The GPU cache budget is too large for this card and context: at most 14200 MiB
+  fit" with the setting to change, instead of "The engine exited (code 1)".
 - **DeepSeek recipes for FLE v1.2.5** (the engine is out: 49.8 / 50.8 / 50.6 tok/s on three runs, the same text each time):
   a fixed GPU cache (no uploads while decoding), a read-only usage profile, so a start gives the same answer, and for the
   DSpark recipe five draft tokens, a 15.5 GB expert cache and `FLE_DRAFT_UBATCH=512`. The recipes ask for engine v1.2.5, which

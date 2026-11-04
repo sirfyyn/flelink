@@ -639,6 +639,13 @@ impl Engine {
             } else {
                 s.state = "crashed".into();
                 s.phase.clear();
+                // FLE v1.2.5+ names why a start failed in one line, `[fle-status-error] {"error": {code, max_mib?, text}}`
+                if let Some((e, h)) = status_error(s.lines.iter().map(|(_, _, t)| t.as_str())) {
+                    s.error = e;
+                    if s.hint.is_empty() {
+                        s.hint = h;
+                    }
+                }
                 if s.error.is_empty() {
                     let last = s
                         .lines
@@ -1056,5 +1063,55 @@ pub fn read_and_memory(pid: u32) -> (Option<u64>, Option<u64>) {
     {
         let _ = pid;
         (None, None)
+    }
+}
+
+/// The reason a start failed, from the engine's `[fle-status-error]` line: (error, hint), in the newest such line.
+pub fn status_error<'a>(
+    lines: impl DoubleEndedIterator<Item = &'a str>,
+) -> Option<(String, String)> {
+    const TAG: &str = "[fle-status-error]";
+    let line = lines.rev().find(|l| l.contains(TAG))?;
+    let v: serde_json::Value = serde_json::from_str(line.split_once(TAG)?.1.trim()).ok()?;
+    let e = v.get("error")?;
+    let text = e.get("text").and_then(|t| t.as_str()).unwrap_or("").trim();
+    let max = e.get("max_mib").and_then(|m| m.as_u64());
+    match (e.get("code").and_then(|c| c.as_str()), max) {
+        (Some("fit_budget_too_large"), Some(m)) => Some((
+            format!("The GPU cache budget is too large for this card and context: at most {m} MiB fit."),
+            format!("Lower FLE_MOE_CACHE_BUDGET_MIB to {m} or less in the recipe, or use a smaller context."),
+        )),
+        (Some("fit_budget_too_large"), None) => Some((
+            "The GPU cache budget is too large for this card and context.".into(),
+            "Lower FLE_MOE_CACHE_BUDGET_MIB in the recipe, or use a smaller context.".into(),
+        )),
+        (Some("model_load_failed"), _) => Some((
+            if text.is_empty() { "The engine could not load the model.".into() } else { format!("The engine could not load the model: {text}") },
+            String::new(),
+        )),
+        _ if !text.is_empty() => Some((format!("The engine stopped: {text}"), String::new())),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod status_error_tests {
+    use super::status_error;
+
+    #[test]
+    fn the_engine_names_why_a_start_failed() {
+        let log = [
+            "load_tensors: offloading 40 layers",
+            r#"[fle-status-error] {"error":{"code":"fit_budget_too_large","max_mib":14200,"text":"budget too large"}}"#,
+            "FLE Link: engine exited with code 1",
+        ];
+        let (e, h) = status_error(log.iter().copied()).unwrap();
+        assert!(e.contains("14200 MiB"), "{e}");
+        assert!(h.contains("FLE_MOE_CACHE_BUDGET_MIB to 14200"), "{h}");
+        let (e, _) = status_error([r#"[fle-status-error] {"error":{"code":"model_load_failed","max_mib":null,"text":"bad gguf"}}"#].into_iter()).unwrap();
+        assert_eq!(e, "The engine could not load the model: bad gguf");
+        assert!(
+            status_error(["nothing to see", "[fle-status-error] not json"].into_iter()).is_none()
+        );
     }
 }
