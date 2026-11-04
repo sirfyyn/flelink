@@ -828,3 +828,8 @@ svg.i.flip { transform: scaleX(-1); }
 
 /* recent requests on the Engine page */
 table.t tr.bad td { color: var(--bad); }
+
+/* the first run: three ways to a model */
+.start-choices { display: grid; gap: 12px; width: 100%; max-width: 640px; text-align: left; }
+.start-choice .card-head p { font-size: 13px; }
+.start-choice .input { min-width: 0; flex: 1; }

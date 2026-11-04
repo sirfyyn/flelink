@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A first-run view with three ways to a model:** download one that fits this computer (the smallest fitting recipes,
+  one click), use one already on it (FLE Link lists what it finds in the models folder, the Hugging Face cache, LM Studio
+  and Ollama, each with a Use button), or connect to a server that already runs. "Add folder" names a folder of GGUF
+  files; it is searched from then on, by the Studio and by recipes. Ollama's models are found by their names.
 - **A simpler first look:** the sidebar shows Chat, Models, Engine and Settings; Experiments, Expert cache and the plugin
   pages (Agent, Forge) sit in "Lab", folded until opened. Without a model the chat hides its Thinking, Tools and Sampling
   chips and the Engine page its tuner. The live numbers explain themselves on hover (drafts accepted, expert cache hits,
