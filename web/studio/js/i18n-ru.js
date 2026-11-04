@@ -1,6 +1,10 @@
 // Russian for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Run {a language model} on your own machine": "Запустите {языковую модель} на своём компьютере",
+  "Use a folder on another drive": "Выбрать папку на другом диске",
+  "· free some space, then Resume": "· освободите место и нажмите «Продолжить»",
+  "more": "подробнее",
   "Chat": "Чат",
   "Models": "Модели",
   "Engine": "Движок",
@@ -250,6 +254,8 @@ export const T = {
 };
 
 export const P = [
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM shared with the GPU\.$/, "Измерено при $1 ГБ RAM и GPU на $2 ГБ; у этого компьютера $3 ГБ RAM, общей с GPU."],
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM and a (\d+) GB GPU\.$/, "Измерено при $1 ГБ RAM и GPU на $2 ГБ; у этого компьютера $3 ГБ RAM и GPU на $4 ГБ."],
   [/^Download (\d[\d.,]* [KMGT]?B)$/, "Скачать ($1)"],
   [/^(\d+) runs?$/, "прогонов: $1"],
   [/^(\d+) minutes$/, "$1 мин"],

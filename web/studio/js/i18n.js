@@ -54,7 +54,21 @@ function onText(n) {
   }
 }
 
+// a whole sentence with one highlighted part: <h2 data-i18n="Run {a language model} on your own machine">
+function onSentence(el) {
+  const key = el.getAttribute("data-i18n");
+  const to = DICT[key];
+  if (!to || el.dataset.i18nDone === to) return;
+  const m = to.match(/^(.*)\{(.+)\}(.*)$/);
+  if (!m) return;
+  const cls = el.querySelector("span")?.className || "";
+  el.replaceChildren(document.createTextNode(m[1]), Object.assign(document.createElement("span"), { className: cls, textContent: m[2] }),
+    document.createTextNode(m[3]));
+  el.dataset.i18nDone = to;
+}
+
 function onAttrs(el) {
+  if (el.hasAttribute("data-i18n")) onSentence(el);
   if (el.closest(SKIP + ", .msg") && el.tagName !== "TEXTAREA" && el.tagName !== "INPUT") return;
   for (const a of ATTRS) {
     const v = el.getAttribute(a);
