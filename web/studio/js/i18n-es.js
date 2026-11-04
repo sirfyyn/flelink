@@ -1,6 +1,10 @@
 // Spanish for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Run {a language model} on your own machine": "Ejecuta {un modelo de lenguaje} en tu propio equipo",
+  "Use a folder on another drive": "Usar una carpeta en otro disco",
+  "· free some space, then Resume": "· libera espacio y luego Reanudar",
+  "more": "más",
   "Chat": "Chat",
   "Models": "Modelos",
   "Engine": "Motor",
@@ -250,6 +254,8 @@ export const T = {
 };
 
 export const P = [
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM shared with the GPU\.$/, "Medido con $1 GB de RAM y una GPU de $2 GB; este equipo tiene $3 GB de RAM compartidos con la GPU."],
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM and a (\d+) GB GPU\.$/, "Medido con $1 GB de RAM y una GPU de $2 GB; este equipo tiene $3 GB de RAM y una GPU de $4 GB."],
   [/^Download (\d[\d.,]* [KMGT]?B)$/, "Descargar ($1)"],
   [/^(\d+) runs?$/, "$1 pasada(s)"],
   [/^(\d+) minutes$/, "$1 minutos"],

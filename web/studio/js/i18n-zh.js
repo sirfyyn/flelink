@@ -1,6 +1,10 @@
 // Chinese (simplified) for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Run {a language model} on your own machine": "在你自己的电脑上运行{语言模型}",
+  "Use a folder on another drive": "使用其他磁盘上的文件夹",
+  "· free some space, then Resume": "· 腾出空间后点继续",
+  "more": "更多",
   "Chat": "对话",
   "Models": "模型",
   "Engine": "引擎",
@@ -250,6 +254,8 @@ export const T = {
 };
 
 export const P = [
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM shared with the GPU\.$/, "测量环境为 $1 GB 内存和 $2 GB 显卡；这台电脑有 $3 GB 与 GPU 共享的内存。"],
+  [/^Measured with (\d+) GB RAM and a (\d+) GB GPU; this computer has (\d+) GB RAM and a (\d+) GB GPU\.$/, "测量环境为 $1 GB 内存和 $2 GB 显卡；这台电脑有 $3 GB 内存和 $4 GB 显卡。"],
   [/^Download (\d[\d.,]* [KMGT]?B)$/, "下载（$1）"],
   [/^(\d+) runs?$/, "$1 次"],
   [/^(\d+) minutes$/, "$1 分钟"],

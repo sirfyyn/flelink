@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Clearer model cards:** a recipe that does not fit says why in numbers ("measured with 120 GB RAM and a 32 GB GPU;
+  this computer has 8 GB RAM shared with the GPU"), a long note shows its first sentence and unfolds the rest, and a
+  download that stops for lack of disk space offers a folder on another drive. The first-run headline is one sentence
+  per language, so Japanese, Korean and Chinese keep their word order.
 - **The Studio in eight languages:** English, German, French, Spanish, Chinese (simplified), Japanese, Korean and
   Russian, from the browser's language or Settings → Appearance → Language. The pages a beginner sees are translated (the
   first-run view, chat, models, engine, settings, hints; German also most advanced settings); chat messages, code, logs
