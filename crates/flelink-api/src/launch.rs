@@ -1039,6 +1039,100 @@ pub fn auto_plan(i: &AutoInput) -> R<Plan> {
     )
 }
 
+/// Flags the automatic plan adds that a direct start of the engine does not have: the model's suggested sampling (it
+/// becomes the server's default for every /v1 request that does not set its own, so a client's answers change) and the
+/// prompt cache in RAM (26 GB on a 120 GB machine, next to a 90 GB expert store). A recipe runs the command it describes:
+/// these stay only when the recipe names them (Max 04.11.2026: no difference between FLE Link and the server itself).
+const AUTO_ONLY: &[&str] = &[
+    "--temp",
+    "--temperature",
+    "--top-p",
+    "--top_p",
+    "--top-k",
+    "--top_k",
+    "--min-p",
+    "--min_p",
+    "--presence-penalty",
+    "--cache-ram",
+    "-cram",
+];
+
+/// Flags with one value that the automatic plan and a recipe may both set; the engine takes the last one, so the earlier
+/// copies only make the command longer and print warnings ("specified multiple times").
+const ONE_VALUE: &[&str] = &[
+    "-c",
+    "--ctx-size",
+    "-t",
+    "--threads",
+    "-ctk",
+    "--cache-type-k",
+    "-ctv",
+    "--cache-type-v",
+    "-b",
+    "--batch-size",
+    "-ub",
+    "--ubatch-size",
+    "-fit",
+    "--fit",
+    "--fit-target",
+    "-fitt",
+    "--moe-expert-cache-inserts",
+    "-ngl",
+    "--n-gpu-layers",
+    "--gpu-layers",
+];
+const SWITCHES: &[&str] = &["--jinja", "-cmoe", "--cpu-moe"];
+
+/// The recipe's arguments win: what the automatic plan added (`auto`) loses the flags in [`AUTO_ONLY`] (they stay only as
+/// the recipe's own, `own`), and a flag both set appears once, with the recipe's value.
+pub fn recipe_args(auto: &[String], own: &[String]) -> Vec<String> {
+    let named = |f: &str| own.iter().any(|a| a == f);
+    let mut out = vec![];
+    let mut i = 0;
+    while i < auto.len() {
+        let a = auto[i].as_str();
+        let takes_value = AUTO_ONLY.contains(&a) || ONE_VALUE.contains(&a);
+        // the automatic copy goes: always for AUTO_ONLY (a recipe that wants one names it itself), else when named
+        if AUTO_ONLY.contains(&a) || (ONE_VALUE.contains(&a) && named(a)) {
+            i += if takes_value { 2 } else { 1 };
+            continue;
+        }
+        if SWITCHES.contains(&a) && named(a) {
+            i += 1;
+            continue;
+        }
+        out.push(auto[i].clone());
+        i += 1;
+    }
+    out.extend(own.iter().cloned());
+    out
+}
+
+#[cfg(test)]
+mod recipe_args_tests {
+    use super::recipe_args;
+
+    fn v(s: &str) -> Vec<String> {
+        s.split_whitespace().map(str::to_string).collect()
+    }
+
+    #[test]
+    fn a_recipe_runs_its_own_command_without_the_automatic_sampling_and_cache() {
+        let auto = v("-m m.gguf -c 16384 --jinja -t 16 --cache-ram 26624 --temp 0 --top-p 0.95 --top-k 20 --min-p 0 --presence-penalty 1.5 --moe-expert-cache-inserts 1");
+        let own = v("--jinja -ngl 99 -cmoe -t 16 --moe-expert-cache-inserts 0");
+        assert_eq!(
+            recipe_args(&auto, &own),
+            v("-m m.gguf -c 16384 --jinja -ngl 99 -cmoe -t 16 --moe-expert-cache-inserts 0")
+        );
+        // a recipe that asks for a sampling value keeps the automatic one out and its own in
+        let own = v("--temp 0.6");
+        assert_eq!(
+            recipe_args(&v("--temp 0 --top-k 20 -c 8192"), &own),
+            v("-c 8192 --temp 0.6")
+        );
+    }
+}
+
 /// Add what FLE Studio needs to reach and follow the engine, unless the command sets it itself. `log_verbosity`: the engine
 /// knows `-lv` (llama.cpp logs its library lines at level 4, one above the default).
 fn finish(mut plan: Plan, log_verbosity: bool) -> R<Plan> {
