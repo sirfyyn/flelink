@@ -23,7 +23,7 @@ fn main() {
     });
     let (types, weights) = usage::types_of(tensors);
     let budget: u64 = a[3].parse().unwrap();
-    let sens = usage::Sensitivity::default();
+    let sens = usage::Sensitivity::implied_by(&types);
     let target = usage::error_of(&types, &sens);
     let plan = usage::plan(&usage::Inputs {
         profile: &prof,
@@ -31,6 +31,7 @@ fn main() {
         budget_mib: budget,
         sens: sens.clone(),
         target_error: target,
+        reference: Some(&types),
     });
     let reference = usage::cpu_bytes_of(&prof, weights, budget, &types);
     println!(

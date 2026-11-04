@@ -208,18 +208,44 @@ pub const CHOICES: [Choice; 7] = [
     },
 ];
 
-/// How much error a role adds per unit of quantization noise. Measured per model at night (KL rise per bit on sample
-/// layers); until then down projections count more, as is usual.
+/// How much error a tensor adds per unit of quantization noise, per layer and role. Best measured (KL rise per bit, the
+/// night run); without a measurement it is implied by a reference quant (`implied_by`). `by_role` is the fallback for a
+/// layer without an entry.
 #[derive(Debug, Clone)]
 pub struct Sensitivity {
     pub by_role: BTreeMap<Role, f64>,
+    pub by_layer: BTreeMap<(u32, Role), f64>,
 }
 
 impl Default for Sensitivity {
     fn default() -> Self {
         Sensitivity {
-            by_role: [(Role::Gate, 1.0), (Role::Up, 1.0), (Role::Down, 1.6)]
-                .into_iter()
+            by_role: Role::ALL.iter().map(|r| (*r, 1.0)).collect(),
+            by_layer: BTreeMap::new(),
+        }
+    }
+}
+
+impl Sensitivity {
+    pub fn of(&self, il: u32, role: Role) -> f64 {
+        self.by_layer
+            .get(&(il, role))
+            .copied()
+            .unwrap_or_else(|| self.by_role.get(&role).copied().unwrap_or(1.0))
+    }
+
+    /// The sensitivities under which a reference's split is the best one for its size: at the optimum every tensor
+    /// gives up the same error per bit, and with noise 4^-bpw that means s ∝ 4^bpw (Procyon 04.11.2026: ISTA's split
+    /// varies by layer and role, as if measured; start from it). The plan then only moves bits where usage pays for it.
+    pub fn implied_by(types: &BTreeMap<u32, BTreeMap<Role, String>>) -> Sensitivity {
+        Sensitivity {
+            by_role: Role::ALL.iter().map(|r| (*r, 1.0)).collect(),
+            by_layer: types
+                .iter()
+                .flat_map(|(il, r)| {
+                    r.iter()
+                        .map(move |(role, t)| ((*il, *role), 4f64.powf(bpw_of(t))))
+                })
                 .collect(),
         }
     }
@@ -244,6 +270,8 @@ pub struct Inputs<'a> {
     pub sens: Sensitivity,
     /// the error to reach, in the same units as `Plan::error` (e.g. the error of a reference quant's types)
     pub target_error: f64,
+    /// the reference's own types: a candidate too, so the plan is never slower than the reference
+    pub reference: Option<&'a BTreeMap<u32, BTreeMap<Role, String>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -312,7 +340,7 @@ fn choose(
             let roles = Role::ALL
                 .iter()
                 .map(|r| {
-                    let s = inp.sens.by_role[r];
+                    let s = inp.sens.of(l.il, *r);
                     let best = CHOICES
                         .iter()
                         .min_by(|a, b| {
@@ -335,10 +363,10 @@ pub fn plan(inp: &Inputs) -> Plan {
     let w = inp.expert_weights;
     let p = inp.profile;
     let err_of = |c: &BTreeMap<u32, BTreeMap<Role, &'static Choice>>| -> f64 {
-        c.values()
-            .flat_map(|r| {
+        c.iter()
+            .flat_map(|(il, r)| {
                 r.iter()
-                    .map(|(role, ch)| inp.sens.by_role[role] * noise(ch.bpw))
+                    .map(move |(role, ch)| inp.sens.of(*il, *role) * noise(ch.bpw))
             })
             .sum()
     };
@@ -389,6 +417,24 @@ pub fn plan(inp: &Inputs) -> Plan {
         if let Some(d) = CHOICES.get(i + 1) {
             cands.push(uniform(c, d));
         }
+    }
+    if let Some(r) = inp.reference {
+        let pick: Option<Pick> = p
+            .layers
+            .iter()
+            .map(|l| {
+                let roles = r.get(&l.il)?;
+                Role::ALL
+                    .iter()
+                    .map(|role| {
+                        let t = roles.get(role)?;
+                        Some((*role, CHOICES.iter().find(|c| c.name == t.as_str())?))
+                    })
+                    .collect::<Option<BTreeMap<_, _>>>()
+                    .map(|m| (l.il, m))
+            })
+            .collect();
+        cands.extend(pick);
     }
     let seeds: Vec<Pick> = cands.clone();
     for seed in seeds {
@@ -472,15 +518,10 @@ impl Plan {
 /// The error a given assignment (e.g. a reference quant's types per layer and role) has in the plan's units.
 pub fn error_of(types: &BTreeMap<u32, BTreeMap<Role, String>>, sens: &Sensitivity) -> f64 {
     types
-        .values()
-        .flat_map(|r| {
-            r.iter().map(|(role, t)| {
-                let bpw = CHOICES
-                    .iter()
-                    .find(|c| c.name == t.to_lowercase())
-                    .map_or(2.0, |c| c.bpw);
-                sens.by_role[role] * noise(bpw)
-            })
+        .iter()
+        .flat_map(|(il, r)| {
+            r.iter()
+                .map(move |(role, t)| sens.of(*il, *role) * noise(bpw_of(t)))
         })
         .sum()
 }
@@ -622,6 +663,7 @@ mod tests {
             budget_mib: ((2.0 * slot) as u64 >> 20) + 1,
             sens: sens.clone(),
             target_error: error_of(&even, &sens),
+            reference: None,
         };
         let plan = plan(&inp);
         assert!(plan.error <= inp.target_error * 1.000001);
@@ -644,7 +686,7 @@ mod tests {
         );
         assert!(
             bpw(1, Role::Down) >= bpw(1, Role::Gate),
-            "down counts more: {:?}",
+            "equal sensitivity, layer 1 even: {:?}",
             plan.layers
         );
         assert_eq!(plan.experts[&0][&Role::Up].len(), 4);

@@ -261,7 +261,7 @@ impl Forge {
         if budget == 0 {
             return bad("Give the GPU expert cache in MiB (the recipe's --moe-expert-cache-mb or FLE_MOE_BUDGET)");
         }
-        let sens = usage::Sensitivity::default();
+        let sens = usage::Sensitivity::implied_by(&ref_types);
         let target = usage::error_of(&ref_types, &sens);
         let plan = usage::plan(&usage::Inputs {
             profile: &prof,
@@ -269,6 +269,7 @@ impl Forge {
             budget_mib: budget,
             sens: sens.clone(),
             target_error: target,
+            reference: Some(&ref_types),
         });
         let ref_bytes = usage::cpu_bytes_of(&prof, weights, budget, &ref_types);
         let sha = {
