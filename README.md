@@ -36,6 +36,9 @@ webhooks, your messages), and FLE Link starts it with your model on the Agent pa
 | **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp |
 | **31.6 tok/s** | DeepSeek-V4.1-Flash (232 GiB) on the same 32 GB GPU, exact, experts in a 90 GB RAM store (`flelink run deepseek-v41-ista`, FLE v1.2.4); with the DSpark draft 41.9 |
 
+**Best performance measured on Linux.** The speed figures in this README were measured on Linux; macOS and Windows run
+the same recipes.
+
 ## Install
 
 ```bash
@@ -81,6 +84,8 @@ Toolkit on the host; not tested yet). Built and smoke-tested with every release 
 
 Small models such as Llama 3.2 1B run on any laptop and are in the built-in catalog (`flelink models`). Any other GGUF on
 Hugging Face can be searched, checked for fit and downloaded from the Studio's Models page.
+
+All figures in this table: best performance measured on Linux.
 
 ## How it works
 
