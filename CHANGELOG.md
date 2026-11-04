@@ -2,9 +2,6 @@
 
 ## Unreleased
 
-- **Small machines:** the Studio's fit rule keeps a quarter of the RAM for the system on a small machine (8 GiB before) , so
-  Llama 3.2 1B Q8 is no longer "too big" on an 8 GB Mac (`flelink models` said it fits; from 32 GiB of RAM the rule is
-  unchanged).
 - **Clearer words:** `flelink bench --task` says "Nothing answers at …" when no server runs, `flelink ask` without a
   question says so before loading the model (and reads one from a pipe), `flelink recipes` keeps its columns with long
   ids, and the DeepSeek recipe's title and note name the RAM expert store and the FLE Link number on v1.2.4.
