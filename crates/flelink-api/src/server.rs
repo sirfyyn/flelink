@@ -2015,7 +2015,13 @@ impl Studio {
                 _ => plan.args.extend(["-c".to_string(), c.to_string()]),
             }
         }
-        plan.args.extend(r.run_args(&self.models_dir()));
+        // the recipe's command as it would run by hand: no automatic sampling or prompt cache, each flag once
+        let own = r.run_args(&self.models_dir());
+        plan.args = if plugin.is_none() {
+            crate::launch::recipe_args(&plan.args, &own)
+        } else {
+            [plan.args.clone(), own].concat()
+        };
         for (k, v) in r.run_env(&self.models_dir()) {
             match plan.env.iter_mut().find(|(a, _)| *a == k) {
                 Some(e) => e.1 = v,

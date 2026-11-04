@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A recipe runs the engine as it would run by hand:** the Studio no longer adds the model's suggested sampling
+  (`--temp`, `--top-p`, `--top-k`, `--min-p`, `--presence-penalty`) or a large prompt cache in RAM (`--cache-ram`) to a
+  recipe's command, and a flag the recipe sets appears once. Those sampling flags were the server's defaults for every
+  `/v1` request that set none, so a client got other answers through FLE Link than from the engine itself. The Studio's
+  chat sends the model's suggested values with each request instead ("Model defaults").
 - **A recipe start no longer waits for checksums:** copies of the model already on this machine that FLE Link has not
   read before are checked in the background (120 GB take over a minute), and the recipe starts once they match. Before,
   the Studio's request waited for the whole read (seen with IQ1_M on 4 Nov 2026).

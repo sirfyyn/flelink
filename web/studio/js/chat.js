@@ -762,6 +762,7 @@ export function mount(main, chatId) {
     const nodes = [];
     for (let cur = node.parent ? idx.byId.get(node.parent) : null; cur; cur = cur.parent ? idx.byId.get(cur.parent) : null) nodes.unshift(cur);
     return buildRequest({ nodes, system: chat.system || c.system_prompt, settings: c, noMoreTools: lastRound,
+      modelSampling: store.engine?.plan?.model?.sampling || null,
       tools: useTools ? toolInfo.tools.map((t) => t.schema) : [], images: caps.vision ? images : new Map() });
   }
 

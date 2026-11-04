@@ -99,7 +99,7 @@ export function usedImages(nodes) {
 // nodes: the conversation up to (not including) the message that will be generated.
 // noMoreTools: the last round of a turn. The tools stay in the request, only `tool_choice: "none"` stops the call:
 // taking the tools out would change the front of the prompt and make the engine read all of it again.
-export function buildRequest({ nodes, system = "", settings = {}, tools = [], images = new Map(), extra = {}, noMoreTools = false }) {
+export function buildRequest({ nodes, system = "", settings = {}, tools = [], images = new Map(), extra = {}, noMoreTools = false, modelSampling = null }) {
   const msgs = apiMessages(nodes, images);
   if (system) msgs.unshift({ role: "system", content: system });
   const body = { messages: msgs, stream_options: { include_usage: true },
@@ -107,6 +107,12 @@ export function buildRequest({ nodes, system = "", settings = {}, tools = [], im
   if (settings.sampling === "custom") {
     Object.assign(body, { temperature: settings.temperature, top_p: settings.top_p, top_k: settings.top_k,
       min_p: settings.min_p, presence_penalty: settings.presence_penalty });
+  } else if (modelSampling) {
+    // "Model defaults": the model's suggested values go with the request, not as the server's defaults for everyone
+    // (a recipe starts the engine as it would run by hand, so other /v1 clients get the engine's own defaults)
+    for (const k of ["temperature", "top_p", "top_k", "min_p", "presence_penalty"]) {
+      if (typeof modelSampling[k] === "number") body[k] = modelSampling[k];
+    }
   }
   if (settings.max_tokens > 0) body.max_tokens = settings.max_tokens;
   if (tools.length) {
