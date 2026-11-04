@@ -202,6 +202,13 @@ pub fn run(p: &Params, t: &Task) -> Result<Value> {
     }
     let c = client(p.timeout, &base)?;
     let model = if p.model.is_empty() {
+        if c.get(format!("{base}/v1/models")).send().is_err() {
+            return Err(FleError::new(
+                format!("Nothing answers at {base}."),
+                "Start the engine or the Studio first, or pass --url.",
+            )
+            .into());
+        }
         get(&c, &format!("{base}/v1/models"))
             .and_then(|m| m["data"][0]["id"].as_str().map(str::to_string))
             .ok_or_else(|| {

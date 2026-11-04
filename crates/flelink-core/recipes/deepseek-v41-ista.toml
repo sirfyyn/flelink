@@ -1,6 +1,6 @@
 id = "deepseek-v41-ista"
-title = "DeepSeek-V4.1-Flash ISTA IQ2_XXS (FLE, hot experts in RAM)"
-note = "On one 32 GB GPU with 120 GB RAM (RTX PRO 4500), exact (no cache bonus): 33.3 tok/s decode on a three.js scene of 3000 tokens (n=6, 32.9 to 33.9), 31.5 on short prompts (n=5, 30.8 to 31.5); 59-token prompts read in about 1.4 s (prefill windows of 16 tokens, about 45 tok/s at every length). Through FLE Link: 31.1 tok/s on a 3583-token answer (n=1). Strata 0.2.9 on the same task: 37.1 direct, 36.5 through FLE Link (3 Nov 2026). FLE 1.2.4 keeps 90 GB of experts in a RAM store that the usage profile fills at start (about 18 s; ready after that), the rest is read from NVMe. Needs FLE v1.2.4 or newer and about 255 GB on a fast NVMe."
+title = "DeepSeek-V4.1-Flash ISTA IQ2_XXS (FLE, exact, experts in a RAM store)"
+note = "On one 32 GB GPU with 120 GB RAM (RTX PRO 4500), exact (no cache bonus): 33.3 tok/s decode on a three.js scene of 3000 tokens (n=6, 32.9 to 33.9), 31.5 on short prompts (n=5, 30.8 to 31.5); 59-token prompts read in about 1.4 s (prefill windows of 16 tokens, about 45 tok/s at every length). Through FLE Link: 31.6 tok/s on a 3106-token answer, its 59-token prompt in 2.5 s (n=1). Strata 0.2.9 on the same task: 37.1 direct, 36.5 through FLE Link (3 Nov 2026). FLE 1.2.4 keeps 90 GB of experts in a RAM store that the usage profile fills at start (about 18 s; ready after that), the rest is read from NVMe. Needs FLE v1.2.4 or newer and about 255 GB on a fast NVMe."
 
 [model]
 repo = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"

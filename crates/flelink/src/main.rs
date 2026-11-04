@@ -189,7 +189,9 @@ enum Cmd {
     Bench(Box<BenchArgs>),
     /// Ask one question and print the answer (loads the model for the duration)
     Ask {
+        /// a recipe id (`flelink recipes`), a model id (`flelink models`) or a .gguf file
         model: String,
+        /// the question; without one it is read from stdin
         question: Vec<String>,
     },
     /// Drive a Studio started with --demo (chat, page, preview, wait) and record the screen, for videos
@@ -781,6 +783,7 @@ fn run() -> Result<()> {
         Some(Cmd::Recipes) => {
             let s = system::detect(&home);
             let (all, problems) = flelink_core::recipe::load_all(&home);
+            let w = all.iter().map(|r| r.id.len()).max().unwrap_or(22).max(22);
             for r in &all {
                 let fit = if r.model.size > 0 {
                     r.fit(&home.join("models"), &s).label()
@@ -797,7 +800,7 @@ fn run() -> Result<()> {
                     format!("  ({})", r.source)
                 };
                 println!(
-                    "{:<22} {:>9}  {:<8} {}{}{}",
+                    "{:<w$} {:>9}  {:<8} {}{}{}",
                     r.id,
                     if r.model.size > 0 {
                         system::gib(r.model.size)
@@ -807,7 +810,8 @@ fn run() -> Result<()> {
                     fit,
                     r.title,
                     if have { "  [downloaded]" } else { "" },
-                    from
+                    from,
+                    w = w
                 );
             }
             for p in problems {
@@ -1019,8 +1023,25 @@ fn run() -> Result<()> {
             Ok(())
         }
         Some(Cmd::Ask { model, question }) => {
+            // the question before the model loads: a missing one should not cost a minute of loading
+            let q = if question.is_empty() {
+                use std::io::{IsTerminal, Read};
+                let mut t = String::new();
+                if !std::io::stdin().is_terminal() {
+                    std::io::stdin().read_to_string(&mut t)?;
+                }
+                if t.trim().is_empty() {
+                    return Err(flelink_core::FleError::new(
+                        "No question given.",
+                        "flelink ask MODEL \"your question\" (or pipe it in: echo … | flelink ask MODEL)",
+                    )
+                    .into());
+                }
+                t.trim().to_string()
+            } else {
+                question.join(" ")
+            };
             let srv = flow::ensure_and_start(&home, &model, &mut |e| print_event(&e))?;
-            let q = question.join(" ");
             eprintln!("\n> {q}\n");
             let st = chat::stream(
                 &srv.base,
