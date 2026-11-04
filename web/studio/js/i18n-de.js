@@ -1,0 +1,224 @@
+// The German words of the Studio (i18n.js). Keys are the English texts exactly as the page shows them; texts with a
+// number or a path in them are in DE_PATTERNS. Missing entries stay English, so a new English text never breaks a page.
+export const DE = {
+  // navigation and frame
+  "Chat": "Chat", "Models": "Modelle", "Engine": "Engine", "Settings": "Einstellungen", "Lab": "Labor",
+  "Experiments": "Experimente", "Expert cache": "Expertencache", "Agent": "Agent", "Forge": "Forge",
+  "New chat": "Neuer Chat", "Search chats": "Chats durchsuchen", "Chats": "Chats", "Menu": "Menü", "Chat menu": "Chat-Menü",
+  "This machine": "Dieser Rechner", "Today": "Heute", "Yesterday": "Gestern", "Previous 7 days": "Letzte 7 Tage", "Older": "Älter",
+  "Your conversations stay on this computer.": "Deine Unterhaltungen bleiben auf diesem Rechner.",
+  "Measuring, the expert cache, the agent and building your own quants": "Messen, Expertencache, Agent und eigene Quants bauen",
+  "Not running": "Läuft nicht", "No model loaded": "Kein Modell geladen", "Open the engine page": "Engine-Seite öffnen",
+  "Connected": "Verbunden", "Ready": "Bereit", "Live": "Live",
+
+  // first run
+  "Run": "Starte", "a language model": "ein Sprachmodell", "on your own machine": "auf deinem eigenen Rechner",
+  "FLE Link downloads a model, picks the engine and the settings that fit your hardware, and shows what the engine is doing while you chat.":
+    "FLE Link lädt ein Modell, wählt Engine und Einstellungen passend zu deiner Hardware und zeigt beim Chatten, was die Engine tut.",
+  "Download a model that fits": "Ein passendes Modell herunterladen",
+  "Picked for this computer's memory; every file is checked before use.": "Passend zum Speicher dieses Rechners ausgewählt; jede Datei wird vor der Nutzung geprüft.",
+  "All models": "Alle Modelle", "Download": "Herunterladen", "use another folder": "anderen Ordner nehmen",
+  "Use models you already have": "Modelle nutzen, die schon da sind",
+  "FLE Link looks in the models folder, the Hugging Face cache, LM Studio and Ollama.": "FLE Link sucht im Modellordner, im Hugging-Face-Cache, in LM Studio und in Ollama.",
+  "Looking on this computer…": "Suche auf diesem Rechner …",
+  "Nothing found in the models folder, the Hugging Face cache, LM Studio or Ollama. Name a folder below.":
+    "Im Modellordner, im Hugging-Face-Cache, in LM Studio und in Ollama nichts gefunden. Unten einen Ordner angeben.",
+  "A folder with GGUF files, e.g. ~/models": "Ein Ordner mit GGUF-Dateien, z. B. ~/models", "Add folder": "Ordner hinzufügen", "Use": "Nutzen",
+  "Use a server that already runs": "Einen laufenden Server nutzen",
+  "Any llama.cpp or FLE server on this computer or the network.": "Jeder llama.cpp- oder FLE-Server auf diesem Rechner oder im Netz.",
+  "Connect to it": "Verbinden", "Load": "Laden", "Get a model": "Modell holen", "Load it": "Laden",
+  "Ask anything. Nothing leaves this computer.": "Frag, was du willst. Nichts verlässt diesen Rechner.",
+  "What should": "Woran soll", "work on?": "arbeiten?",
+  "Explain mixture-of-experts": "Erkläre Mixture-of-Experts", "Write a Python script": "Schreib ein Python-Skript",
+  "Summarize a text for me": "Fass mir einen Text zusammen", "Plan three days in Lisbon": "Plane drei Tage in Lissabon",
+  "FLE Link searches this folder from now on": "FLE Link durchsucht diesen Ordner ab jetzt",
+
+  // composer and chat
+  "Message": "Nachricht", "Load a model to start chatting": "Lade ein Modell, um zu chatten", "Attach": "Anhängen",
+  "Attach files": "Dateien anhängen", "Attach files: text, code, PDF or pictures (or drop them here)": "Dateien anhängen: Text, Code, PDF oder Bilder (oder hier ablegen)",
+  "Thinking on": "Denken an", "Thinking off": "Denken aus", "No thinking in this model": "Dieses Modell denkt nicht",
+  "Let the model think before it answers": "Das Modell vor der Antwort nachdenken lassen",
+  "Tools off": "Werkzeuge aus", "Tools: connecting…": "Werkzeuge: verbinde …", "Tools: not in this model": "Werkzeuge: nicht in diesem Modell",
+  "Tools the model may call": "Werkzeuge, die das Modell nutzen darf", "Model defaults": "Modellvorgaben", "Sampling settings": "Sampling-Einstellungen",
+  "Send": "Senden", "Send (Enter)": "Senden (Enter)", "Stop (Esc)": "Stopp (Esc)",
+  "Delete this message?": "Diese Nachricht löschen?", "Edit your message": "Nachricht bearbeiten", "Send as new version": "Als neue Version senden",
+  "Versions of this message": "Versionen dieser Nachricht", "Previous version": "Vorige Version", "Next version": "Nächste Version",
+  "Export or import chats": "Chats exportieren oder importieren", "Import a chat file": "Chat-Datei importieren",
+  "Import a chat (JSON or Markdown)": "Chat importieren (JSON oder Markdown)", "Export as JSON (all versions)": "Als JSON exportieren (alle Versionen)",
+  "Export as Markdown (the version on screen)": "Als Markdown exportieren (die angezeigte Version)", "This chat": "Dieser Chat",
+  "Rename": "Umbenennen", "Delete": "Löschen", "Cancel": "Abbrechen", "Copy": "Kopieren", "Done": "Fertig", "Save": "Speichern",
+  "Saved": "Gespeichert", "Repeat": "Wiederholen", "Close": "Schließen",
+
+  // live panel
+  "Generation": "Erzeugung", "Prompt reading (prefill)": "Prompt lesen (Prefill)", "Drafts accepted": "Angenommene Entwürfe",
+  "Expert cache hits": "Expertencache-Treffer", "Expert cache (FLE only)": "Expertencache (nur FLE)", "Expert cache (not reported)": "Expertencache (nicht gemeldet)",
+  "Tokens per second while answering, last two minutes": "Token pro Sekunde beim Antworten, letzte zwei Minuten",
+  "Average of each finished answer, last two minutes": "Mittel jeder fertigen Antwort, letzte zwei Minuten",
+  "now": "jetzt", "last answer": "letzte Antwort", "Memory": "Speicher", "System RAM": "Arbeitsspeicher", "Slots busy": "Belegte Slots",
+  "How fast the model reads your message and the chat so far before it starts to answer": "Wie schnell das Modell deine Nachricht und den bisherigen Chat liest, bevor es antwortet",
+  "The model guesses a few tokens ahead and checks them; this is the share it kept. Higher is faster. Empty: the model drafts nothing.":
+    "Das Modell rät ein paar Token voraus und prüft sie; das ist der Anteil, den es behält. Höher ist schneller. Leer: Das Modell entwirft nichts.",
+  "How often the GPU already had the expert a token needed, instead of reading it from RAM. Higher is faster. Only the FLE engine has this cache.":
+    "Wie oft die GPU den Experten, den ein Token brauchte, schon hatte, statt ihn aus dem RAM zu lesen. Höher ist schneller. Nur die FLE-Engine hat diesen Cache.",
+  "Busy": "Auslastung",
+
+  // models page
+  "Pick a model that fits this computer. Downloads resume after an interruption and every file is checked against its SHA-256 before use.":
+    "Wähle ein Modell, das zu diesem Rechner passt. Downloads setzen nach einer Unterbrechung fort, jede Datei wird vor der Nutzung per SHA-256 geprüft.",
+  "Processor": "Prozessor", "GPU": "GPU", "Disk": "Platte", "free in the models folder ·": "frei im Modellordner ·", "change": "ändern",
+  "Recipes": "Rezepte", "A model with the engine and start settings it wants. Built in, from your recipes folder or from a plugin; fitting ones first.":
+    "Ein Modell mit der Engine und den Starteinstellungen, die es braucht. Eingebaut, aus deinem Rezeptordner oder aus einem Plugin; passende zuerst.",
+  "Fits this machine": "Passt auf diesen Rechner", "Tight fit": "Knapp", "Too big for this machine": "Zu groß für diesen Rechner",
+  "Copy run command": "Startbefehl kopieren", "Your library": "Deine Bibliothek",
+  "No models yet. Download one above or add a GGUF file you already have.": "Noch keine Modelle. Lade oben eines herunter oder füge eine vorhandene GGUF-Datei hinzu.",
+  "Add from disk": "Von der Platte hinzufügen", "/path/to/model.gguf or a folder": "/pfad/zu/modell.gguf",
+  "Any GGUF from Hugging Face": "Jedes GGUF von Hugging Face", "Search GGUF models, or paste owner/name or a Hugging Face link": "GGUF-Modelle suchen oder owner/name bzw. einen Hugging-Face-Link einfügen",
+  "No GGUF repos found.": "Keine GGUF-Repos gefunden.", "Model card": "Modellkarte", "Size": "Größe", "Load time": "Ladezeit",
+  "KL divergence": "KL-Divergenz", "MTP files missing": "MTP-Dateien fehlen", "Downloading": "Lädt herunter", "Waiting": "Wartet",
+  "Paused": "Pausiert", "Failed": "Fehlgeschlagen", "Cancelled": "Abgebrochen", "Installing": "Installiert", "Checking SHA-256": "Prüfe SHA-256",
+  "In your library": "In deiner Bibliothek", "FLE models": "FLE-Modelle", "FLE quants of Qwen3.8-Flash-Next": "FLE-Quants von Qwen3.8-Flash-Next",
+  "Made for the FLE engine: experts in RAM, the busy ones cached on the GPU, MTP drafting for faster answers.":
+    "Für die FLE-Engine gemacht: Experten im RAM, die gefragten auf der GPU, MTP-Entwürfe für schnellere Antworten.",
+  "Tiny, runs on any laptop. Good for trying FLE Link out.": "Winzig, läuft auf jedem Laptop. Gut zum Ausprobieren.",
+  "Same model, higher precision.": "Dasselbe Modell, höhere Genauigkeit.",
+
+  // engine page
+  "FLE Link runs llama-server for you. Every start is a plain command that you can read, copy and change; a profile keeps a command of your own, placeholders and all.":
+    "FLE Link startet llama-server für dich. Jeder Start ist ein normaler Befehl zum Lesen, Kopieren und Ändern; ein Profil hält einen eigenen Befehl samt Platzhaltern fest.",
+  "Simple": "Einfach", "Advanced": "Erweitert", "Start": "Starten", "Restart": "Neu starten", "Stop": "Stoppen",
+  "Not running. Choose a model and how to start it below, then press Start.": "Läuft nicht. Wähle unten ein Modell und wie es starten soll, dann auf Starten drücken.",
+  "Use it from your tools": "Aus deinen Werkzeugen nutzen", "Load a model first; then this shows the exact model name for your tools.":
+    "Erst ein Modell laden; dann steht hier der genaue Modellname für deine Werkzeuge.",
+  "Run in a terminal:": "Im Terminal ausführen:", "The same from a terminal:": "Dasselbe im Terminal:", "Any other app": "Andere App",
+  "Let the agent drive FLE Link (MCP)": "Den Agenten FLE Link steuern lassen (MCP)",
+  "Model": "Modell", "Starts with automatic settings, sized for this machine.": "Startet mit automatischen Einstellungen, passend für diesen Rechner.",
+  "Context": "Kontext", "Context size": "Kontextgröße", "Tokens the model can see at once; more needs more memory.": "So viele Token sieht das Modell auf einmal; mehr braucht mehr Speicher.",
+  "Switch to Advanced above for every setting, launch profiles, engines and servers that already run.": "Oben auf Erweitert schalten für alle Einstellungen, Startprofile, Engines und laufende Server.",
+  "Command": "Befehl", "What Start runs. Paste it into a terminal to run the engine without FLE Link.": "Was Starten ausführt. Im Terminal eingefügt läuft die Engine auch ohne FLE Link.",
+  "Download or add a model first (Models page).": "Erst ein Modell herunterladen oder hinzufügen (Seite Modelle).",
+  "Engine log": "Engine-Log", "Filter lines": "Zeilen filtern", "Copy the log": "Log kopieren", "Jump to the end": "Zum Ende springen",
+  "The engine has not written anything yet.": "Die Engine hat noch nichts geschrieben.", "No line matches.": "Keine Zeile passt.",
+  "Engines": "Engines", "Prebuilt llama.cpp and FLE builds, downloaded from GitHub and checked before use.": "Fertige llama.cpp- und FLE-Builds, von GitHub geladen und vor der Nutzung geprüft.",
+  "Best installed": "Bestes installiertes", "My own build": "Eigener Build", "Install": "Installieren", "Install an engine": "Engine installieren",
+  "No engine installed yet. Install one below or point to your own llama-server.": "Noch keine Engine installiert. Unten eine installieren oder auf einen eigenen llama-server zeigen.",
+  "Your own llama-server": "Eigener llama-server", "Check": "Prüfen",
+  "Chat with any llama.cpp or FLE server and watch its numbers. FLE Link does not start or stop it.": "Mit jedem llama.cpp- oder FLE-Server chatten und seine Zahlen sehen. FLE Link startet oder stoppt ihn nicht.",
+  "Address": "Adresse", "API key": "API-Schlüssel", "Only if the server wants one": "Nur wenn der Server einen will", "Connect": "Verbinden",
+  "Launch profiles": "Startprofile", "New profile": "Neues Profil", "Paste any llama-server command": "Beliebigen llama-server-Befehl einfügen",
+  "Best for my machine": "Das Beste für meinen Rechner", "Find the best settings": "Beste Einstellungen finden", "Time budget": "Zeitbudget",
+  "Automatic settings": "Automatische Einstellungen", "Batch size": "Batch-Größe", "CPU threads": "CPU-Threads",
+  "Install an engine first": "Erst eine Engine installieren", "Load a model first": "Erst ein Modell laden",
+
+  // settings
+  "Appearance": "Darstellung", "Like the system": "Wie das System", "Dark": "Dunkel", "Light": "Hell",
+  "Models folder": "Modellordner", "Where downloads go and where FLE Link looks for GGUF files. A drive with more room is fine.":
+    "Wohin Downloads gehen und wo FLE Link nach GGUF-Dateien sucht. Eine Platte mit mehr Platz geht auch.",
+  "Defaults for new answers. A chat can still turn thinking on or off from the message box.": "Vorgaben für neue Antworten. Ein Chat kann das Denken weiter im Eingabefeld an- oder ausschalten.",
+  "Sampling": "Sampling", "The model's recommended values": "Die empfohlenen Werte des Modells", "My own values": "Eigene Werte",
+  "Temperature": "Temperatur", "Presence penalty": "Wiederholungsstrafe", "System prompt": "System-Prompt",
+  "Optional. Sent at the start of every new chat.": "Optional. Wird zu Beginn jedes neuen Chats gesendet.",
+  "Answer length limit": "Höchstlänge der Antwort", "0 = no limit": "0 = keine Grenze", "Largest upload": "Größter Upload",
+  "Tools": "Werkzeuge", "Let the model use tools": "Das Modell Werkzeuge nutzen lassen", "Calculator": "Taschenrechner", "Clock": "Uhr",
+  "Web search": "Websuche", "Read files in one folder": "Dateien in einem Ordner lesen", "Use MCP servers": "MCP-Server nutzen",
+  "Access": "Zugang", "Access key": "Zugangsschlüssel", "Port": "Port", "Save port": "Port speichern", "Data folder": "Datenordner",
+  "Open the browser when FLE Link starts": "Browser öffnen, wenn FLE Link startet", "Plugins": "Plugins", "Updates": "Updates",
+  "Remote access": "Fernzugriff", "Recorder": "Rekorder", "Model switcher": "Modellwechsler",
+  "Tells you when a new FLE Link or FLE engine is out, and updates in one click.": "Meldet neue Versionen von FLE Link und der FLE-Engine und aktualisiert mit einem Klick.",
+  "This computer only": "Nur dieser Rechner", "Other machines too": "Auch andere Rechner", "Language": "Sprache", "Like the browser": "Wie der Browser",
+  "Kept in settings.json on this computer and only sent to huggingface.co. FLE Link never shows it again.":
+    "Liegt in settings.json auf diesem Rechner und geht nur an huggingface.co. FLE Link zeigt ihn nie wieder an.",
+  "Only needed for gated or private repos. Public models download without it.": "Nur für gesperrte oder private Repos nötig. Öffentliche Modelle laden ohne.",
+  "FLE Link talks to the internet only when you download a model or an engine, search Hugging Face, look for updates (once a day, switchable above), or turn on web search or a web MCP server for the chat. No telemetry.":
+    "FLE Link geht nur ins Internet, wenn du ein Modell oder eine Engine lädst, Hugging Face durchsuchst, nach Updates schaust (einmal am Tag, oben abschaltbar) oder Websuche bzw. einen Web-MCP-Server für den Chat einschaltest. Keine Telemetrie.",
+
+  // second round: settings, engine (advanced), remote, updates
+  "(for models that can)": "(bei Modellen, die das können)", "(needs a model whose chat template supports them)": "(braucht ein Modell, dessen Chat-Vorlage sie unterstützt)",
+  "A free port FLE Link picks": "Ein freier Port, den FLE Link wählt", "Built in": "Eingebaut", "built in": "eingebaut", "No model yet": "Noch kein Modell",
+  "Check for updates (about once a day)": "Nach Updates schauen (etwa einmal am Tag)", "FLE Link tells you when a new version is out.": "FLE Link meldet, wenn eine neue Version da ist.",
+  "Choose a key for other machines": "Schlüssel für andere Rechner wählen", "Choose the machine that computes": "Rechner wählen, der rechnet",
+  "Context length from the start settings": "Kontextlänge aus den Starteinstellungen", "Copy to edit": "Zum Bearbeiten kopieren",
+  "Discourages words that already appeared; stops long answers from going in circles.": "Bremst Wörter, die schon vorkamen; verhindert, dass lange Antworten im Kreis laufen.",
+  "Experts kept on the CPU (--n-cpu-moe)": "Experten auf der CPU (--n-cpu-moe)", "FLE engine on GitHub": "FLE-Engine auf GitHub",
+  "How many prompt tokens are handed to the engine per round. Larger reads long prompts faster and needs more memory.": "So viele Prompt-Token gehen je Runde an die Engine. Mehr liest lange Prompts schneller und braucht mehr Speicher.",
+  "How many requests are served at the same time. Without a unified cache each gets an equal share of the context.": "So viele Anfragen laufen gleichzeitig. Ohne gemeinsamen Cache bekommt jede einen gleichen Teil des Kontexts.",
+  "How many tokens the GPU computes at once while reading the prompt. Larger is faster up to a point, then it only costs memory.": "So viele Token rechnet die GPU beim Lesen des Prompts auf einmal. Mehr ist bis zu einem Punkt schneller, danach kostet es nur Speicher.",
+  "How many tokens the model can see at once (prompt plus answer), shared by all parallel requests. A larger value needs more memory.": "So viele Token sieht das Modell auf einmal (Prompt und Antwort), geteilt von allen parallelen Anfragen. Mehr braucht mehr Speicher.",
+  "How often the model may call tools before it has to answer.": "Wie oft das Modell Werkzeuge aufrufen darf, bevor es antworten muss.",
+  "Largest upload in MB": "Größter Upload in MB", "MB per attached file (1 to 512). Larger files are refused with a message that names this limit.": "MB je angehängter Datei (1 bis 512). Größere Dateien werden mit einer Meldung abgelehnt, die diese Grenze nennt.",
+  "Let other FLE Links use this machine's engine.": "Andere FLE Links die Engine dieses Rechners nutzen lassen.", "Let the model work in your repos.": "Das Modell in deinen Repos arbeiten lassen.",
+  "Make one on GitHub": "Auf GitHub anlegen", "Measured on the reference machine": "Auf dem Referenzrechner gemessen", "No MCP server is set up.": "Kein MCP-Server eingerichtet.",
+  "No hosts yet. This machine does the work.": "Noch keine Hosts. Dieser Rechner macht die Arbeit.", "Not signed in.": "Nicht angemeldet.", "Sign in": "Anmelden",
+  "Nothing is tuned for this model on this machine yet. The first run needs the engine stopped; it starts and stops the engine by itself, once for every setting it tries.":
+    "Für dieses Modell ist auf diesem Rechner noch nichts abgestimmt. Der erste Lauf braucht eine gestoppte Engine; er startet und stoppt sie selbst, einmal für jede getestete Einstellung.",
+  "Number format of the keys in the context memory (KV cache). q8_0 takes about half the memory of f16.": "Zahlenformat der Schlüssel im Kontextspeicher (KV-Cache). q8_0 braucht etwa halb so viel Speicher wie f16.",
+  "Number format of the values in the context memory (KV cache). q8_0 takes about half the memory of f16.": "Zahlenformat der Werte im Kontextspeicher (KV-Cache). q8_0 braucht etwa halb so viel Speicher wie f16.",
+  "One FLE Link computes for another: pairing with a code, rights per client, hosts by address or SSH.": "Ein FLE Link rechnet für einen anderen: Kopplung per Code, Rechte je Client, Hosts per Adresse oder SSH.",
+  "Only add servers you trust: a program you list here runs with your rights, and what its tools return is read by the model.": "Nur Server eintragen, denen du traust: Ein Programm hier läuft mit deinen Rechten, und was seine Werkzeuge liefern, liest das Modell.",
+  "Only the K most likely words are considered for each step.": "Je Schritt zählen nur die K wahrscheinlichsten Wörter.",
+  "Only the most likely words that together make up this share (0 to 1) are considered.": "Es zählen nur die wahrscheinlichsten Wörter, die zusammen diesen Anteil (0 bis 1) ergeben.",
+  "Other machines sign in with it; API clients send it as the Bearer key.": "Andere Rechner melden sich damit an; API-Clients senden ihn als Bearer-Schlüssel.",
+  "Other machines that compute for this one: pick one at the top of the sidebar.": "Andere Rechner, die für diesen rechnen: oben in der Seitenleiste wählen.",
+  "RAM in MiB for remembering earlier prompts, so a follow-up question does not read the whole chat again. 0 turns it off.": "RAM in MiB, um frühere Prompts zu behalten, damit eine Folgefrage nicht den ganzen Chat neu liest. 0 schaltet es ab.",
+  "Randomness of the answers: lower is more predictable. The value is the one the model's authors recommend.": "Zufall in den Antworten: niedriger ist vorhersehbarer. Der Wert ist der, den die Modellautoren empfehlen.",
+  "Run it from a terminal with these settings": "Mit diesen Einstellungen im Terminal starten", "Save and connect": "Speichern und verbinden",
+  "The MTP head file (Models page)": "Die MTP-Kopf-Datei (Seite Modelle)", "The MTP vocabulary file": "Die MTP-Wortliste",
+  "The model file chosen when starting": "Die beim Start gewählte Modelldatei", "The llama-server of the engine picked for this profile": "Der llama-server der für dieses Profil gewählten Engine",
+  "This model has no MTP head; the engine drafts without it": "Dieses Modell hat keinen MTP-Kopf; die Engine entwirft ohne",
+  "This Studio listens on this computer only. To let other computers connect, start it with --host 0.0.0.0 (or the address of your network or tailnet). An SSH host needs no change here.":
+    "Dieses Studio lauscht nur auf diesem Rechner. Damit andere Rechner sich verbinden, mit --host 0.0.0.0 starten (oder der Adresse deines Netzes oder Tailnets). Ein SSH-Host braucht hier keine Änderung.",
+  "Threads from the start settings (0 there = one per physical core)": "Threads aus den Starteinstellungen (0 dort = einer je physischem Kern)",
+  "Tries a few settings one after another, measures each several times, and keeps what is clearly faster. The result is saved as a launch profile that starts the same way every time.":
+    "Probiert einige Einstellungen nacheinander, misst jede mehrmals und behält, was klar schneller ist. Das Ergebnis wird als Startprofil gespeichert, das jedes Mal gleich startet.",
+  "Use for the next start": "Für den nächsten Start nutzen", "What to try and for how long": "Was probiert wird und wie lange",
+  "What the model may call while it answers. Tools that write something or start a program always ask you first.": "Was das Modell beim Antworten aufrufen darf. Werkzeuge, die etwas schreiben oder ein Programm starten, fragen immer erst.",
+  "Who can open FLE Link. Changes here apply the next time FLE Link starts.": "Wer FLE Link öffnen darf. Änderungen gelten ab dem nächsten Start.",
+  "Words less than this share as likely as the best one are dropped.": "Wörter, die weniger als diesen Anteil so wahrscheinlich sind wie das beste, fallen weg.",
+  "Works with the upstream llama.cpp engine too. Big MoE models run best with the FLE engine.": "Geht auch mit der normalen llama.cpp-Engine. Große MoE-Modelle laufen mit der FLE-Engine am besten.",
+  "Runs the model on the Apple GPU with unified memory.": "Rechnet das Modell auf der Apple-GPU mit gemeinsamem Speicher.",
+  "off by default. The question the model searches for leaves this computer.": "standardmäßig aus. Die Suchanfrage des Modells verlässt diesen Rechner.",
+  "read only; the model can list and read text files below the folder you name, nothing outside it": "nur lesen; das Modell kann Textdateien unterhalb des genannten Ordners auflisten und lesen, nichts außerhalb",
+  "today's date and time": "heutiges Datum und Uhrzeit", "programs and web addresses that offer tools in the Model Context Protocol": "Programme und Webadressen, die Werkzeuge im Model Context Protocol anbieten",
+  "no MTP": "kein MTP", "Use the chat template stored in the model file. Needed for correct roles, reasoning and tool calls.": "Die Chat-Vorlage aus der Modelldatei nutzen. Nötig für richtige Rollen, Denken und Werkzeugaufrufe.",
+  "Let the engine adjust what is not set by hand (how much runs on the GPU) so that everything fits into the available GPU memory.": "Die Engine anpassen lassen, was nicht von Hand gesetzt ist (wie viel auf der GPU läuft), damit alles in den GPU-Speicher passt.",
+  "Access token (if the hub asks for one)": "Zugangstoken (falls der Hub einen will)", "Add host…": "Host hinzufügen …",
+
+  // lab
+  "Speed test": "Tempotest", "Run the test": "Test starten", "Short answer": "Kurze Antwort", "Long prompt": "Langer Prompt", "Code": "Code",
+  "No results yet.": "Noch keine Ergebnisse.", "Quality": "Qualität", "Measure KL divergence": "KL-Divergenz messen", "Compare": "Vergleichen",
+  "A/B/A comparison": "A/B/A-Vergleich", "Runs per block": "Läufe je Block", "Runs per setting": "Läufe je Einstellung",
+  "Load a model first; the test talks to the running engine.": "Erst ein Modell laden; der Test spricht mit der laufenden Engine.",
+  "Your results show up here as bars, newest first.": "Deine Ergebnisse erscheinen hier als Balken, die neuesten zuerst.",
+  "No engine is running. Start the FLE engine on the Engine page; the cache numbers appear here once it has generated about 500 tokens.":
+    "Keine Engine läuft. Starte die FLE-Engine auf der Engine-Seite; die Cache-Zahlen erscheinen, sobald sie etwa 500 Token erzeugt hat.",
+};
+
+// texts with a number, a size or a path in them
+export const DE_PATTERNS = [
+  [/^Download (\d[\d.,]* [KMGT]?B)$/, "Herunterladen ($1)"],
+  [/^(\d+) runs?$/, (m, n) => `${n} ${n === "1" ? "Lauf" : "Läufe"}`],
+  [/^(\d+) minutes$/, "$1 Minuten"], [/^(\d+) hours$/, "$1 Stunden"],
+  [/^(\d+k) tokens$/, "$1 Token"],
+  [/^Tools · (\d+)$/, "Werkzeuge · $1"],
+  [/^(.+) free right now$/, "$1 gerade frei"],
+  [/^(\d+) cores · (.+)$/, "$1 Kerne · $2"],
+  [/^(.+) free in (.+) ·$/, "$1 frei in $2 ·"],
+  [/^Models in (.+) and files you added\.$/, "Modelle in $1 und von dir hinzugefügte Dateien."],
+  [/^Everything llama-server prints\. Full logs: (.+)$/, "Alles, was llama-server ausgibt. Vollständige Logs: $1"],
+  [/^Changing it moves nothing; models already in the new folder show up in the library\. (.+) free there now\.$/,
+    "Ändern verschiebt nichts; Modelle, die schon im neuen Ordner liegen, erscheinen in der Bibliothek. Dort gerade $1 frei."],
+  [/^(\d+) FLE quants for machines with about 120 GB of RAM; none fits this one\. Show them$/,
+    "$1 FLE-Quants für Rechner mit etwa 120 GB RAM; keiner passt auf diesen. Zeigen"],
+  [/^(\d+) in your library$/, "$1 in deiner Bibliothek"],
+  [/^Message (.+)$/, "Nachricht an $1"],
+  [/^(.+) · about (.+) left$/, "$1 · noch etwa $2"],
+  [/^Downloading (.+)$/, "Lade $1 herunter"],
+  [/^(.+) · tight fit$/, "$1 · knapp"],
+  [/^(.+): no data$/, "$1: keine Daten"],
+  [/^Unified memory · (.+) usable by the GPU$/, "Gemeinsamer Speicher · $1 für die GPU nutzbar"],
+  [/^with MTP head \((.+)\)$/, "mit MTP-Kopf ($1)"],
+  [/^Last checked: (.+)\. FLE Link is up to date\.$/, "Zuletzt geprüft: $1. FLE Link ist aktuell."],
+  [/^Stored in (.+)\. Start settings for the engine live on the Engine page\.$/, "Gespeichert in $1. Die Starteinstellungen der Engine stehen auf der Engine-Seite."],
+];
+
+export const T = DE;
+export const P = DE_PATTERNS;

@@ -3,6 +3,7 @@
 import { del, get, post } from "./api.js";
 import { initChatSearch, searchActive } from "./chat-search.js";
 import { clear, confirmDialog, fmt, h, icon, stateBadge, toast } from "./ui.js";
+import { startI18n } from "./i18n.js";
 
 // ----------------------------------------------------------------------------------------------- store
 
@@ -327,6 +328,7 @@ function renderEngineCard() {
 // ----------------------------------------------------------------------------------------------- start
 
 async function start() {
+  startI18n(); // German texts when the browser or the setting says so (i18n.js)
   document.getElementById("new-chat").append(icon("plus"), h("span", null, "New chat"));
   const card = document.getElementById("engine-card");
   card.addEventListener("click", () => navigate("/engine"));

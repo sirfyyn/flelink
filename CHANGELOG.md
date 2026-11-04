@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **The Studio in eight languages:** English, German, French, Spanish, Chinese (simplified), Japanese, Korean and
+  Russian, from the browser's language or Settings → Appearance → Language. The pages a beginner sees are translated (the
+  first-run view, chat, models, engine, settings, hints; German also most advanced settings); chat messages, code, logs
+  and model descriptions stay as they are, and a text without a translation stays English.
 - **Fewer things that stop a first try:** the macOS app is signed ad hoc (Apple Silicon opens it instead of calling it
   damaged; the installer avoids every warning, flelink.run says what a browser download asks); loading shows the time
   left; the Thinking chip says "No thinking in this model" for models without one; on a small machine the fit rule keeps
