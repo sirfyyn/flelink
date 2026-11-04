@@ -10,7 +10,7 @@
 //!
 //! The profile format (FLE src/llama-moecache.cpp, version 1, text): header lines `FLE-MOE-PROFILE v1`, `model_size N`,
 //! `model_desc …`, `n_layer N`, `steps N`, `layers N`; then per layer `L <il> <n_expert> <slot_bytes>` and a line of
-//! n_expert counts. FLE refuses a profile whose header names another model, so a profile taken on one quant is rewritten
+//! n_expert counts; last `END <fnv1a-64 of everything before END, 16 hex digits>`. FLE refuses a profile whose header names another model, so a profile taken on one quant is rewritten
 //! for the new one (`Profile::for_model`): the counts are per expert and do not depend on the quant.
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -33,6 +33,21 @@ pub struct Profile {
 
 impl Profile {
     pub fn parse(text: &str) -> Result<Profile, String> {
+        // FLE ends the file with a checksum and refuses it when it does not match; a text without END is read as is
+        let text = match text.rfind("END ") {
+            Some(e) if e == 0 || text.as_bytes()[e - 1] == b'\n' => {
+                let want =
+                    u64::from_str_radix(text[e + 4..].trim(), 16).map_err(|_| "bad END line")?;
+                if fnv1a(&text.as_bytes()[..e]) != want {
+                    return Err(
+                        "the profile's checksum does not match (changed by hand or cut off?)"
+                            .into(),
+                    );
+                }
+                &text[..e]
+            }
+            _ => text,
+        };
         let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
         if lines.next() != Some("FLE-MOE-PROFILE v1") {
             return Err("not an FLE usage profile (version 1)".into());
@@ -120,8 +135,19 @@ impl Profile {
                 .join(" ");
             s.push('\n');
         }
+        s += &format!("END {:016x}\n", fnv1a(s.as_bytes()));
         s
     }
+}
+
+/// FLE's profile checksum (llama-moecache.cpp prof_fnv1a).
+fn fnv1a(b: &[u8]) -> u64 {
+    let mut h: u64 = 1469598103934665603;
+    for x in b {
+        h ^= *x as u64;
+        h = h.wrapping_mul(1099511628211);
+    }
+    h
 }
 
 /// The three expert roles; `rows` and `cols` per expert (cols is the row length the type packs).
@@ -559,6 +585,12 @@ mod tests {
         assert_eq!(again.model_desc, "new quant");
         assert_eq!(again.layers[0].slot_bytes, 77);
         assert_eq!(again.layers[1].counts, p.layers[1].counts);
+        let text = p.for_model(2000, "new quant", &BTreeMap::new());
+        assert!(text.lines().last().unwrap().starts_with("END "));
+        assert!(
+            Profile::parse(&text.replace("steps 100", "steps 101")).is_err(),
+            "checksum"
+        );
         assert!(
             Profile::parse("FLE-MOE-PROFILE v1\nL 0 2 1\n1\n").is_err(),
             "too few counts"
