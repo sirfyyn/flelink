@@ -50,3 +50,4 @@ engine log: `FLE Link: …` where the Python Studio writes `FLE Studio: …` (th
 `find_engine` looks at the explicit path, then `FLE_ENGINE`, then the engines FLE Link installed itself, and only then at a
 `llama-server` on the PATH. The Python helper looks at the PATH before its own installs, so a Homebrew llama.cpp would win
 over the engine the program chose and checked.
+

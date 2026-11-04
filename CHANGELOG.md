@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Clearer words:** `flelink bench --task` says "Nothing answers at …" when no server runs, `flelink ask` without a
+  question says so before loading the model (and reads one from a pipe), `flelink recipes` keeps its columns with long
+  ids, and the DeepSeek recipe's title and note name the RAM expert store and the FLE Link number on v1.2.4.
+
 ## 0.1.5 (2026-11-04)
 
 - **DeepSeek recipes read prompts in windows of 8 tokens instead of 16:** with 16, FLE v1.2.4 sends each window down a
