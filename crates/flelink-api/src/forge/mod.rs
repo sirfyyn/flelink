@@ -209,6 +209,94 @@ impl Forge {
         Ok(out)
     }
 
+    /// The usage profiles FLE keeps for recipes (`<models>/profiles/*.prof`), newest first.
+    pub fn usage_profiles(&self, models: &Path) -> Value {
+        let mut out = vec![];
+        if let Ok(rd) = std::fs::read_dir(models.join("profiles")) {
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|x| x.to_str()) != Some("prof") {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&p) else {
+                    continue;
+                };
+                let Ok(prof) = usage::Profile::parse(&text) else {
+                    continue;
+                };
+                let when = e
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_secs());
+                out.push(json!({"path": p.to_string_lossy(), "name": p.file_stem().map(|s| s.to_string_lossy()),
+                    "model": prof.model_desc, "steps": prof.steps, "layers": prof.layers.len(), "modified": when}));
+            }
+        }
+        out.sort_by_key(|v| std::cmp::Reverse(v["modified"].as_u64().unwrap_or(0)));
+        json!({"profiles": out})
+    }
+
+    /// The usage plan (decision 774): from a usage profile, the GPU expert cache and a reference quant, the expert type per
+    /// layer and role that reads the fewest bytes on the CPU at the reference's error. Returns the plan, the rules for the
+    /// recipe and how it compares with the reference.
+    pub fn usage_plan(&self, body: &Value) -> R<Value> {
+        let prof_path = file(&body["profile"])?;
+        let text =
+            std::fs::read_to_string(&prof_path).map_err(|e| ForgeError(400, e.to_string()))?;
+        let prof = usage::Profile::parse(&text)?;
+        let reference =
+            ggufio::open_model(Path::new(&file(&body["reference"])?)).map_err(|e| e.0)?;
+        let (ref_types, weights) = usage::types_of(
+            reference
+                .tensors
+                .values()
+                .map(|t| (t.name.clone(), t.shape.clone(), t.type_name())),
+        );
+        if ref_types.is_empty() || weights == 0 {
+            return bad("The reference has no expert tensors (blk.N.ffn_gate_exps and the like); the usage plan is for MoE models");
+        }
+        let budget = num(&body["budget_mib"]) as u64;
+        if budget == 0 {
+            return bad("Give the GPU expert cache in MiB (the recipe's --moe-expert-cache-mb or FLE_MOE_BUDGET)");
+        }
+        let sens = usage::Sensitivity::default();
+        let target = usage::error_of(&ref_types, &sens);
+        let plan = usage::plan(&usage::Inputs {
+            profile: &prof,
+            expert_weights: weights,
+            budget_mib: budget,
+            sens: sens.clone(),
+            target_error: target,
+        });
+        let ref_bytes = usage::cpu_bytes_of(&prof, weights, budget, &ref_types);
+        let sha = {
+            use sha2::Digest;
+            hex::encode(sha2::Sha256::digest(text.as_bytes()))
+        };
+        let layers: Vec<Value> = plan
+            .layers
+            .iter()
+            .map(|(il, r)| {
+                let t = |role| r.get(&role).copied().unwrap_or("");
+                let was = |role| ref_types.get(il).and_then(|m| m.get(&role)).cloned().unwrap_or_default();
+                json!({"layer": il, "gate": t(usage::Role::Gate), "up": t(usage::Role::Up), "down": t(usage::Role::Down),
+                    "was": {"gate": was(usage::Role::Gate), "up": was(usage::Role::Up), "down": was(usage::Role::Down)},
+                    "cpu_share": plan.cpu_share.get(il).copied().unwrap_or(1.0)})
+            })
+            .collect();
+        Ok(json!({
+            "profile": {"path": prof_path, "model": prof.model_desc, "steps": prof.steps, "sha256": sha},
+            "budget_mib": budget,
+            "layers": layers,
+            "rules": plan.rules(),
+            "error": plan.error, "reference_error": target,
+            "cpu_bytes_per_token": plan.cpu_bytes_per_token, "reference_cpu_bytes_per_token": ref_bytes,
+            "note": usage::model_card_note(&sha, budget, body["hardware"].as_str().unwrap_or("this machine")),
+        }))
+    }
+
     pub fn make_corpus(&self, body: &Value) -> R<Value> {
         let dir = self.data_dir.join("forge").join("corpus");
         let stamp = std::time::SystemTime::now()

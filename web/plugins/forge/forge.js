@@ -22,6 +22,7 @@ const blank = () => ({
   imatrix: { corpus: "", chunks: 200, context: 2048 },
   reap: { enabled: false, keep: 0, score: "reap", table: "" },
   verify: { enabled: true, text: "", chunks: 20, context: 2048, reference_path: "", reference_file: "" },
+  usage: { profile: "", reference: "", budget_mib: 15000 },
 });
 
 function loadDraft() {
@@ -402,6 +403,64 @@ export function mount(main) {
       nav("models", "prune"));
   }
 
+  // "Optimize for my usage" (decision 774): FLE's usage profile and the GPU expert cache decide which layers keep bits.
+  let usageResult = null;
+  let usageProfiles = null;
+  function usageCard() {
+    const u = draft.usage;
+    const box = h("div", { class: "stack" });
+    const mb = (b) => `${fmt.one(b / 1e6)} MB`;
+    const show = () => {
+      const r = usageResult;
+      if (!r) return clear(box);
+      const faster = r.reference_cpu_bytes_per_token > 0 ? r.reference_cpu_bytes_per_token / Math.max(r.cpu_bytes_per_token, 1) : 1;
+      const rows = r.layers.map((l) => h("tr", null, h("td", { class: "mono" }, String(l.layer)),
+        ...["gate", "up", "down"].map((k) => h("td", { class: `mono${l.was[k] && l.was[k] !== l[k] ? " strong" : ""}`, title: l.was[k] ? `reference: ${l.was[k]}` : "" }, l[k])),
+        h("td", null, `${Math.round((1 - l.cpu_share) * 100)} %`)));
+      clear(box,
+        h("div", { class: "grid three" },
+          fact("Read on the CPU per token", mb(r.cpu_bytes_per_token)),
+          fact("The reference reads", mb(r.reference_cpu_bytes_per_token)),
+          fact("Expert traffic", faster >= 1.005 ? `${fmt.two(faster)}× less` : "about the same")),
+        faster < 1.005 ? callout("info", "With this profile and cache the reference is already as fast as an even quant can get; a usage quant would not pay off.") : null,
+        h("div", { class: "table-wrap" }, h("table", { class: "t" },
+          h("thead", null, h("tr", null, h("th", null, "Layer"), h("th", null, "gate"), h("th", null, "up"), h("th", null, "down"), h("th", null, "Served by the GPU cache"))),
+          h("tbody", null, rows))),
+        h("p", { class: "small faint", style: { margin: 0 } }, "Bold types differ from the reference (hover for its type). The error is held at the reference's level: ",
+          `${fmt.two(r.error)} vs ${fmt.two(r.reference_error)} in the plan's units.`),
+        h("div", { class: "row wrap" },
+          h("button", { class: "btn primary", onclick: () => {
+            draft.quantize.rules = r.rules.map((x) => ({ pattern: x.pattern, type: x.type }));
+            saveDraft(); renderPanel(); toast(`${r.rules.length} rules taken into the recipe`, "good");
+          } }, icon("check", "sm"), "Use these types"),
+          h("button", { class: "btn", onclick: () => copyText(r.note) }, icon("copy", "sm"), "Copy the model card note")));
+    };
+    const profileField = () => {
+      const list = usageProfiles?.profiles || [];
+      if (!list.length) return field("Usage profile", textInput(u, "profile", { mono: true, placeholder: "…/profiles/<recipe>.prof" }),
+        "FLE writes one while a recipe with a profile runs (models folder, profiles). Use the model a while first.");
+      if (!u.profile) u.profile = list[0].path;
+      return field("Usage profile", select(u, "profile", list.map((x) => [x.path, `${x.name} · ${fmt.int(x.steps)} tokens`])),
+        "How often each expert was picked while you used the model.");
+    };
+    const fields = h("div", { class: "grid three" });
+    const fill = () => clear(fields, profileField(),
+      field("Reference quant", textInput(u, "reference", { mono: true, placeholder: "first part of the quant you run now" }), "Its error is the bar; its speed the comparison."),
+      field("GPU expert cache (MiB)", numInput(u, "budget_mib", { min: 0, step: 500 }), "The recipe's --moe-expert-cache-mb."));
+    fill();
+    if (!usageProfiles) get("/api/forge/usage/profiles").then((x) => { usageProfiles = x; fill(); }).catch(() => {});
+    show();
+    return h("div", { class: "card stack" },
+      h("div", { class: "card-head" }, icon("bolt"), h("div", { class: "grow" }, h("h3", null, "Optimize for my usage"),
+        h("p", null, "Experts that sit in the GPU cache cost almost nothing per byte; experts read on the CPU cost speed with every byte. So layers the cache serves keep more bits and the others fewer, at the same error as your reference."))),
+      fields,
+      h("div", { class: "row wrap" }, h("button", { class: "btn", onclick: (e) => busy(e.currentTarget, async () => {
+        usageResult = await post("/api/forge/usage", { profile: u.profile.trim(), reference: u.reference.trim(), budget_mib: Number(u.budget_mib) || 0 });
+        show();
+      }) }, icon("bolt", "sm"), "Plan the types")),
+      box);
+  }
+
   function panelQuantize() {
     const q = draft.quantize;
     const types = overview?.types || ["q4_0", "q8_0", "iq4_nl", "iq3_s"];
@@ -413,6 +472,7 @@ export function mount(main) {
       h("div", { class: "grow" }, textInput(rule, "pattern", { mono: true, placeholder: "Part of a tensor name, e.g. ffn_down_exps" })),
       select(rule, "type", types), h("button", { class: "btn ghost icon", "aria-label": "Remove rule", onclick: () => { q.rules.splice(i, 1); renderPanel(); } }, icon("x", "sm"))));
     return h("div", { class: "stack" },
+      usageCard(),
       h("div", { class: "card stack" },
         h("div", { class: "card-head" }, icon("sliders"), h("div", { class: "grow" }, h("h3", null, "Quantization"),
           h("p", null, "The type is used for every weight matrix unless a rule below names it. Vectors such as norms keep their precision."))),

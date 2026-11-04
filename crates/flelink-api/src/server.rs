@@ -1312,6 +1312,10 @@ impl Studio {
             }
             ("POST", "/api/forge/calculate") => self.forge.calculate(&body).map_err(fe),
             ("POST", "/api/forge/corpus") => self.forge.make_corpus(&body).map_err(fe),
+            ("GET", "/api/forge/usage/profiles") => {
+                Ok(self.forge.usage_profiles(&self.models_dir()))
+            }
+            ("POST", "/api/forge/usage") => self.forge.usage_plan(&body).map_err(fe),
             ("POST", "/api/forge/recipe/import") => {
                 let r = if body["recipe"].is_null() || body["recipe"] == false {
                     body.clone()

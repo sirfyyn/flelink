@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Forge: optimize for my usage.** In Forge → Recipe (quantize), a card takes FLE's usage profile of a recipe, the GPU
+  expert cache and the quant you run now, and plans the expert type per layer and role: layers the cache serves keep
+  more bits, layers read on the CPU fewer, at the reference's error. It shows what each plan reads on the CPU per token
+  next to the reference, takes the types into the recipe's rules, and copies the note a model card needs. The plan now
+  compares every candidate by what it really reads (more bits in a hot layer make its slots bigger, so the cache holds
+  fewer experts), so it is never slower than an even quant.
 - **The app picks folders like any app:** "Add folder" on the first run and the models folder in Settings get a
   "Choose…" button that opens the system's folder picker (the app allows its page this one call and nothing else). In a
   browser the text field stays.

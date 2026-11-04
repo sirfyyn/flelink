@@ -316,52 +316,94 @@ pub fn plan(inp: &Inputs) -> Plan {
             })
             .sum()
     };
-    // start with the middle type everywhere; the cache contents depend on the slot sizes, so settle them in a few rounds
-    let mut slot: BTreeMap<u32, f64> = p
-        .layers
-        .iter()
-        .map(|l| (l.il, 3.0 * bytes(w, 2.3125)))
-        .collect();
-    let mut best = choose(inp, &cpu_shares(p, &slot, budget), 0.0);
-    for _ in 0..4 {
-        let share = cpu_shares(p, &slot, budget);
-        // the smallest λ (fastest plan) whose error stays within the target
-        let (mut lo, mut hi) = (0.0f64, 1e30f64);
-        for _ in 0..200 {
-            let mid = if hi > 1e29 {
-                (lo * 10.0).max(1.0)
-            } else {
-                (lo + hi) / 2.0
-            };
-            if err_of(&choose(inp, &share, mid)) <= inp.target_error {
-                hi = mid;
-            } else {
-                lo = mid;
-            }
-            if hi < 1e29 && (hi - lo) <= hi * 1e-6 {
-                break;
-            }
-        }
-        best = choose(inp, &share, hi);
-        slot = best
-            .iter()
-            .map(|(il, r)| (*il, r.values().map(|c| bytes(w, c.bpw)).sum()))
-            .collect();
-    }
-    let share = cpu_shares(p, &slot, budget);
+    type Pick = BTreeMap<u32, BTreeMap<Role, &'static Choice>>;
+    let slots = |c: &Pick| -> BTreeMap<u32, f64> {
+        c.iter()
+            .map(|(il, r)| (*il, r.values().map(|ch| bytes(w, ch.bpw)).sum()))
+            .collect()
+    };
     let k = |l: &LayerUse| -> f64 {
-        let total: u64 = l.counts.iter().sum();
         if p.steps == 0 {
             0.0
         } else {
-            total as f64 / p.steps as f64
+            l.counts.iter().sum::<u64>() as f64 / p.steps as f64
         }
     };
-    let cpu_bytes_per_token = p
-        .layers
+    // what an assignment really reads on the CPU: its own slot sizes decide what the cache holds
+    let real = |c: &Pick| -> (f64, BTreeMap<u32, f64>) {
+        let slot = slots(c);
+        let share = cpu_shares(p, &slot, budget);
+        let b = p
+            .layers
+            .iter()
+            .map(|l| k(l) * share[&l.il] * slot[&l.il])
+            .sum();
+        (b, share)
+    };
+    let uniform = |gu: &'static Choice, down: &'static Choice| -> Pick {
+        p.layers
+            .iter()
+            .map(|l| {
+                (
+                    l.il,
+                    Role::ALL
+                        .iter()
+                        .map(|r| (*r, if *r == Role::Down { down } else { gu }))
+                        .collect(),
+                )
+            })
+            .collect()
+    };
+    // candidates: every even assignment (down the same or one step up), and the λ choice for the cache each candidate
+    // leaves, settled over a few rounds. More bits in a hot layer make its slots bigger, so the cache holds fewer experts;
+    // only the real cost of each candidate says which one is fastest.
+    let mut cands: Vec<Pick> = vec![];
+    for (i, c) in CHOICES.iter().enumerate() {
+        cands.push(uniform(c, c));
+        if let Some(d) = CHOICES.get(i + 1) {
+            cands.push(uniform(c, d));
+        }
+    }
+    let seeds: Vec<Pick> = cands.clone();
+    for seed in seeds {
+        let mut slot = slots(&seed);
+        for _ in 0..6 {
+            let share = cpu_shares(p, &slot, budget);
+            // the smallest λ (fastest for this cache) whose error stays within the target
+            let (mut lo, mut hi) = (0.0f64, 1e30f64);
+            for _ in 0..200 {
+                let mid = if hi > 1e29 {
+                    (lo * 10.0).max(1.0)
+                } else {
+                    (lo + hi) / 2.0
+                };
+                if err_of(&choose(inp, &share, mid)) <= inp.target_error {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+                if hi < 1e29 && (hi - lo) <= hi * 1e-6 {
+                    break;
+                }
+            }
+            let c = choose(inp, &share, hi);
+            slot = slots(&c);
+            cands.push(c);
+        }
+    }
+    let ok: Vec<&Pick> = cands
         .iter()
-        .map(|l| k(l) * share[&l.il] * best[&l.il].values().map(|c| bytes(w, c.bpw)).sum::<f64>())
-        .sum();
+        .filter(|c| err_of(c) <= inp.target_error * (1.0 + 1e-9))
+        .collect();
+    let best: Pick = if ok.is_empty() {
+        uniform(&CHOICES[CHOICES.len() - 1], &CHOICES[CHOICES.len() - 1])
+    } else {
+        (*ok.iter()
+            .min_by(|a, b| real(a).0.partial_cmp(&real(b).0).unwrap())
+            .unwrap())
+        .clone()
+    };
+    let (cpu_bytes_per_token, share) = real(&best);
     let layers: BTreeMap<u32, BTreeMap<Role, &'static str>> = best
         .iter()
         .map(|(il, r)| (*il, r.iter().map(|(role, c)| (*role, c.name)).collect()))
@@ -424,6 +466,72 @@ pub fn model_card_note(profile_sha: &str, budget_mib: u64, hardware: &str) -> St
          experts the profile used often enough to sit on the GPU keep more bits, experts read on the CPU fewer. On other \
          prompts or another cache size it can be slower or less exact than a quant with even bits. Built and measured on: {hardware}."
     )
+}
+
+fn bpw_of(t: &str) -> f64 {
+    CHOICES
+        .iter()
+        .find(|c| c.name == t.to_lowercase())
+        .map_or(2.0, |c| c.bpw)
+}
+
+/// The expert types of a quant per layer and role, and the weights of one expert in one role (from its tensor shapes).
+pub fn types_of(
+    tensors: impl Iterator<Item = (String, Vec<u64>, String)>,
+) -> (BTreeMap<u32, BTreeMap<Role, String>>, u64) {
+    let mut types: BTreeMap<u32, BTreeMap<Role, String>> = BTreeMap::new();
+    let mut weights = 0;
+    for (name, shape, ty) in tensors {
+        let Some(rest) = name.strip_prefix("blk.") else {
+            continue;
+        };
+        let Some((il, tail)) = rest.split_once('.') else {
+            continue;
+        };
+        let Ok(il) = il.parse::<u32>() else { continue };
+        let Some(role) = Role::ALL
+            .into_iter()
+            .find(|r| tail == format!("{}.weight", r.tensor()))
+        else {
+            continue;
+        };
+        if shape.len() == 3 {
+            weights = shape[0] * shape[1];
+        }
+        types.entry(il).or_default().insert(role, ty.to_lowercase());
+    }
+    (types, weights)
+}
+
+/// Expert bytes per token a given assignment reads on the CPU with this profile and cache (for a reference quant).
+pub fn cpu_bytes_of(
+    p: &Profile,
+    expert_weights: u64,
+    budget_mib: u64,
+    types: &BTreeMap<u32, BTreeMap<Role, String>>,
+) -> f64 {
+    let w = expert_weights;
+    let slot: BTreeMap<u32, f64> = p
+        .layers
+        .iter()
+        .map(|l| {
+            let s = types.get(&l.il).map_or(3.0 * bytes(w, 2.0625), |r| {
+                r.values().map(|t| bytes(w, bpw_of(t))).sum()
+            });
+            (l.il, s)
+        })
+        .collect();
+    let share = cpu_shares(p, &slot, (budget_mib << 20) as f64);
+    if p.steps == 0 {
+        return 0.0;
+    }
+    p.layers
+        .iter()
+        .map(|l| {
+            let k = l.counts.iter().sum::<u64>() as f64 / p.steps as f64;
+            k * share[&l.il] * slot[&l.il]
+        })
+        .sum()
 }
 
 #[cfg(test)]
@@ -510,5 +618,32 @@ mod tests {
         assert_eq!(plan.experts[&0][&Role::Up].len(), 4);
         assert_eq!(plan.rules().as_array().unwrap().len(), 6);
         assert!(model_card_note("abc", 15000, "RTX PRO 4500").contains("usage profile"));
+        // the reference's traffic is computed the same way as the plan's
+        let planned: BTreeMap<u32, BTreeMap<Role, String>> = plan
+            .layers
+            .iter()
+            .map(|(il, r)| (*il, r.iter().map(|(k, v)| (*k, v.to_string())).collect()))
+            .collect();
+        let again = cpu_bytes_of(&p, w, inp.budget_mib, &planned);
+        assert!((again - plan.cpu_bytes_per_token).abs() <= plan.cpu_bytes_per_token * 1e-9);
+        assert!(plan.cpu_bytes_per_token <= cpu_bytes_of(&p, w, inp.budget_mib, &even) * 1.000001);
+        let (t, wt) = types_of(
+            [
+                (
+                    "blk.3.ffn_down_exps.weight".to_string(),
+                    vec![2304, 5120, 256],
+                    "IQ2_XS".to_string(),
+                ),
+                (
+                    "blk.3.attn_q.weight".to_string(),
+                    vec![5120, 4096],
+                    "Q8_0".to_string(),
+                ),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(t[&3][&Role::Down], "iq2_xs");
+        assert_eq!(t[&3].len(), 1);
+        assert_eq!(wt, 2304 * 5120);
     }
 }
