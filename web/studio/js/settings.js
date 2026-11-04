@@ -133,9 +133,13 @@ export function mount(main) {
 
   function models(s) {
     const dir = h("input", { class: "input mono", value: s.models_dir });
-    return section("folder", "Models folder", "Where downloads go and where FLE Link looks for GGUF files.",
+    const el = section("folder", "Models folder", "Where downloads go and where FLE Link looks for GGUF files. A drive with more room is fine.",
       h("div", { class: "row" }, dir, h("button", { class: "btn", onclick: async () => { if (await save({ models_dir: dir.value.trim() })) refreshState(); } }, "Save")),
       h("span", { class: "small faint" }, `Changing it moves nothing; models already in the new folder show up in the library. ${fmt.bytes(store.state.system?.disk_free)} free there now.`));
+    el.id = "folder";
+    // "use another folder" from the first-run view lands here
+    if (location.hash === "#folder") setTimeout(() => { el.scrollIntoView({ block: "start" }); dir.focus(); }, 60);
+    return el;
   }
 
   function chat(s) {

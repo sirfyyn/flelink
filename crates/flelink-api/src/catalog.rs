@@ -136,9 +136,14 @@ mod fit_tests {
             return;
         }
         let mac = json!({"memory": {"total": 8 * GIB_I}, "gpus": [{"unified": true, "metal_limit": 5_755_256_176i64}]});
-        assert_ne!(fit(1_320_000_000, &mac)["verdict"], "too_big", "Llama 3.2 1B Q8");
+        assert_ne!(
+            fit(1_320_000_000, &mac)["verdict"],
+            "too_big",
+            "Llama 3.2 1B Q8"
+        );
         assert_eq!(fit(6 * GIB_I, &mac)["verdict"], "too_big");
-        let titan = json!({"memory": {"total": 121 * GIB_I}, "gpus": [{"memory_total": 32 * GIB_I}]});
+        let titan =
+            json!({"memory": {"total": 121 * GIB_I}, "gpus": [{"memory_total": 32 * GIB_I}]});
         assert_eq!(fit(89 * GIB_I, &titan)["verdict"], "good");
     }
 }

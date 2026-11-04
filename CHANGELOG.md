@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Fewer things that stop a first try:** the macOS app is signed ad hoc (Apple Silicon opens it instead of calling it
+  damaged; the installer avoids every warning, flelink.run says what a browser download asks); loading shows the time
+  left; the Thinking chip says "No thinking in this model" for models without one; on a small machine the fit rule keeps
+  a quarter of the RAM for the system (8 GiB before), so a 1 GB model no longer shows "too big" on an 8 GB Mac
+  (DEVIATIONS.md D13); the big FLE quants fold away where none fits; the first-run view shows the free space and the way
+  to another folder; a CUDA driver error names the driver needed; an engine the system killed for lack of memory says so.
 - **A first-run view with three ways to a model:** download one that fits this computer (the smallest fitting recipes,
   one click), use one already on it (FLE Link lists what it finds in the models folder, the Hugging Face cache, LM Studio
   and Ollama, each with a Use button), or connect to a server that already runs. "Add folder" names a folder of GGUF

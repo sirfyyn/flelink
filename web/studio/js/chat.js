@@ -441,6 +441,9 @@ export function mount(main, chatId) {
     return h("div", { class: "start-choices" },
       card("download", "Download a model that fits", "Picked for this computer's memory; every file is checked before use.",
         recBox,
+        // where downloads go and how much room is left there, with the way to put them on another drive
+        h("div", { class: "small faint" }, `${fmt.bytes(st.system?.disk_free)} free in ${st.settings?.models_dir || "the models folder"} · `,
+          h("a", { href: "/settings#folder", "data-link": true }, "use another folder")),
         h("a", { class: "btn", href: "/models", "data-link": true }, "All models")),
       card("models", "Use models you already have", "FLE Link looks in the models folder, the Hugging Face cache, LM Studio and Ollama.",
         foundBox,

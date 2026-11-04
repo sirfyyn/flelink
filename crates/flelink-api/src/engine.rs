@@ -654,6 +654,11 @@ impl Engine {
                             format!(": {last}")
                         };
                 }
+                // killed by a signal 9 with no error line of its own: on Linux that is almost always the kernel's
+                // out-of-memory killer (system RAM, not the GPU), which says nothing in the engine's log
+                if rc == -9 && s.hint.is_empty() {
+                    s.hint = "The system ran out of memory and stopped the engine. Choose a smaller model or a smaller context, or close other large programs.".into();
+                }
                 if s.ready_at == 0.0 {
                     if let Some((_, p)) = s.plan.as_ref().filter(|(_, p)| p.fallback.is_empty()) {
                         failed_load = Some(p.clone());

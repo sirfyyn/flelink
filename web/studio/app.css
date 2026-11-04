@@ -833,3 +833,4 @@ table.t tr.bad td { color: var(--bad); }
 .start-choices { display: grid; gap: 12px; width: 100%; max-width: 640px; text-align: left; }
 .start-choice .card-head p { font-size: 13px; }
 .start-choice .input { min-width: 0; flex: 1; }
+
