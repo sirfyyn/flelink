@@ -410,7 +410,10 @@ mod tests {
         );
         let r = Recipe::parse(&text, "t").unwrap();
         std::env::set_var("FLE_MODEL_DIRS", &other);
-        assert!(needs_reading(&r, &home, &models), "an unchecked copy with the checksum to read");
+        assert!(
+            needs_reading(&r, &home, &models),
+            "an unchecked copy with the checksum to read"
+        );
         let mut said = vec![];
         let got = adopt(&r, &home, &models, &mut |e| {
             if let Event::Step(s) = e {
@@ -431,7 +434,10 @@ mod tests {
         assert!(!c.map.is_empty());
         std::fs::remove_file(&first).unwrap();
         std::env::set_var("FLE_MODEL_DIRS", &other);
-        assert!(!needs_reading(&r, &home, &models), "a copy checked before needs no reading");
+        assert!(
+            !needs_reading(&r, &home, &models),
+            "a copy checked before needs no reading"
+        );
         std::env::remove_var("FLE_MODEL_DIRS");
         let _ = std::fs::remove_dir_all(&tmp);
     }
