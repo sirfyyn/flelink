@@ -2429,6 +2429,14 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
         ("GET", "/api/ping") => Ok(json!({"app": "fle-studio", "version": st.opts.version})),
         ("GET", "/api/system") => Ok(crate::system::info(&st.config.lock().unwrap().models_dir())),
         ("GET", "/api/chat/capabilities") => Ok(st.capabilities()),
+        // whether the loaded model has a thinking phase at all: its chat template mentions one (Qwen, DeepSeek, GLM …);
+        // the page then shows the Thinking chip, and for a model without one says so instead of "Thinking on"
+        ("GET", "/api/chat/thinking") => {
+            let t = st.engine.props()["chat_template"].as_str().unwrap_or("").to_string();
+            let known = !t.is_empty();
+            let yes = ["enable_thinking", "<think>", "reasoning_content", "thinking"].iter().any(|k| t.contains(k));
+            Ok(json!({"known": known, "thinking": yes}))
+        }
         ("GET", "/api/tools") => Ok(st.toolbox.status(&st.tool_settings())),
         ("POST", "/api/tools/reload") => Ok(st.toolbox.reload(&st.tool_settings())),
         ("POST", "/api/tools/call") => r.json(MAX_JSON).and_then(|body| st.tools_call(&body)),

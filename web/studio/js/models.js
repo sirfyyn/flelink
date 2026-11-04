@@ -140,7 +140,17 @@ export function mount(main) {
     const cat = store.state?.catalog;
     if (!cat) return;
     const jobs = new Map(store.downloads.map((d) => [d.dedupe, d]));
-    patch(catGrid, cat.map((m) => modelCard(m, jobs.get(`catalog:${m.id}`))));
+    // on a machine none of them fits (they need about 120 GB of RAM), the big FLE quants fold away under one line
+    // instead of filling the page with download buttons that cannot help
+    const none = cat.length && cat.every((m) => m.fit?.verdict === "too_big");
+    const cards = cat.map((m) => modelCard(m, jobs.get(`catalog:${m.id}`)));
+    if (none) {
+      patch(catGrid, h("details", { class: "fold" },
+        h("summary", { class: "small muted" }, `${cat.length} FLE quants for machines with about 120 GB of RAM; none fits this one. Show them`),
+        h("div", { class: "cat-grid" }, cards)));
+    } else {
+      patch(catGrid, cards);
+    }
   }
 
   function modelCard(m, job) {

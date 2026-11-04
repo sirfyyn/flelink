@@ -33,6 +33,7 @@ print(json.dumps(out))
 
 #[test]
 fn catalog_downloads_and_fit_match_the_python_studio() {
+    std::env::set_var("FLE_FIT_PYTHON_RULE", "1"); // DEVIATIONS.md D13
     let Some(src) = studio_src() else {
         eprintln!("FLE Studio sources not found: skipped");
         return;

@@ -48,21 +48,33 @@ pub fn mtp_vocab() -> &'static Value {
 }
 
 /// Will a model of `size` bytes run on this machine? A verdict and the numbers behind it.
+/// What the OS keeps: 8 GiB, on a small machine at most a quarter of the RAM (DEVIATIONS.md D13: with a flat 8 GiB an
+/// 8 GB Mac could fit nothing that misses the Metal limit; `flelink models` said a 1 GB model fits). The comparison tests
+/// with the Python Studio set `FLE_FIT_PYTHON_RULE` and get its rule.
+fn os_reserve(ram: i64) -> i64 {
+    if std::env::var_os("FLE_FIT_PYTHON_RULE").is_some() {
+        OS_RESERVE
+    } else {
+        OS_RESERVE.min(ram / 4)
+    }
+}
+
 pub fn fit(size: i64, sys: &Value) -> Value {
     let need = size + RUNTIME;
     let ram = sys["memory"]["total"].as_i64().unwrap_or(0);
+    let reserve = os_reserve(ram);
     let gpus = sys["gpus"].as_array().cloned().unwrap_or_default();
     if let Some(apple) = gpus.iter().find(|g| g["unified"].as_bool() == Some(true)) {
         let limit = apple["metal_limit"].as_i64().unwrap_or(0);
         let verdict = if need as f64 <= limit as f64 * 0.95 {
             "good"
-        } else if need <= ram - OS_RESERVE {
+        } else if need <= ram - reserve {
             "tight"
         } else {
             "too_big"
         };
         let advice = if verdict == "tight" {
-            format!("Above macOS's default GPU memory limit ({:.0} GB). Raising it with `sudo sysctl iogpu.wired_limit_mb={}` lets the whole model run on the GPU (resets at reboot).", limit as f64 / GIB, (ram - OS_RESERVE) / (1 << 20))
+            format!("Above macOS's default GPU memory limit ({:.0} GB). Raising it with `sudo sysctl iogpu.wired_limit_mb={}` lets the whole model run on the GPU (resets at reboot).", limit as f64 / GIB, (ram - reserve) / (1 << 20))
         } else {
             String::new()
         };
@@ -73,7 +85,7 @@ pub fn fit(size: i64, sys: &Value) -> Value {
         .filter_map(|g| g["memory_total"].as_i64())
         .max()
         .unwrap_or(0);
-    let usable = (ram - OS_RESERVE).max(0) + (vram - 2 * GIB_I).max(0);
+    let usable = (ram - reserve).max(0) + (vram - 2 * GIB_I).max(0);
     let verdict = if need as f64 <= usable as f64 * 0.9 {
         "good"
     } else if need <= usable {
@@ -112,4 +124,26 @@ pub fn mtp_status(supported: bool, head: bool, vocab: bool) -> Value {
     }
     let ready = head && vocab;
     json!({"state": if ready { "ready" } else { "missing" }, "label": if ready { "MTP ready" } else { "MTP files missing" }, "head": head, "vocab": vocab})
+}
+
+#[cfg(test)]
+mod fit_tests {
+    use super::*;
+
+    #[test]
+    fn a_small_model_is_not_too_big_for_an_8_gb_mac() {
+        if std::env::var_os("FLE_FIT_PYTHON_RULE").is_some() {
+            return;
+        }
+        let mac = json!({"memory": {"total": 8 * GIB_I}, "gpus": [{"unified": true, "metal_limit": 5_755_256_176i64}]});
+        assert_ne!(
+            fit(1_320_000_000, &mac)["verdict"],
+            "too_big",
+            "Llama 3.2 1B Q8"
+        );
+        assert_eq!(fit(6 * GIB_I, &mac)["verdict"], "too_big");
+        let titan =
+            json!({"memory": {"total": 121 * GIB_I}, "gpus": [{"memory_total": 32 * GIB_I}]});
+        assert_eq!(fit(89 * GIB_I, &titan)["verdict"], "good");
+    }
 }

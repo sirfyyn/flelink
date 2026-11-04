@@ -28,7 +28,8 @@
     "macOS": {
       "files": {
         "Resources/Assets.car": "icons/Assets.car"
-      }
+      },
+      "signingIdentity": "-"
     }
   }
 }

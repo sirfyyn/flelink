@@ -61,7 +61,7 @@ pub const LLAMA_HINTS: [(&str, &str); 6] = [
     ),
     (
         r"(?i)CUDA driver version is insufficient|no CUDA-capable device|cudaGetDeviceCount",
-        "CUDA could not start. Update the NVIDIA driver, or use the Vulkan or CPU engine.",
+        "CUDA could not start. Update the NVIDIA driver (the CUDA 12.8 engines need driver 570 or newer; `nvidia-smi` shows yours), or use the Vulkan or CPU engine.",
     ),
     (
         r"(?i)failed to load model|error loading model|unable to load model",

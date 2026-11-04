@@ -159,6 +159,7 @@ export function mount(main, chatId) {
   async function fetchCaps() {
     try {
       caps = await get("/api/chat/capabilities");
+      try { const th = await get("/api/chat/thinking"); caps.thinking = th.known ? th.thinking : null; } catch { caps.thinking = null; }
       renderComposer();
     } catch { /* the next engine change asks again */ }
   }
@@ -317,6 +318,13 @@ export function mount(main, chatId) {
     replaceMessages(inner, v.path.map((m, i) => msgEl(m, i, v)));
   }
 
+  // "about 40 s left" once enough of the model is read to tell (the rate so far, at least 5 % and 3 s in)
+  function loadLeft(l) {
+    if (!l?.total || !l.read || !l.elapsed || l.read / l.total < 0.05 || l.elapsed < 3) return "";
+    const left = (l.total - l.read) / (l.read / l.elapsed);
+    return left > 1 ? ` · about ${fmt.dur(left)} left` : "";
+  }
+
   function welcome() {
     const e = store.engine || {};
     const st = store.state || {};
@@ -340,7 +348,7 @@ export function mount(main, chatId) {
           h("div", { class: `bar${p ? "" : " indet"}` }, h("i", { style: { width: `${(p * 100).toFixed(1)}%` } })),
           h("div", { class: "row between small muted num" },
             h("span", null, e.load?.total ? `${fmt.bytes(e.load.read)} of ${fmt.bytes(e.load.total)} read` : "Preparing"),
-            h("span", null, e.load?.elapsed ? fmt.dur(e.load.elapsed) : "")),
+            h("span", null, e.load?.elapsed ? fmt.dur(e.load.elapsed) + loadLeft(e.load) : "")),
           e.hint ? h("div", { class: "callout info" }, icon("info"), h("div", null, e.hint)) : null)));
       return box;
     }
@@ -433,6 +441,9 @@ export function mount(main, chatId) {
     return h("div", { class: "start-choices" },
       card("download", "Download a model that fits", "Picked for this computer's memory; every file is checked before use.",
         recBox,
+        // where downloads go and how much room is left there, with the way to put them on another drive
+        h("div", { class: "small faint" }, `${fmt.bytes(st.system?.disk_free)} free in ${st.settings?.models_dir || "the models folder"} · `,
+          h("a", { href: "/settings#folder", "data-link": true }, "use another folder")),
         h("a", { class: "btn", href: "/models", "data-link": true }, "All models")),
       card("models", "Use models you already have", "FLE Link looks in the models folder, the Hugging Face cache, LM Studio and Ollama.",
         foundBox,
@@ -645,8 +656,11 @@ export function mount(main, chatId) {
     clear(sendBtn, icon(busy ? "stop" : "send"));
     sendBtn.title = busy ? "Stop (Esc)" : "Send (Enter)";
     ta.placeholder = up ? `Message ${engineModelName() || "the model"}` : "Load a model to start chatting";
-    thinkChip.classList.toggle("on", c.thinking !== false);
-    clear(thinkChip, icon("brain", "sm"), c.thinking !== false ? "Thinking on" : "Thinking off");
+    // a model without a thinking phase: the chip says so and is not a switch (Thinking on would mean nothing there)
+    const noThink = caps.thinking === false;
+    thinkChip.disabled = noThink;
+    thinkChip.classList.toggle("on", !noThink && c.thinking !== false);
+    clear(thinkChip, icon("brain", "sm"), noThink ? "No thinking in this model" : c.thinking !== false ? "Thinking on" : "Thinking off");
     clear(sampChip, icon("sliders", "sm"), c.sampling === "custom" ? `T ${c.temperature} · top-p ${c.top_p}` : "Model defaults");
     const count = toolInfo.tools.length;
     toolsChip.classList.toggle("on", toolsActive());
