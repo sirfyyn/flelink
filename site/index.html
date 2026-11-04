@@ -122,7 +122,8 @@
           <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 22 GB expert cache on the card, 90 GB expert store in RAM, prefill windows, exact (no cache bias); a 3100-token three.js answer at 31.6 tok/s, its prompt in 2.5 s, FLE engine v1.2.4 (3 Nov 2026). FLE's own release: 33.3 tok/s on such answers (n=6)</li>
           <li><b>One command</b> <code>flelink run deepseek-v41-ista</code> installs the FLE engine, profiles the experts on the first run and uses copies of the model already on your disk</li>
           <li><b>With the DSpark draft model</b> <code>deepseek-v41-ista-dspark</code>: 41.9 tok/s, lossless at temperature 0 (one run, FLE release)</li>
-          <li><b>Today</b> it also runs through FLE Link on llama.cpp b11870 or newer</li>
+          <li><b>Faster, less exact</b> <code>deepseek-v41-ista-iq1m</code>: the IQ1_M quant at 42.3 tok/s (n=6, before the prefill windows), KL divergence about 0.13 against IQ2_XXS</li>
+          <li><b>Same as by hand</b> through FLE Link the engine runs the recipe's own command: started by hand or through FLE Link, the same answer token for token (4 Nov 2026)</li>
         </ul>
       </article>
     </div>
@@ -238,6 +239,7 @@ claude</pre>
     <h2>Measure it, tune it, build your own</h2>
     <ul class="faults">
       <li><b>Speed test</b> The same requests every time, compared with your last run of the same setting.</li>
+      <li><b>Practical test</b> <code>flelink bench --task pagoda</code>: a real three.js answer of up to 8000 tokens at temperature 0, through any <code>/v1</code>, with a check that it is complete and the machine in the result file, so two people can compare.</li>
       <li><b>Best for my machine</b> A tuner that keeps a change only when it is faster with a 95 % interval that excludes zero.</li>
       <li><b>A/B/A</b> Two settings compared with a drift check, so a machine that warms up does not decide.</li>
       <li><b>Quality next to speed</b> KL divergence against the reference and a knowledge probe, right after a speed test.</li>
@@ -302,7 +304,7 @@ Agent → Set up → Start
 <pre class="out"><span class="p">$</span> flelink studio --host 0.0.0.0
 FLE Link is open to the network. Access key:
   4-yB…Tc
-FLE Link 0.1.0 — https://127.0.0.1:8642/
+FLE Link 0.1.4 — https://127.0.0.1:8642/
 Other machines: https://192.168.1.20:8642/
 Certificate fingerprint (SHA-256): 9f3c…</pre>
   </div>
