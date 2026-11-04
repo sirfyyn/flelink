@@ -245,3 +245,14 @@ async function start(call, panel, status) {
     toast("App hidden. Open the tool card to see its result as text.", "info", 3000);
   });
 }
+
+// The desktop app's own folder picker (app/capabilities: only the open dialog, only for the app's loopback server). In a
+// browser there is none, and the page shows its text field alone.
+export const canPickFolder = () => typeof window.__TAURI_INTERNALS__?.invoke === "function";
+export async function pickFolder(title = "Choose a folder") {
+  if (!canPickFolder()) return null;
+  try {
+    const p = await window.__TAURI_INTERNALS__.invoke("plugin:dialog|open", { options: { directory: true, multiple: false, title } });
+    return typeof p === "string" ? p : null;
+  } catch { return null; }
+}

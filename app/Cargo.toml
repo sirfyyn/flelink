@@ -14,6 +14,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# the system's own folder picker for "Add folder" (only the open dialog is allowed, see capabilities/default.json)
+tauri-plugin-dialog = "2"
 flelink-api = { path = "../crates/flelink-api" }
 
 [profile.release]

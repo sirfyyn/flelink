@@ -1,1 +1,8 @@
-{ "$schema": "../gen/schemas/desktop-schema.json", "identifier": "default", "description": "The window talks to its own local server over HTTP; it needs no Tauri commands.", "windows": ["main"], "permissions": [] }
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The window shows its own local server over HTTP. Its one Tauri call is the system's folder picker (Add folder); nothing else is allowed, and only for the app's loopback server.",
+  "windows": ["main"],
+  "remote": { "urls": ["http://127.0.0.1:*"] },
+  "permissions": ["dialog:allow-open"]
+}

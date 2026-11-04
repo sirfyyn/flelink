@@ -1,6 +1,7 @@
 // Spanish for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Choose…": "Elegir…",
   "Chat": "Chat",
   "Models": "Modelos",
   "Engine": "Motor",

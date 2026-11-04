@@ -7,7 +7,7 @@ import { attachmentsEl, createAttach } from "./attach.js";
 import { attachmentBlock, buildRequest, estimateRequest, estimateTokens, usedImages } from "./chat-request.js";
 import { addChild, ensureTree, indexOf, newId, pathOf, removeBranch, siblingsOf, switchTo } from "./chat-tree.js";
 import { createStreamRenderer, renderMarkdown } from "./md.js";
-import { host as appHost, replaceMessages, swapNode } from "./app-bridge.js";
+import { host as appHost, canPickFolder, pickFolder, replaceMessages, swapNode } from "./app-bridge.js";
 import { showAppNow, toolCardEl, waitForApproval } from "./tools-ui.js";
 import { clear, confirmDialog, copyText, debounce, fmt, h, icon, mark, meter, openMenu, ring, sparkline, stateBadge, toast, countTo } from "./ui.js";
 
@@ -447,7 +447,11 @@ export function mount(main, chatId) {
         h("a", { class: "btn", href: "/models", "data-link": true }, "All models")),
       card("models", "Use models you already have", "FLE Link looks in the models folder, the Hugging Face cache, LM Studio and Ollama.",
         foundBox,
-        h("div", { class: "row", style: { gap: "6px" } }, folder, h("button", { class: "btn", onclick: addFolder }, icon("plus", "sm"), "Add folder"))),
+        h("div", { class: "row", style: { gap: "6px" } },
+          // in the app: the system's folder picker fills the field and adds it right away
+          canPickFolder() ? h("button", { class: "btn", onclick: async () => { const p = await pickFolder("A folder with GGUF files"); if (p) { folder.value = p; addFolder(); } } },
+            icon("folder", "sm"), "Choose…") : null,
+          folder, h("button", { class: "btn", onclick: addFolder }, icon("plus", "sm"), "Add folder"))),
       card("link", "Use a server that already runs", "Any llama.cpp or FLE server on this computer or the network.",
         h("a", { class: "btn", href: "/engine?connect", "data-link": true }, "Connect to it")));
   }

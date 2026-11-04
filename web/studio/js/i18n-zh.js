@@ -1,6 +1,7 @@
 // Chinese (simplified) for the Studio (i18n.js): the texts a first look meets. Keys are the English texts as the page shows them;
 // a missing one stays English. Improvements are welcome (github.com/sirfyyn/flelink/discussions).
 export const T = {
+  "Choose…": "选择…",
   "Chat": "对话",
   "Models": "模型",
   "Engine": "引擎",

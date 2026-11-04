@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **The app picks folders like any app:** "Add folder" on the first run and the models folder in Settings get a
+  "Choose…" button that opens the system's folder picker (the app allows its page this one call and nothing else). In a
+  browser the text field stays.
 - **The Studio in eight languages:** English, German, French, Spanish, Chinese (simplified), Japanese, Korean and
   Russian, from the browser's language or Settings → Appearance → Language. The pages a beginner sees are translated (the
   first-run view, chat, models, engine, settings, hints; German also most advanced settings); chat messages, code, logs
