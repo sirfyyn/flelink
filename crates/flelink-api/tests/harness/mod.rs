@@ -198,6 +198,8 @@ pub fn start_rust_full(
     github_api: &str,
     with_web_dir: bool,
 ) -> SocketAddr {
+    // the Python Studio's fit rule (DEVIATIONS.md D13), so catalog and state compare word for word
+    std::env::set_var("FLE_FIT_PYTHON_RULE", "1");
     let st = new_studio(Options {
         home: home.to_path_buf(),
         web_dir: with_web_dir.then(|| src.join("fle_studio/web")),
