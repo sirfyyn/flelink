@@ -1330,6 +1330,55 @@ impl Studio {
                     .map(|r| json!({"recipe": r}))
                     .map_err(|e| ApiError(400, e.0))
             }
+            // a post for the Community quants discussions: the portable recipe (file names, no folders), the machine and
+            // the check results the page has; the person opens the link and posts it themself
+            ("POST", "/api/forge/recipe/github") => {
+                let r = if body["recipe"].is_object() {
+                    body["recipe"].clone()
+                } else {
+                    json!({})
+                };
+                let r = match crate::forge::recipe::portable(&r) {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(ApiError(400, e.0))),
+                };
+                let sys = self.sysinfo();
+                let gpus: Vec<String> = sys["gpus"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|g| g["name"].as_str().unwrap_or("?").to_string())
+                    .collect();
+                let mut text = format!(
+                    "**{}** built with the FLE Link Forge ({}).\n\n**Machine** {}, {:.0} GiB RAM, {}\n\n",
+                    r["name"].as_str().unwrap_or("my-quant"),
+                    r["mode"].as_str().unwrap_or(""),
+                    sys["cpu"]["name"].as_str().or(sys["cpu"].as_str()).unwrap_or("?"),
+                    sys["memory"]["total"].as_f64().unwrap_or(0.0) / f64::from(1u32 << 30),
+                    if gpus.is_empty() { "no GPU".into() } else { gpus.join(", ") }
+                );
+                if let Some(note) = r["notes"].as_str().filter(|n| !n.is_empty()) {
+                    text += &format!("{note}\n\n");
+                }
+                if let Some(res) = body.get("results").filter(|v| !v.is_null()) {
+                    text += &format!(
+                        "**Check**\n```json\n{}\n```\n\n",
+                        serde_json::to_string_pretty(res).unwrap_or_default()
+                    );
+                }
+                text += &format!(
+                    "**Recipe** (load it in the Forge and point each source at your own copy)\n```json\n{}\n```\n",
+                    crate::forge::recipe::dumps(&r).trim_end()
+                );
+                let title = format!(
+                    "{} ({})",
+                    r["name"].as_str().unwrap_or("my-quant"),
+                    r["mode"].as_str().unwrap_or("quant")
+                );
+                let sh =
+                    flelink_core::share::discussion(flelink_core::share::QUANTS, &title, &text);
+                Ok(json!({"url": sh.url, "paste": sh.paste}))
+            }
             ("POST", "/api/forge/check") => {
                 let r = if body["recipe"].is_object() {
                     body["recipe"].clone()

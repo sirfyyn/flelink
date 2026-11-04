@@ -581,6 +581,14 @@ export function mount(main) {
         h("div", { class: "card-head" }, icon("link"), h("div", { class: "grow" }, h("h3", null, "Recipe"),
           h("p", null, "A recipe is a small JSON file: sources by file name (no folders), the layer choice, the pruning and the check. Share it and others can build the same model from their own copies."))),
         h("div", { class: "row wrap" },
+          h("button", { class: "btn", id: "fg-github", title: "Opens a GitHub discussion with the recipe filled in; you read it and post it yourself", onclick: (e) => busy(e.currentTarget, async () => {
+            const sh = await post("/api/forge/recipe/github", { recipe: toRecipe(), results: job?.result?.verify || null });
+            if (sh.paste) {
+              try { await navigator.clipboard.writeText(sh.paste); toast("Too long for a link: the post is on the clipboard, paste it into the form", "", 8000); }
+              catch { toast("Too long for a link and the clipboard is blocked: save the recipe and attach it", "bad", 8000); }
+            }
+            window.open(sh.url, "_blank", "noopener");
+          }) }, icon("link", "sm"), "Share on GitHub"),
           h("button", { class: "btn", id: "fg-save", onclick: (e) => busy(e.currentTarget, async () => download(`${r.name}.recipe.json`, JSON.stringify(await share(), null, 2) + "\n")) },
             icon("download", "sm"), "Save recipe"),
           h("button", { class: "btn", onclick: (e) => busy(e.currentTarget, async () => { await copyText(JSON.stringify(await share(), null, 2)); toast("Recipe copied", "good"); }) },
