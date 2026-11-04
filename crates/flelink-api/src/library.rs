@@ -314,7 +314,13 @@ impl Library {
         if !p.is_file() {
             return Err(format!("No file at {}", p.display()));
         }
-        if p.extension().map(|e| e.to_string_lossy().to_lowercase()) != Some("gguf".into()) {
+        // Ollama keeps GGUF weights without the extension (blobs/sha256-…): the file's own header decides
+        let ollama_blob = p
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with("sha256-"));
+        if !ollama_blob
+            && p.extension().map(|e| e.to_string_lossy().to_lowercase()) != Some("gguf".into())
+        {
             return Err("That is not a .gguf file".into());
         }
         let fname = p.file_name().unwrap().to_string_lossy().to_string();

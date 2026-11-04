@@ -23,6 +23,12 @@ pub fn search_roots(models: &Path) -> Vec<PathBuf> {
     if let Some(v) = std::env::var_os("FLE_MODEL_DIRS") {
         out.extend(std::env::split_paths(&v).filter(|p| !p.as_os_str().is_empty()));
     }
+    // folders added in the Studio's first-run view (flelink-api found.rs keeps them in <data>/model-dirs.json)
+    if let Ok(t) = std::fs::read_to_string(crate::data_dir().join("model-dirs.json")) {
+        if let Ok(list) = serde_json::from_str::<Vec<String>>(&t) {
+            out.extend(list.into_iter().map(PathBuf::from));
+        }
+    }
     let home = dirs::home_dir().unwrap_or_default();
     let hf = std::env::var_os("HF_HUB_CACHE")
         .map(PathBuf::from)
