@@ -116,6 +116,11 @@ impl Checked {
         })
     }
 
+    /// This very file was read before and has not changed since.
+    fn has(&self, p: &Path) -> bool {
+        Self::key(p).is_some_and(|k| self.map.contains_key(&k))
+    }
+
     fn remember(&mut self, p: &Path, sha: &str) {
         if let Some(key) = Self::key(p) {
             self.map.insert(key, json!(sha));
@@ -233,6 +238,71 @@ fn link(from: &Path, to: &Path) -> std::io::Result<()> {
     }
 }
 
+/// The names a recipe file may have on this machine: its name in the repo, its local name, and the names other built-in
+/// recipes give a file with the same SHA-256 (a part two quants share).
+fn names_for(x: &Fetch) -> Vec<String> {
+    let repo_name = Path::new(&x.file)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let local_name = x
+        .local
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let mut names = vec![repo_name];
+    if !names.contains(&local_name) {
+        names.push(local_name);
+    }
+    // the same file (same SHA-256) that another recipe keeps under its own name, e.g. a part two quants share
+    if let Some(sha) = &x.sha256 {
+        for other in crate::recipe::builtin().iter().flat_map(|r| r.fetches()) {
+            if other.sha256.as_deref() == Some(sha.as_str()) {
+                let n = other
+                    .local
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
+                if !names.contains(&n) {
+                    names.push(n);
+                }
+            }
+        }
+    }
+    names
+}
+
+/// Whether adopting the recipe's missing files would read whole files for their checksum first (a copy on this machine
+/// that FLE Link has not checked before): then a caller that must answer quickly does it in the background. 120 GB take
+/// over a minute (IQ1_M on Titan, 4 Nov 2026).
+pub fn needs_reading(r: &Recipe, home: &Path, models: &Path) -> bool {
+    let missing: Vec<Fetch> = r
+        .fetches()
+        .into_iter()
+        .filter(|x| !models.join(&x.local).exists())
+        .collect();
+    if missing.is_empty() {
+        return false;
+    }
+    let idx = index(&search_roots(models));
+    let checked = Checked::open(home);
+    missing.iter().any(|x| {
+        let Some(sha) = &x.sha256 else { return false };
+        if ollama_blob(sha).is_some() || checked.known(sha).is_some() {
+            return false;
+        }
+        names_for(x).iter().any(|n| {
+            idx.get(n).into_iter().flatten().any(|p| {
+                let size = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+                (x.size == 0 || size == x.size) && !checked.has(p)
+            })
+        })
+    })
+}
+
 /// Link every file of the recipe that is missing in `models` but already elsewhere on this machine; what was linked.
 pub fn adopt(
     r: &Recipe,
@@ -263,37 +333,7 @@ pub fn adopt_fetches(
     let mut out = vec![];
     for x in missing {
         let dest = models.join(&x.local);
-        let repo_name = Path::new(&x.file)
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        let local_name = x
-            .local
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        let mut names = vec![repo_name];
-        if !names.contains(&local_name) {
-            names.push(local_name);
-        }
-        // the same file (same SHA-256) that another recipe keeps under its own name, e.g. a part two quants share
-        if let Some(sha) = &x.sha256 {
-            for other in crate::recipe::builtin().iter().flat_map(|r| r.fetches()) {
-                if other.sha256.as_deref() == Some(sha.as_str()) {
-                    let n = other
-                        .local
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    if !names.contains(&n) {
-                        names.push(n);
-                    }
-                }
-            }
-        }
+        let names = names_for(&x);
         if let Some(found) = find(&x, &names, &idx, &dest, &mut checked, say) {
             match link(&found, &dest) {
                 Ok(()) => {
@@ -370,6 +410,7 @@ mod tests {
         );
         let r = Recipe::parse(&text, "t").unwrap();
         std::env::set_var("FLE_MODEL_DIRS", &other);
+        assert!(needs_reading(&r, &home, &models), "an unchecked copy with the checksum to read");
         let mut said = vec![];
         let got = adopt(&r, &home, &models, &mut |e| {
             if let Event::Step(s) = e {
@@ -388,6 +429,10 @@ mod tests {
         // the check was remembered: a second look reads nothing again
         let c = Checked::open(&home);
         assert!(!c.map.is_empty());
+        std::fs::remove_file(&first).unwrap();
+        std::env::set_var("FLE_MODEL_DIRS", &other);
+        assert!(!needs_reading(&r, &home, &models), "a copy checked before needs no reading");
+        std::env::remove_var("FLE_MODEL_DIRS");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

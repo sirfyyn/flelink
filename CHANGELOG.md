@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **A recipe start no longer waits for checksums:** copies of the model already on this machine that FLE Link has not
+  read before are checked in the background (120 GB take over a minute), and the recipe starts once they match. Before,
+  the Studio's request waited for the whole read (seen with IQ1_M on 4 Nov 2026).
 - **A practical test you can compare:** `flelink bench --task pagoda` measures a real answer (a three.js scene, up to
   8000 tokens) at temperature 0 without thinking, through any `/v1`: decode and prompt speed, length, whether the answer is
   complete, and the machine and server build in the result file. `--answers DIR` keeps the scenes.
