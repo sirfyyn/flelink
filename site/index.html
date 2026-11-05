@@ -124,7 +124,7 @@
           <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, Ryzen 9 9950X3D, Linux. Experts a usage profile picks most sit on the card, a 90 GB expert store in RAM holds the rest. Through FLE Link the same recipe gives 49.9 tok/s (median of three, 5 Nov 2026)</li>
           <li><b>One command</b> <code>flelink run deepseek-v41-ista-dspark</code> installs the FLE engine, fetches the model and the draft, and uses copies already on your disk</li>
           <li><b>Without the draft</b> <code>deepseek-v41-ista</code>: exact, 37.6 tok/s started by hand, 37.2 through FLE Link</li>
-          <li><b>Rin</b> <code>rin-deepseek-v41-dspark</code>: a split 2-bit build of the same model, hot experts resident on the GPU. About +7 % speed for a bit more error: {RIN_DSPARK} tok/s, KL divergence 0.29 against the original (ISTA IQ2_XXS: 0.25). <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-GGUF">Model card</a></li>
+          <li><b>Rin</b> <code>rin-deepseek-v41-dspark</code>: a split 2-bit build of the same model, hot experts resident on the GPU. About +6 % speed for a bit more error: 53.4 tok/s, KL divergence 0.29 against the original (ISTA IQ2_XXS: 0.25). <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-GGUF">Model card</a></li>
           <li><b>Same as by hand</b> through FLE Link the engine runs the recipe's own command: started by hand or through FLE Link, the same answer token for token</li>
         </ul>
       </article>
