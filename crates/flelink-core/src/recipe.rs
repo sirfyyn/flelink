@@ -541,10 +541,11 @@ impl Recipe {
 }
 
 /// Recipes that ship as TOML because the catalog's fields do not cover them (a draft model, engine flags).
-const BUILTIN_TOML: [&str; 3] = [
+const BUILTIN_TOML: [&str; 4] = [
     include_str!("../recipes/deepseek-v41-ista.toml"),
     include_str!("../recipes/deepseek-v41-ista-dspark.toml"),
     include_str!("../recipes/deepseek-v41-ista-iq1m.toml"),
+    include_str!("../recipes/rin-deepseek-v41-dspark.toml"),
 ];
 
 /// The built-in catalog as recipes, then the built-in TOML recipes.

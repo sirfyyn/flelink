@@ -886,6 +886,26 @@ impl Engine {
 
     // ------------------------------------------------------------------ status
 
+    /// `GET /fle/status` of the running engine, passed through. Never fails: no engine, another engine, an older FLE
+    /// or a slow answer give `{"available": false}`.
+    pub fn fle_status(&self) -> Value {
+        let (state, base, key) = self.target();
+        if !matches!(state.as_str(), "ready" | "attached") {
+            return json!({"available": false});
+        }
+        let agent = ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(2))
+            .build();
+        let mut req = agent.get(&format!("{base}/fle/status"));
+        if !key.is_empty() {
+            req = req.set("Authorization", &format!("Bearer {key}"));
+        }
+        match req.call().ok().and_then(|r| r.into_string().ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
+            Some(v) if v.get("schema").is_some() => json!({"available": true, "status": v}),
+            _ => json!({"available": false}),
+        }
+    }
+
     pub fn status(&self) -> Value {
         // an attached server: the live sampler asks only while a page watches; without one the answer would stay at
         // the state of the last look (an engine that came back shown as "not answering")
@@ -1085,6 +1105,19 @@ pub fn status_error<'a>(
             "The GPU cache budget is too large for this card and context.".into(),
             "Lower FLE_MOE_CACHE_BUDGET_MIB in the recipe, or use a smaller context.".into(),
         )),
+        (Some("ram_too_small"), _) => {
+            let g = |k: &str| e.get(k).and_then(|v| v.as_f64());
+            match (g("need_gb"), g("free_gb")) {
+                (Some(need), Some(free)) => Some((
+                    format!("Not enough free memory for the RAM expert store: it needs {need:.0} GB, this process may use {free:.0} GB."),
+                    "Close other programs, lower FLE_MOE_STORE_GB in the recipe, or use a recipe for a smaller model.".into(),
+                )),
+                _ => Some((
+                    "Not enough free memory for the RAM expert store.".into(),
+                    "Close other programs or lower FLE_MOE_STORE_GB in the recipe.".into(),
+                )),
+            }
+        }
         (Some("model_load_failed"), _) => Some((
             if text.is_empty() { "The engine could not load the model.".into() } else { format!("The engine could not load the model: {text}") },
             String::new(),
@@ -1110,6 +1143,9 @@ mod status_error_tests {
         assert!(h.contains("FLE_MOE_CACHE_BUDGET_MIB to 14200"), "{h}");
         let (e, _) = status_error([r#"[fle-status-error] {"error":{"code":"model_load_failed","max_mib":null,"text":"bad gguf"}}"#].into_iter()).unwrap();
         assert_eq!(e, "The engine could not load the model: bad gguf");
+        let (e, h) = status_error([r#"[fle-status-error] {"error":{"code":"ram_too_small","need_gb":90.0,"free_gb":61.4,"text":"x"}}"#].into_iter()).unwrap();
+        assert!(e.contains("90 GB") && e.contains("61 GB"), "{e}");
+        assert!(h.contains("FLE_MOE_STORE_GB"), "{h}");
         assert!(
             status_error(["nothing to see", "[fle-status-error] not json"].into_iter()).is_none()
         );
