@@ -8,6 +8,9 @@
   card and a cache on top would run out of memory. Leave a few seconds between two starts: the GPU memory has to be free first. A recipe can now name a usage profile
   (`run.profile_file`) that is one of the model repo's files: it is fetched with the model and copied to the recipe's profile the
   first time, so Rin's store starts warm (without the profile Rin ran at 30.9 instead of 53 tokens per second).
+- **A split model (Rin) keeps the RAM expert store.** The plan did not count the `_exps_hot` and `_exps_cold` tensors of the split
+  layout as experts, took the model for small and pinned all of it in RAM (`--load-mode none`); the engine then logged "store off" and
+  never reached its ready line. Both halves now count as experts.
 - **FLE's own status is available at `GET /api/engine/fle-status`.** It passes through `/fle/status` (schema 1) of FLE v1.2.6 and
   newer: what the engine decided at start (usage profile, GPU cache, RAM store, warnings) and its live counters. Another engine, or an
   older FLE, answers `{"available": false}`. The engine page of the Studio shows it as a card "FLE engine": decode and prefill speed,
