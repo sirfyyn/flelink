@@ -207,3 +207,5 @@ section[id]{scroll-margin-top:64px}
 details.more{margin-top:12px}
 details.more summary{cursor:pointer;color:var(--muted);font-size:.9rem}
 details.more p{margin-top:8px}
+.ways h3{font-family:var(--mono);letter-spacing:-.01em}
+.ways article p code{color:var(--accent);background:none;border:0;padding:0}

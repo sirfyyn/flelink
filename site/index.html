@@ -210,22 +210,22 @@ fle-iq3-m        82.8 GiB  <span class="bad">too big</span></pre>
     <div class="ways">
       <article>
         <h3>Terminal</h3>
-        <p><code>flelink</code> opens a full-screen interface: pick a model, watch it load, chat. <code>flelink ask</code> answers one question and cleans up.</p>
+        <p><code>flelink</code> full screen: pick a model, watch it load, chat.</p>
         <figure class="shot" data-shot="tui"><span>TUI recording</span></figure>
       </article>
       <article>
         <h3>Studio in the browser</h3>
-        <p><code>flelink studio</code> on 127.0.0.1:8642: chat with live speed numbers, models, the engine log, launch profiles, MCP servers as chat tools.</p>
+        <p><code>flelink studio</code> chat with live speed, models, engine log, profiles and MCP tools.</p>
         <figure class="shot" data-shot="studio"><video src="media/studio.mp4" poster="media/studio-chat.png" autoplay muted loop playsinline preload="metadata" aria-label="The Studio loads Llama 3.2 1B and answers a question at 556 tokens per second"></video></figure>
       </article>
       <article>
         <h3>Desktop app</h3>
-        <p>The same Studio in a window. Quitting stops the server and the model. The installer asks whether you want it (<code>--app</code> answers yes), or download it from the <a href="https://github.com/sirfyyn/flelink/releases/latest">releases page</a>.</p>
+        <p>The Studio in a window. Quitting stops the model. <a href="https://github.com/sirfyyn/flelink/releases/latest">Download</a></p>
         <figure class="shot" data-shot="app"><span>App screenshot</span></figure>
       </article>
       <article>
         <h3>API</h3>
-        <p>OpenAI- and Anthropic-compatible on one address. <code>flelink connect</code> prints the setting for Claude Code, Codex, OpenCode and pi.</p>
+        <p><code>flelink connect</code> OpenAI- and Anthropic-compatible; prints the settings for Claude Code, Codex, OpenCode and pi.</p>
 <pre class="out">$ flelink connect claude
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8642
 export ANTHROPIC_MODEL=&lt;the model it found&gt;
