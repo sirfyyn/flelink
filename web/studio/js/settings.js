@@ -6,6 +6,7 @@ import { toolsSection, stopToolsPolling } from "./settings-tools.js";
 import { clear, fmt, h, icon, toast } from "./ui.js";
 import { LANGUAGES, chosenLanguage, setLanguage } from "./i18n.js";
 import { canPickFolder, pickFolder } from "./app-bridge.js";
+import { loopGuardOn, setLoopGuard } from "./loop-guard.js";
 
 // The names of the plugins that ship with FLE Link, for the list when one is off (its own title is not known then).
 const BUNDLED = { forge: "Forge", updater: "Updates", remote: "Remote access", recorder: "Recorder", switch: "Model switcher" };
@@ -133,7 +134,10 @@ export function mount(main) {
       seg([["system", "Like the system"], ["dark", "Dark"], ["light", "Light"]], s.theme, (v) => save({ theme: v }, true)),
       // the language is kept in this browser (i18n.js); the page reloads in it
       h("label", { class: "field" }, h("span", null, "Language"),
-        seg([["auto", "Like the browser"], ...LANGUAGES], chosenLanguage(), (v) => setLanguage(v))));
+        seg([["auto", "Like the browser"], ...LANGUAGES], chosenLanguage(), (v) => setLanguage(v))),
+      // kept in this browser (loop-guard.js)
+      h("label", { class: "field" }, h("span", null, "Repeat check"),
+        seg([["on", "Stop a model that repeats itself"], ["off", "Never stop it"]], loopGuardOn() ? "on" : "off", (v) => setLoopGuard(v === "on"))));
   }
 
   function models(s) {

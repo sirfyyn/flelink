@@ -129,6 +129,7 @@ export const DE = {
   "Open the browser when FLE Link starts": "Browser öffnen, wenn FLE Link startet", "Plugins": "Plugins", "Updates": "Updates",
   "Remote access": "Fernzugriff", "Recorder": "Rekorder", "Model switcher": "Modellwechsler",
   "Tells you when a new FLE Link or FLE engine is out, and updates in one click.": "Meldet neue Versionen von FLE Link und der FLE-Engine und aktualisiert mit einem Klick.",
+  "Repeat check": "Wiederholungsprüfung", "Stop a model that repeats itself": "Ein Modell stoppen, das sich wiederholt", "Never stop it": "Nie stoppen", "Stopped: the model was repeating itself. Ask again, or rephrase; Settings → Appearance can turn this check off.": "Gestoppt: Das Modell hat sich wiederholt. Frag noch einmal oder formuliere um; unter Einstellungen → Erscheinungsbild lässt sich die Prüfung abschalten.",
   "This computer only": "Nur dieser Rechner", "Other machines too": "Auch andere Rechner", "Language": "Sprache", "Like the browser": "Wie der Browser",
   "Kept in settings.json on this computer and only sent to huggingface.co. FLE Link never shows it again.":
     "Liegt in settings.json auf diesem Rechner und geht nur an huggingface.co. FLE Link zeigt ihn nie wieder an.",
