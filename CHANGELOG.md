@@ -5,7 +5,9 @@
 - **Rin, the 2-bit DeepSeek V4.1 Flash, is a recipe.** "Rin - Deepseek V4.1 Flash 1017 + DSpark" starts the split model (a hot half
   resident on the GPU, a cold half served from RAM) with FLE's DSpark draft: about 53 tokens per second on one 32 GB GPU with 120 GB
   RAM, measured with FLE v1.2.6. It needs FLE v1.2.6 or newer and sets no GPU cache budget, because the hot half is already on the
-  card and a cache on top would run out of memory. Leave a few seconds between two starts: the GPU memory has to be free first.
+  card and a cache on top would run out of memory. Leave a few seconds between two starts: the GPU memory has to be free first. A recipe can now name a usage profile
+  (`run.profile_file`) that is one of the model repo's files: it is fetched with the model and copied to the recipe's profile the
+  first time, so Rin's store starts warm (without the profile Rin ran at 30.9 instead of 53 tokens per second).
 - **FLE's own status is available at `GET /api/engine/fle-status`.** It passes through `/fle/status` (schema 1) of FLE v1.2.6 and
   newer: what the engine decided at start (usage profile, GPU cache, RAM store, warnings) and its live counters. Another engine, or an
   older FLE, answers `{"available": false}`.

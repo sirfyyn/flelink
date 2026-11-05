@@ -32,6 +32,8 @@ min_version = "v1.2.6"
 
 [run]
 context = 16384
+# the usage profile that decided the hot/cold split: copied to {profile} on the first start (the store's warm start needs it)
+profile_file = "fle-usage-profile-ista-iq2_xxs.prof"
 # -t: physical cores only (SMT threads made it much slower)
 # No FLE_MOE_CACHE_BUDGET_MIB / _FIT: the hot half is already resident on the GPU, a cache budget on top runs out of memory.
 args = [
