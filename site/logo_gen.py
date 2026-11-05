@@ -74,12 +74,12 @@ def svg(bg: bool):
     x -= (side - w) / 2
     y -= (side - h) / 2
     defs = """<defs>
-    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5eeaf9"/><stop offset="0.55" stop-color="#a78bfa"/><stop offset="1" stop-color="#f0abfc"/></linearGradient>
-    <linearGradient id="side-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6d28d9"/><stop offset="1" stop-color="#3b1a78"/></linearGradient>
-    <linearGradient id="side-r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0e7490"/><stop offset="1" stop-color="#123a52"/></linearGradient>
-    <radialGradient id="spill"><stop offset="0" stop-color="#a78bfa" stop-opacity="0.42"/><stop offset="1" stop-color="#a78bfa" stop-opacity="0"/></radialGradient>
-    <linearGradient id="link" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f0abfc"/></linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.55"><stop offset="0" stop-color="#8b5cf6" stop-opacity="0.38"/><stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/></radialGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd0e8"/><stop offset="0.55" stop-color="#ff5cac"/><stop offset="1" stop-color="#ff2d95"/></linearGradient>
+    <linearGradient id="side-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d6007a"/><stop offset="1" stop-color="#5a0a38"/></linearGradient>
+    <linearGradient id="side-r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a30f61"/><stop offset="1" stop-color="#3a0b26"/></linearGradient>
+    <radialGradient id="spill"><stop offset="0" stop-color="#ff5cac" stop-opacity="0.42"/><stop offset="1" stop-color="#ff5cac" stop-opacity="0"/></radialGradient>
+    <linearGradient id="link" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ff2d95"/></linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.55"><stop offset="0" stop-color="#ff2d95" stop-opacity="0.38"/><stop offset="1" stop-color="#ff2d95" stop-opacity="0"/></radialGradient>
   </defs>"""
     back = f'<rect x="{x:.2f}" y="{y:.2f}" width="{side:.2f}" height="{side:.2f}" rx="{side*0.22:.2f}" fill="#0b0e14"/>' if bg else ""
     glow = f'<rect x="{x:.2f}" y="{y:.2f}" width="{side:.2f}" height="{side:.2f}" fill="url(#glow)"/>' if bg else ""
