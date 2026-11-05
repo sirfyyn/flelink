@@ -15,6 +15,9 @@
   all 16000 tokens. Chat now also turns every number into # and stops when one sentence shape fills at least 40 % of the recent
   sentences (14 times or more). In the answers that did not loop, the most frequent shape came 5 times in 44 at most.
   `tests/loop-guard.test.mjs` runs it on the real answer tails.
+- **A failed start says why, with a number:** FLE v1.2.5 and later print `[fle-status-error]` with a code before they stop.
+  FLE Link shows it in plain words, for example "The GPU cache budget is too large for this card and context: at most 14200 MiB
+  fit" with the setting to change, instead of "The engine exited (code 1)".
 
 ## 0.1.6 (2026-11-04)
 
