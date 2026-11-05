@@ -2,7 +2,7 @@
 use flelink_core::launch::{run_ok, which};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 
 const MIB: u64 = 1024 * 1024;
 const GIB: u64 = 1024 * MIB;
@@ -189,6 +189,78 @@ pub fn parse_nvidia(out: &str, fields: &[&str]) -> Vec<Value> {
         .collect()
 }
 
+/// One long-lived `nvidia-smi -l N` instead of a new process every few seconds (05.11.2026). On a machine whose engine keeps all
+/// its CPU threads busy, every started process takes a core away for a moment and the others wait for it at the next barrier:
+/// FLE v1.2.5 decoded 35.6 tokens per second through FLE Link against 37.6 started directly, and the live sampler (which
+/// the first answer through the proxy wakes) started `nvidia-smi` every two seconds. Dropping the stream ends the process.
+pub struct GpuStream {
+    child: std::process::Child,
+    latest: Arc<Mutex<Vec<Value>>>,
+}
+
+impl GpuStream {
+    /// `n_gpus` is how many lines make one round of output; None when nvidia-smi is missing or does not start.
+    pub fn start(n_gpus: usize, seconds: u32) -> Option<GpuStream> {
+        use std::io::{BufRead, BufReader};
+        use std::process::{Command, Stdio};
+        if n_gpus == 0 {
+            return None;
+        }
+        let mut child = Command::new(nvidia_smi()?)
+            .arg(format!("--query-gpu={NV_FIELDS}"))
+            .args(["--format=csv,noheader,nounits", "-l", &seconds.to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+        let out = child.stdout.take()?;
+        let latest = Arc::new(Mutex::new(vec![]));
+        let shared = latest.clone();
+        let started = std::thread::Builder::new()
+            .name("gpu-stream".into())
+            .spawn(move || {
+                let fields: Vec<&str> = NV_FIELDS.split(',').collect();
+                let (mut chunk, mut lines) = (String::new(), 0usize);
+                for line in BufReader::new(out).lines().map_while(Result::ok) {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    chunk.push_str(&line);
+                    chunk.push('\n');
+                    lines += 1;
+                    if lines == n_gpus {
+                        let gpus = parse_nvidia(&chunk, &fields);
+                        if !gpus.is_empty() {
+                            *shared.lock().unwrap() = gpus;
+                        }
+                        chunk.clear();
+                        lines = 0;
+                    }
+                }
+            });
+        if started.is_err() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+        Some(GpuStream { child, latest })
+    }
+
+    /// The newest round of readings; empty until the first one arrived (or when the driver does not know a field: the caller
+    /// then falls back to `nvidia()`).
+    pub fn latest(&self) -> Vec<Value> {
+        self.latest.lock().unwrap().clone()
+    }
+}
+
+impl Drop for GpuStream {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 pub fn nvidia() -> Vec<Value> {
     let Some(smi) = nvidia_smi() else {
         return vec![];
@@ -372,4 +444,55 @@ pub fn info(models_dir: &Path) -> Value {
     m.insert("disk_free".into(), json!(disk_free(models_dir)));
     m.insert("models_dir".into(), json!(models_dir.to_string_lossy()));
     Value::Object(m)
+}
+
+#[cfg(all(test, unix))]
+mod gpu_stream_tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// A fake `nvidia-smi` that prints two GPUs per round, round after round, and writes its pid: the stream must read the
+    /// rounds from that one process and end it when dropped.
+    #[test]
+    fn one_nvidia_smi_process_serves_all_readings_and_ends_with_the_stream() {
+        let dir = std::env::temp_dir().join(format!("flelink-fake-smi-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let smi = dir.join("nvidia-smi");
+        std::fs::write(
+            &smi,
+            "#!/bin/sh\necho $$ > \"$0.pid\"\ni=0\nwhile true; do i=$((i+1))\n\
+             echo \"0, RTX A, 32000, 100, 7, 580, 12.0, 50.5, 41\"\n\
+             echo \"1, RTX B, 16000, 200, $i, 580, 8.9, 20.0, 35\"\nsleep 0.2\ndone\n",
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&smi, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let old = std::env::var("PATH").unwrap_or_default();
+        std::env::set_var("PATH", format!("{}:{old}", dir.display()));
+        let stream = GpuStream::start(2, 1);
+        std::env::set_var("PATH", old);
+        let stream = stream.expect("the fake nvidia-smi starts");
+        let mut got = vec![];
+        for _ in 0..40 {
+            got = stream.latest();
+            if got.len() == 2 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_eq!(got.len(), 2, "one round has one reading per GPU");
+        assert_eq!(got[0]["name"], "RTX A");
+        assert!(got[1]["utilization"].as_f64().is_some());
+        let pid: i32 = std::fs::read_to_string(dir.join("nvidia-smi.pid"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        drop(stream);
+        std::thread::sleep(Duration::from_millis(300));
+        // SAFETY: signal 0 only asks whether the process exists
+        let alive = unsafe { libc::kill(pid, 0) } == 0;
+        assert!(!alive, "dropping the stream ends the nvidia-smi process");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

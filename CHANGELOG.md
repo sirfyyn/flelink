@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **The live sampler no longer slows the engine down.** Through FLE Link, FLE v1.2.5 decoded 35.6 tokens per second where the
+  same engine started by hand did 37.6. The first answer through the proxy wakes the live sampler, and it started a new
+  `nvidia-smi` process every two seconds; an engine that keeps all its CPU threads busy loses a core for a moment with every
+  started process, and the other threads wait for it. Now one long-lived `nvidia-smi -l 3` serves the GPU readings (it ends when
+  nobody watches), and while a response runs the engine is asked for `/metrics` every second tick and for `/slots` every sixth.
+  With this change, three runs through FLE Link gave 37.2, 37.4 and 35.3 tokens per second (median 37.2); one run in three is
+  still slow, the cause of that is being looked at.
+- **The repeat check also catches a loop whose sentences differ only in their numbers.** The first measurement of ISTA IQ2_XXS
+  found no exact loop in 23 runs, but one greedy answer thinking a Pagoda in three.js fell into "Need maybe add
+  `rocks.push(createRockCluster(1, -21.0, 1, 0.00005));` etc." (48 of the last 50 sentences, only the numbers changing) and used
+  all 16000 tokens. Chat now also turns every number into # and stops when one sentence shape fills at least 40 % of the recent
+  sentences (14 times or more). In the answers that did not loop, the most frequent shape came 5 times in 44 at most.
+  `tests/loop-guard.test.mjs` runs it on the real answer tails.
+
 ## 0.1.6 (2026-11-04)
 
 - **A model that repeats itself is stopped:** a 2-bit model sometimes writes the same passage over and over (reports of 100k
