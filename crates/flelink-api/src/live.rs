@@ -87,6 +87,12 @@ struct Inner {
     prev_url: String,
     gpus: Vec<Value>,
     totals: Value,
+    /// one `nvidia-smi -l` process while somebody watches (None otherwise): see system::GpuStream
+    gpu_stream: Option<crate::system::GpuStream>,
+    /// a response is running (from the last /metrics), so the engine is asked less often
+    busy: bool,
+    last_rates: Map<String, Value>,
+    last_slots: Map<String, Value>,
 }
 
 #[derive(Clone)]
@@ -110,6 +116,10 @@ impl Live {
                 prev_url: String::new(),
                 gpus: vec![],
                 totals: json!({}),
+                gpu_stream: None,
+                busy: false,
+                last_rates: Map::new(),
+                last_slots: Map::new(),
             })),
             wake: Arc::new(std::sync::Condvar::new()),
             watch_seconds: 20.0,
@@ -118,13 +128,14 @@ impl Live {
         std::thread::Builder::new()
             .name("live-sampler".into())
             .spawn(move || {
-                let has_nvidia = !crate::system::nvidia().is_empty();
+                let n_gpus = crate::system::nvidia().len();
                 let mut tick = 0u64;
                 loop {
                     // The sampler runs only while somebody watches: a page that asks for the live data keeps it going for
                     // `watch_seconds` after its last look. With no page open nothing is sampled, so an idle Studio next to a
                     // busy engine sends the engine no /metrics and /slots requests.
                     if !me.watched() {
+                        me.inner.lock().unwrap().gpu_stream = None; // ends the nvidia-smi process
                         let guard = me.inner.lock().unwrap();
                         let _unused = me
                             .wake
@@ -137,7 +148,7 @@ impl Live {
                         continue;
                     }
                     let t0 = Instant::now();
-                    me.sample(tick, has_nvidia);
+                    me.sample(tick, n_gpus);
                     tick += 1;
                     let spent = t0.elapsed().as_secs_f64();
                     std::thread::sleep(Duration::from_secs_f64(
@@ -237,7 +248,7 @@ impl Live {
         }
     }
 
-    fn sample(&self, tick: u64, has_nvidia: bool) {
+    fn sample(&self, tick: u64, n_gpus: usize) {
         let bound = self.engine.bound();
         if bound == "url" && tick % 5 == 0 {
             self.engine.refresh_attached();
@@ -253,27 +264,47 @@ impl Live {
         );
         s.insert("ram_used".into(), json!(total as i64 - avail as i64));
         s.insert("ram_total".into(), json!(total));
-        if has_nvidia && (tick % 2 == 0 || self.inner.lock().unwrap().gpus.is_empty()) {
-            let gpus: Vec<Value> = crate::system::nvidia()
-                .into_iter()
-                .map(|g| {
-                    Value::Object(
-                        [
-                            "index",
-                            "name",
-                            "utilization",
-                            "memory_used",
-                            "memory_total",
-                            "power_w",
-                            "temperature_c",
-                        ]
-                        .iter()
-                        .map(|k| (k.to_string(), g.get(*k).cloned().unwrap_or(Value::Null)))
-                        .collect(),
-                    )
-                })
-                .collect();
-            self.inner.lock().unwrap().gpus = gpus;
+        if n_gpus > 0 {
+            // one long-lived nvidia-smi while somebody watches; a process per reading only when the stream gives nothing
+            let streamed = {
+                let mut i = self.inner.lock().unwrap();
+                if i.gpu_stream.is_none() {
+                    i.gpu_stream = crate::system::GpuStream::start(n_gpus, 3);
+                }
+                i.gpu_stream
+                    .as_ref()
+                    .map(|g| g.latest())
+                    .unwrap_or_default()
+            };
+            let raw = if !streamed.is_empty() {
+                Some(streamed)
+            } else if tick % 2 == 0 || self.inner.lock().unwrap().gpus.is_empty() {
+                Some(crate::system::nvidia())
+            } else {
+                None
+            };
+            if let Some(raw) = raw {
+                let gpus: Vec<Value> = raw
+                    .into_iter()
+                    .map(|g| {
+                        Value::Object(
+                            [
+                                "index",
+                                "name",
+                                "utilization",
+                                "memory_used",
+                                "memory_total",
+                                "power_w",
+                                "temperature_c",
+                            ]
+                            .iter()
+                            .map(|k| (k.to_string(), g.get(*k).cloned().unwrap_or(Value::Null)))
+                            .collect(),
+                        )
+                    })
+                    .collect();
+                self.inner.lock().unwrap().gpus = gpus;
+            }
         }
         s.insert(
             "gpus".into(),
@@ -300,13 +331,28 @@ impl Live {
                     i.metrics_available = None;
                 }
             }
-            let (code, text) = self.get(&base, "/metrics", &key);
-            if code == 200 && !text.is_empty() {
+            // while a response runs the engine is asked for /metrics every second tick and for /slots every sixth (the rates
+            // cover the longer interval; the counters keep counting), so the sampler does not interrupt its decode loop
+            let busy = self.inner.lock().unwrap().busy;
+            let ask_metrics = !busy || tick % 2 == 0;
+            let (code, text) = if ask_metrics {
+                self.get(&base, "/metrics", &key)
+            } else {
+                (-1, String::new())
+            };
+            if code == -1 {
+                let i = self.inner.lock().unwrap();
+                for (k, v) in &i.last_rates {
+                    s.insert(k.clone(), v.clone());
+                }
+            } else if code == 200 && !text.is_empty() {
                 let cur = parse_prometheus(&text);
                 let mut i = self.inner.lock().unwrap();
                 i.metrics_available = Some(true);
                 let r = rates(i.prev.as_ref(), &cur);
                 i.prev = Some(cur.clone());
+                i.busy = r.get("busy").and_then(Value::as_bool).unwrap_or(false);
+                i.last_rates = r.clone();
                 for (k, v) in r {
                     s.insert(k, v);
                 }
@@ -315,18 +361,25 @@ impl Live {
             } else if code == 404 || code == 501 {
                 self.inner.lock().unwrap().metrics_available = Some(false);
             }
-            if tick % 2 == 0 {
+            let ask_slots = if busy { tick % 6 == 0 } else { tick % 2 == 0 };
+            if !ask_slots {
+                let i = self.inner.lock().unwrap();
+                for (k, v) in &i.last_slots {
+                    s.insert(k.clone(), v.clone());
+                }
+            } else {
                 let (code, text) = self.get(&base, "/slots", &key);
                 if code == 200 && text.starts_with('[') {
                     if let Ok(Value::Array(slots)) = serde_json::from_str::<Value>(&text) {
-                        s.insert(
-                            "slots_busy".into(),
-                            json!(slots
-                                .iter()
-                                .filter(|x| crate::settings::py_truthy(&x["is_processing"]))
-                                .count()),
-                        );
+                        let busy_n = slots
+                            .iter()
+                            .filter(|x| crate::settings::py_truthy(&x["is_processing"]))
+                            .count();
+                        s.insert("slots_busy".into(), json!(busy_n));
                         s.insert("slots".into(), json!(slots.len()));
+                        let mut i = self.inner.lock().unwrap();
+                        i.last_slots.insert("slots_busy".into(), json!(busy_n));
+                        i.last_slots.insert("slots".into(), json!(slots.len()));
                     }
                 }
             }
