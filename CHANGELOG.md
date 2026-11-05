@@ -10,7 +10,8 @@
   first time, so Rin's store starts warm (without the profile Rin ran at 30.9 instead of 53 tokens per second).
 - **FLE's own status is available at `GET /api/engine/fle-status`.** It passes through `/fle/status` (schema 1) of FLE v1.2.6 and
   newer: what the engine decided at start (usage profile, GPU cache, RAM store, warnings) and its live counters. Another engine, or an
-  older FLE, answers `{"available": false}`.
+  older FLE, answers `{"available": false}`. The engine page of the Studio shows it as a card "FLE engine": decode and prefill speed,
+  draft acceptance, usage profile, GPU cache, RAM store, CUDA version and the engine's warnings; with another engine the card stays hidden.
 - **A start that fails for lack of memory says so.** FLE v1.2.6 reports `ram_too_small` (how much the RAM expert store needs and how
   much this process may use); the engine log of a failed start now names both numbers and what to change.
 - **The live sampler no longer slows the engine down.** Through FLE Link, FLE v1.2.5 decoded 35.6 tokens per second where the

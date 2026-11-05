@@ -834,3 +834,8 @@ table.t tr.bad td { color: var(--bad); }
 .start-choice .card-head p { font-size: 13px; }
 .start-choice .input { min-width: 0; flex: 1; }
 
+
+/* FLE engine status card (engine page) */
+.fle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px; padding: 4px 2px 2px; }
+.fle-cell { min-width: 0; }
+.fle-num { font-size: 22px; font-weight: 600; letter-spacing: -.02em; overflow-wrap: anywhere; }
