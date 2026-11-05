@@ -900,7 +900,12 @@ impl Engine {
         if !key.is_empty() {
             req = req.set("Authorization", &format!("Bearer {key}"));
         }
-        match req.call().ok().and_then(|r| r.into_string().ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
+        match req
+            .call()
+            .ok()
+            .and_then(|r| r.into_string().ok())
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        {
             Some(v) if v.get("schema").is_some() => json!({"available": true, "status": v}),
             _ => json!({"available": false}),
         }
