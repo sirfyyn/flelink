@@ -47,8 +47,9 @@
   <div class="wrap hero-grid">
     <div class="hero-copy">
       <p class="eyebrow">Open source · MIT · macOS, Linux, Windows</p>
-      <h1>Local models,<br><span class="grad">wired up</span> in one command.</h1>
-      <p class="lede">FLE Link sits between your inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI- and Anthropic-compatible API. Nothing to configure.</p>
+      <h1>Big models.<br><span class="grad">One command.</span></h1>
+      <p class="hero-num"><b>50</b><span>tokens / second<br>DeepSeek V4.1 Flash, 763B parameters, one 32 GB GPU</span></p>
+      <p class="lede">FLE Link installs the engine, fetches a model that fits your machine and serves an OpenAI- and Anthropic-compatible API. Nothing to configure.</p>
 
       <div class="install" data-install>
         <div class="tabs" role="tablist" aria-label="Your system">
@@ -59,13 +60,13 @@
           <code id="cmd-text" data-unix="curl -fsSL https://flelink.run/install.sh | sh" data-win="irm https://flelink.run/install.ps1 | iex">curl -fsSL https://flelink.run/install.sh | sh</code>
           <button class="copy" type="button" data-copy="#cmd-text" aria-label="Copy the install command">Copy</button>
         </div>
-        <p class="fine">One file. No Python, no git, no sudo. Checked against its SHA-256 before it runs. It offers the desktop app too, or get the app directly: <a href="https://github.com/sirfyyn/flelink/releases/latest">macOS · Windows · Linux</a>. The app is not signed by Apple or Microsoft: downloaded in a browser, macOS asks once (right-click the app, Open) and Windows shows "More info, Run anyway". Through the installer neither asks.</p>
+        <details class="more"><summary>About the installer and the unsigned app</summary><p class="fine">One file. No Python, no git, no sudo. Checked against its SHA-256 before it runs. It offers the desktop app too, or get the app directly: <a href="https://github.com/sirfyyn/flelink/releases/latest">macOS · Windows · Linux</a>. The app is not signed by Apple or Microsoft: downloaded in a browser, macOS asks once (right-click the app, Open) and Windows shows "More info, Run anyway". Through the installer neither asks.</p></details>
       </div>
 
       <dl class="proof">
+        <div><dt>50 tok/s</dt><dd>DeepSeek V4.1 Flash on one 32 GB GPU, same answer every run</dd></div>
         <div><dt>66 s</dt><dd>from nothing to the first answer on Linux with an NVIDIA card</dd></div>
-        <div><dt>68 s</dt><dd>the same on an 8 GB M2 MacBook, model download included</dd></div>
-        <div><dt>91 tok/s</dt><dd>a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp</dd></div>
+        <div><dt>91 tok/s</dt><dd>a 125B MoE on one GPU, 2.5× plain llama.cpp</dd></div>
       </dl>
       <p class="fine"><b>Best performance measured on Linux.</b> The speed figures on this page were measured on Linux; macOS and Windows run the same recipes.</p>
     </div>
