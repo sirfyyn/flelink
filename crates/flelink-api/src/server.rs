@@ -2598,6 +2598,9 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             }
         }
         ("GET", "/api/engine") => Ok(st.engine.status()),
+        // FLE's own status (schema 1, FLE v1.2.6 and newer): what it decided at start (profile, cache, store, warnings)
+        // and its live counters. Another engine, or an FLE without the endpoint, answers {"available": false}.
+        ("GET", "/api/engine/fle-status") => Ok(st.engine.fle_status()),
         // the GitHub sign-in (github.rs): status without the token, save (checked with GitHub), remove
         ("GET", "/api/github") => Ok(st.github.status()),
         ("POST", "/api/github") => r.json(MAX_JSON).and_then(|body| {

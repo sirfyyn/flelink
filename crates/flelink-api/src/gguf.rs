@@ -260,9 +260,11 @@ pub fn split_parts(first: &Path) -> Vec<PathBuf> {
 }
 
 fn is_expert(n: &str) -> bool {
-    ["gate_up", "gate", "up", "down"]
-        .iter()
-        .any(|k| n.contains(&format!(".ffn_{k}_exps.")))
+    ["gate_up", "gate", "up", "down"].iter().any(|k| {
+        ["", "_hot", "_cold"]
+            .iter()
+            .any(|half| n.contains(&format!(".ffn_{k}_exps{half}.")))
+    })
 }
 
 fn kv_type_bytes(t: &str) -> f64 {

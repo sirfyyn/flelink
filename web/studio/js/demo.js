@@ -38,7 +38,10 @@ const AKTION = {
     [...document.querySelectorAll("button")].find((b) => /New chat/.test(b.textContent))?.click(); },
   seite: async (s) => navigate(s.pfad),
   vorschau: async () => { const b = [...document.querySelectorAll("button")].filter((x) => /^\s*Preview\s*$/.test(x.textContent)).pop();
-    b?.scrollIntoView({ block: "center" }); b?.click(); },
+    b?.scrollIntoView({ block: "center" }); b?.click();
+    // the frame opens under a long code block: bring it into view, so the recording shows the page
+    await warte(2500);
+    document.querySelector(".preview-frame")?.scrollIntoView({ block: "center", behavior: "smooth" }); },
   scroll: async (s) => { (document.querySelector("main") || document.scrollingElement).scrollBy({ top: s.dy, behavior: "smooth" }); },
 };
 

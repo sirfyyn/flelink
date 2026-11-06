@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Banners for READMEs and model cards that point to FLE Link, in the look of flelink.run.
-     Open with ?v=engine|model|agent|any; render 2560×640 from a server in site/ (python3 -m http.server 8779), e.g.
+     Open with ?v=engine|model|agent|rin|any; render 2560×640 from a server in site/ (python3 -m http.server 8779), e.g.
      chrome --headless --hide-scrollbars --window-size=2560,640 --screenshot=media/banner-any.png "http://127.0.0.1:8779/banner/banner.html?v=any"
      then sips -s format jpeg -s formatOptions 92 (media/banner-*.jpg are what READMEs and model cards show). -->
 <meta charset="utf-8">
@@ -9,20 +9,20 @@
 @font-face{font-family:"DM Sans";font-weight:400 700;src:url("../fonts/dm-sans-latin-1.woff2") format("woff2")}
 @font-face{font-family:"JetBrains Mono";font-weight:400 500;src:url("../fonts/jetbrains-mono-latin-5.woff2") format("woff2")}
 :root{--bg:#0b0e14;--text:#e9edf3;--muted:#94a0b2;--faint:#6b778a;--line:#1f2633;--line-2:#2b3446;--code:#090c12;
-  --grad:linear-gradient(100deg,#22d3ee,#8b5cf6 55%,#e879f9)}
+  --grad:linear-gradient(#ff2d95,#ff2d95)}
 html,body{margin:0;width:1280px;height:320px;overflow:hidden;background:var(--bg)}
 html{zoom:2}
 body{font-family:"DM Sans",system-ui,sans-serif;color:var(--text);position:relative}
 /* the glow of the hero, and a faint plane of experts behind the text */
 .glow{position:absolute;inset:0;background:
-  radial-gradient(520px 260px at 170px 190px,rgba(139,92,246,.32),transparent 70%),
-  radial-gradient(640px 300px at 1180px 40px,rgba(34,211,238,.10),transparent 70%)}
+  radial-gradient(520px 260px at 170px 190px,rgba(255,45,149,.26),transparent 70%),
+  radial-gradient(640px 300px at 1180px 40px,rgba(34,211,238,.07),transparent 70%)}
 .plane{position:absolute;inset:0;opacity:.5;background-image:
   linear-gradient(30deg,transparent 49.4%,rgba(148,160,178,.07) 50%,transparent 50.6%),
   linear-gradient(150deg,transparent 49.4%,rgba(148,160,178,.07) 50%,transparent 50.6%);
   background-size:56px 32px;mask-image:linear-gradient(90deg,transparent 0,#000 40%,#000 70%,transparent)}
 .wrap{position:relative;height:100%;display:flex;align-items:center;gap:44px;padding:0 64px;box-sizing:border-box}
-.logo{width:196px;height:196px;flex:none;filter:drop-shadow(0 18px 40px rgba(139,92,246,.35))}
+.logo{width:196px;height:196px;flex:none;filter:drop-shadow(0 18px 40px rgba(255,45,149,.35))}
 .text{flex:1;min-width:0}
 .eyebrow{font:500 15px/1 "JetBrains Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
 .eyebrow b{color:var(--text);font-weight:500}
@@ -31,7 +31,7 @@ h1{margin:0;font-weight:700;font-size:44px;line-height:1.08;letter-spacing:-.02e
 .sub{margin:12px 0 0;font-size:19px;line-height:1.4;color:var(--muted);max-width:700px}
 .cmd{margin-top:22px;display:inline-flex;align-items:center;gap:12px;background:var(--code);border:1px solid var(--line-2);
   border-radius:12px;padding:12px 18px;font:500 19px/1 "JetBrains Mono",monospace;color:var(--text)}
-.cmd .p{color:#8b5cf6}
+.cmd .p{color:#ff2d95}
 .side{flex:none;align-self:stretch;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:10px;
   border-left:1px solid var(--line);padding-left:40px}
 .site{font-weight:700;font-size:30px;letter-spacing:-.01em}
@@ -42,7 +42,7 @@ h1{margin:0;font-weight:700;font-size:44px;line-height:1.08;letter-spacing:-.02e
 <div class="wrap">
   <img class="logo" src="../logo.svg" alt="">
   <div class="text">
-    <div class="eyebrow"><b>FLE Link</b> · local models, wired up</div>
+    <div class="eyebrow"><b>FLE Link</b> · big models, one command</div>
     <h1 id="h"></h1>
     <p class="sub" id="s"></p>
     <div class="cmd"><span class="p">$</span><span id="c"></span></div>
@@ -63,6 +63,9 @@ const V = {
   agent:  ["Run an agent <span class=grad>next to your model</span>",
            "FLE Link starts FLE Durable on its Agent page with the model you run: always on, works from events.",
            "curl -fsSL https://flelink.run/install.sh | sh"],
+  rin:    ["Run Rin in <span class=grad>one command</span>",
+           "DeepSeek V4.1 Flash, 763B, at about 53 tokens/s on one 32 GB GPU. FLE Link installs the engine and fetches the model.",
+           "flelink run rin-deepseek-v41-dspark"],
   any:    ["Run local models in <span class=grad>one command</span>",
            "Find this model in the Studio, see whether it fits before you download, and serve it.",
            "curl -fsSL https://flelink.run/install.sh | sh"],

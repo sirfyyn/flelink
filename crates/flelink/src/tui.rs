@@ -12,11 +12,11 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
-// The brand in 256 colours (the macOS Terminal has no 24-bit colour): cyan, violet, fuchsia as on flelink.run, and the
-// muted line colour for the frames.
+// The brand in 256 colours (the macOS Terminal has no 24-bit colour): the pink signal colour of flelink.run (ff2d95 is close to 198),
+// cyan as the quiet second colour, and the muted line colour for the frames.
 const CYAN: Color = Color::Indexed(51);
-const VIOLET: Color = Color::Indexed(99);
-const FUCHSIA: Color = Color::Indexed(213);
+const VIOLET: Color = Color::Indexed(198);
+const FUCHSIA: Color = Color::Indexed(198);
 const LINE: Color = Color::Indexed(238);
 
 /// A rounded frame in the line colour with its title in normal text.
@@ -33,7 +33,7 @@ fn panel(title: &str) -> Block<'static> {
 /// "FLE Link" in the gradient of the logo.
 fn brand() -> Vec<Span<'static>> {
     let colors = [
-        CYAN, CYAN, VIOLET, VIOLET, VIOLET, FUCHSIA, FUCHSIA, FUCHSIA,
+        FUCHSIA, FUCHSIA, FUCHSIA, FUCHSIA, FUCHSIA, FUCHSIA, FUCHSIA, FUCHSIA,
     ];
     let mut out = vec![Span::raw(" ")];
     for (ch, c) in "FLE Link".chars().zip(colors) {
