@@ -388,7 +388,7 @@ impl App {
                     .map(|h| {
                         let id = h["id"].as_str().unwrap_or("").to_string();
                         let dl = h["downloads"].as_u64().unwrap_or(0);
-                        (id.clone(), format!("{id}   {} downloads", compact(dl)))
+                        (id.clone(), format!("{:>6}  {id}", compact(dl)))
                     })
                     .filter(|(id, _)| !id.is_empty())
                     .collect()
@@ -619,7 +619,7 @@ impl App {
         } else if self.hits.is_empty() {
             " Results (most downloaded first) "
         } else {
-            " Results (most downloaded first), Enter loads the quantisation that fits "
+            " Results, most downloaded first "
         };
         let list = List::new(items)
             .block(panel(title))
