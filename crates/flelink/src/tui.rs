@@ -68,7 +68,7 @@ enum Msg {
     Tok(bool, String),
     Done(Result<chat::Stats, String>),
     Hits(Result<Vec<(String, String)>, String>),
-    Picked(Result<flelink_core::recipe::Recipe, String>),
+    Picked(Result<Box<flelink_core::recipe::Recipe>, String>),
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -233,7 +233,7 @@ impl App {
             Msg::Picked(r) => {
                 self.searching = false;
                 match r {
-                    Ok(rec) => self.begin_load(rec),
+                    Ok(rec) => self.begin_load(*rec),
                     Err(e) => self.err = Some(e),
                 }
             }
@@ -419,7 +419,9 @@ impl App {
                     .filter_map(|f| f["path"].as_str().map(|p| p.to_string()))
                     .collect();
                 let toml = recipe_toml(&repo, &paths, g["size"].as_u64().unwrap_or(0));
-                flelink_core::recipe::Recipe::parse(&toml, "search").map_err(|e| format!("{e:#}"))
+                flelink_core::recipe::Recipe::parse(&toml, "search")
+                    .map(Box::new)
+                    .map_err(|e| format!("{e:#}"))
             })();
             let _ = tx.send(Msg::Picked(r));
         });
