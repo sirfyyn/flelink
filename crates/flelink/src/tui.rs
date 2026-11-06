@@ -92,6 +92,8 @@ struct App {
     screen: Screen,
     sys: system::SysInfo,
     models: Vec<catalog::Model>,
+    // the recipes that are not in the catalog (DeepSeek V4.1 Flash, Rin, ...): a row each, between the catalog and the search
+    rezepte: Vec<flelink_core::recipe::Recipe>,
     list: ListState,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -121,6 +123,10 @@ pub fn run(home: &Path) -> Result<()> {
     let sys = system::detect(home);
     let (tx, rx) = channel();
     let models = catalog::builtin();
+    let rezepte: Vec<_> = flelink_core::recipe::builtin()
+        .into_iter()
+        .filter(|r| !models.iter().any(|m| m.id == r.id))
+        .collect();
     let mut list = ListState::default();
     list.select(Some(0));
     let mut app = App {
@@ -128,6 +134,7 @@ pub fn run(home: &Path) -> Result<()> {
         screen: Screen::Machine,
         sys,
         models,
+        rezepte,
         list,
         tx,
         rx,
@@ -266,12 +273,16 @@ impl App {
                 KeyCode::Down => {
                     let i = self.list.selected().unwrap_or(0);
                     // one row more than the models: the search
-                    self.list.select(Some((i + 1).min(self.models.len())));
+                    self.list
+                        .select(Some((i + 1).min(self.models.len() + self.rezepte.len())));
                 }
                 KeyCode::Enter => {
-                    if self.list.selected() == Some(self.models.len()) {
+                    let i = self.list.selected().unwrap_or(0);
+                    if i == self.models.len() + self.rezepte.len() {
                         self.err = None;
                         self.screen = Screen::Search;
+                    } else if i >= self.models.len() {
+                        self.start_recipe(i - self.models.len());
                     } else {
                         self.start_load()
                     }
@@ -353,6 +364,21 @@ impl App {
             Ok(r) => self.begin_load(r),
             Err(e) => self.err = Some(format!("{e:#}")),
         }
+    }
+
+    /// A built-in recipe that is not in the catalog (the same check as for a model: it must fit before anything is downloaded).
+    fn start_recipe(&mut self, k: usize) {
+        let r = self.rezepte[k].clone();
+        if r.fit(&self.home.join("models"), &self.sys) == catalog::Fit::TooBig {
+            self.err = Some(format!(
+                "{} does not fit this machine ({} memory, {} free on disk).",
+                r.title,
+                system::gib(self.sys.ram_bytes),
+                system::gib(self.sys.disk_free_bytes)
+            ));
+            return;
+        }
+        self.begin_load(r);
     }
 
     /// Download what is missing, start the engine, open the chat: the same for a catalog model and a found one.
@@ -564,6 +590,26 @@ impl App {
                     ),
                 ]))
             })
+            .chain(self.rezepte.iter().map(|r| {
+                let fit = r.fit(&self.home.join("models"), &self.sys);
+                let col = match fit {
+                    catalog::Fit::Fits => Color::Green,
+                    catalog::Fit::Tight => Color::Yellow,
+                    catalog::Fit::TooBig => Color::Red,
+                };
+                let got = r.missing_bytes(&self.home.join("models")) == 0;
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        format!(" {:<8}", fit.label()),
+                        Style::new().fg(col).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(format!(" {:>9}  {}", system::gib(r.model.size), r.title)),
+                    Span::styled(
+                        if got { "  [downloaded]" } else { "" },
+                        Style::new().fg(Color::Cyan),
+                    ),
+                ]))
+            }))
             .chain(std::iter::once(ListItem::new(Line::from(vec![
                 Span::styled(
                     " search  ",
@@ -579,8 +625,12 @@ impl App {
             .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
             .highlight_symbol("> ");
         f.render_stateful_widget(list, top, &mut self.list);
-        let mut lines = vec![Line::from(match self.models.get(self.list.selected().unwrap_or(0)) {
+        let sel_i = self.list.selected().unwrap_or(0);
+        let mut lines = vec![Line::from(match self.models.get(sel_i) {
             Some(sel) => sel.note.to_string(),
+            None if sel_i < self.models.len() + self.rezepte.len() => {
+                self.rezepte[sel_i - self.models.len()].note.clone()
+            }
             None => "Type a name, for example qwen, llama or deepseek: FLE Link lists GGUF models from Hugging Face, takes the quantisation that fits this machine and loads it."
                 .to_string(),
         })];
