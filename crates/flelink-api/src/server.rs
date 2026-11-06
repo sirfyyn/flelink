@@ -3838,7 +3838,7 @@ async fn proxy(
         .unwrap_or("*/*")
         .to_string();
     let live = st.live.clone();
-    live.touch();
+    live.touch_api();
     // for the list of requests: which API, which program, how long
     let api = ["chat/completions", "messages", "responses", "completions"]
         .into_iter()

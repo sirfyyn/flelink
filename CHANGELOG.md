@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **The GPU is read only while a page is open.** An answer through the proxy (Claude Code, an agent, a script, `flelink bench`) used to wake the
+  whole live sampler, including the `nvidia-smi` stream, which took about 16 % of a core with spikes to 67 % from a 16-thread engine: the same
+  DeepSeek V4.1 Flash recipe measured 47.1 against 49.7 tokens per second directly (5 %, same answer, same accepted drafts). Now an answer only
+  keeps the engine's `/metrics` and `/slots` going; the GPU stream starts when a Studio page asks for the live data and ends when it stops.
 - **Rin, the 2-bit DeepSeek V4.1 Flash, is a recipe.** "Rin - Deepseek V4.1 Flash 1017 + DSpark" starts the split model (a hot half
   resident on the GPU, a cold half served from RAM) with FLE's DSpark draft: about 53 tokens per second on one 32 GB GPU with 120 GB
   RAM, measured with FLE v1.2.6. It needs FLE v1.2.6 or newer and sets no GPU cache budget, because the hot half is already on the
