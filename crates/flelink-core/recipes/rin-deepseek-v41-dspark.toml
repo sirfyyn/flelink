@@ -12,11 +12,17 @@ files = [
   "Rin-Deepseek-V4.1-Flash-1017-FLE-00005-of-00006.gguf",
   "Rin-Deepseek-V4.1-Flash-1017-FLE-00006-of-00006.gguf",
 ]
-# sum of the six parts as written on Titan (5 Nov 2026); re-check against the final upload
+# sum of the six parts (final, checked with the upload's sha256 list, 6 Nov 2026)
 size = 237857494656
 
 [model.sha256]
-# TODO before release: from /mnt/perf/forge/rin-sha256.txt (Titan)
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00001-of-00006.gguf" = "5b48a2ff4ecc738ae50dd0984bc344586b4788778a19c0addaaedadcaa66700d"
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00002-of-00006.gguf" = "c9edbaca80ad0814656438001acc89d23c9fa1a87e6e12101acbe400df9f2116"
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00003-of-00006.gguf" = "d644980fdf83438216b127b17d34b419efb1e1ab5f70fca7fd1f6f03d19001cb"
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00004-of-00006.gguf" = "86090f92c8425e0a0f4282ac4894eee0bbed63192dda7fd31d0c229e6e50b40f"
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00005-of-00006.gguf" = "8f9c0342ab661657ad46be8a871e6d588a2db04cc040414755bf6d29610ec31a"
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00006-of-00006.gguf" = "3dac4c54893ad7aa89103c0028500eadc78e74112cef3a2930a97e67dc9fb4f3"
+"fle-usage-profile-ista-iq2_xxs.prof" = "9aa25b3ff20d6ea78934370c348ac47259241ac0a08c2fb8fd16de27695d01ac"
 
 [draft]
 repo = "sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF"
