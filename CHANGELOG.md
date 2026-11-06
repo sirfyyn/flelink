@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.7 (2026-11-06)
+
 - **A model with some parts already on the disk is no longer turned down for the disk space of all of them.** The fit check counted the whole
   model once as soon as one part was missing (a recipe gave only a total size), so `flelink run` of Rin said "does not fit this machine" with
   147 GiB free although only the 6 MB of part 1 were missing. Recipes can now list the bytes per file (`[model.sizes]`); then only the missing
