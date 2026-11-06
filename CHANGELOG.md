@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **The terminal interface lists the recipes too.** Besides the catalog models, the model list of `flelink` now shows the built-in recipes that
+  are not in the catalog (DeepSeek V4.1 Flash with and without the draft model, Rin) with the same verdict (fits, tight, too big) and
+  `[downloaded]` mark; the fit check runs before anything is downloaded, and the search row stays last.
 - **The GPU is read only while a page is open.** An answer through the proxy (Claude Code, an agent, a script, `flelink bench`) used to wake the
   whole live sampler, including the `nvidia-smi` stream, which took about 16 % of a core with spikes to 67 % from a 16-thread engine: the same
   DeepSeek V4.1 Flash recipe measured 47.1 against 49.7 tokens per second directly (5 %, same answer, same accepted drafts). Now an answer only
