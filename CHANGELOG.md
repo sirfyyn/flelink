@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Rin, the 2-bit DeepSeek V4.1 Flash, is a recipe.** "Rin - Deepseek V4.1 Flash 1017 + DSpark" starts the split model (a hot half
+  resident on the GPU, a cold half served from RAM) with FLE's DSpark draft: about 53 tokens per second on one 32 GB GPU with 120 GB
+  RAM, measured with FLE v1.2.6. It needs FLE v1.2.6 or newer and sets no GPU cache budget, because the hot half is already on the
+  card and a cache on top would run out of memory. Leave a few seconds between two starts: the GPU memory has to be free first. A recipe can now name a usage profile
+  (`run.profile_file`) that is one of the model repo's files: it is fetched with the model and copied to the recipe's profile the
+  first time, so Rin's store starts warm (without the profile Rin ran at 30.9 instead of 53 tokens per second).
+- **A split model (Rin) keeps the RAM expert store.** The plan did not count the `_exps_hot` and `_exps_cold` tensors of the split
+  layout as experts, took the model for small and pinned all of it in RAM (`--load-mode none`); the engine then logged "store off" and
+  never reached its ready line. Both halves now count as experts.
+- **FLE's own status is available at `GET /api/engine/fle-status`.** It passes through `/fle/status` (schema 1) of FLE v1.2.6 and
+  newer: what the engine decided at start (usage profile, GPU cache, RAM store, warnings) and its live counters. Another engine, or an
+  older FLE, answers `{"available": false}`. The engine page of the Studio shows it as a card "FLE engine": decode and prefill speed,
+  draft acceptance, usage profile, GPU cache, RAM store, CUDA version and the engine's warnings; with another engine the card stays hidden.
+- **A start that fails for lack of memory says so.** FLE v1.2.6 reports `ram_too_small` (how much the RAM expert store needs and how
+  much this process may use); the engine log of a failed start now names both numbers and what to change.
 - **The live sampler no longer slows the engine down.** Through FLE Link, FLE v1.2.5 decoded 35.6 tokens per second where the
   same engine started by hand did 37.6. The first answer through the proxy wakes the live sampler, and it started a new
   `nvidia-smi` process every two seconds; an engine that keeps all its CPU threads busy loses a core for a moment with every

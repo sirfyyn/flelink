@@ -143,6 +143,10 @@ pub struct RunSpec {
     /// first start is warm instead of cold.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
+    /// The same, for a profile that is a file of the model's repo (fetched with the model, checked by
+    /// `model.sha256`): copied to `{profile}` the first time, never over a saved one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_file: Option<String>,
     /// A line the engine log must show before the engine counts as ready (after its health check answers), e.g.
     /// "[fle-store] warm start" when a RAM expert store fills after the server is up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -286,6 +290,18 @@ impl Recipe {
                 bail!("recipe {}: run.profile must be an absolute path", self.id);
             }
         }
+        if let Some(f) = &self.run.profile_file {
+            if f.is_empty()
+                || !Path::new(f)
+                    .components()
+                    .all(|c| matches!(c, std::path::Component::Normal(_)))
+            {
+                bail!(
+                    "recipe {}: run.profile_file must be a path inside the repo",
+                    self.id
+                );
+            }
+        }
         if let Some(l) = &self.run.ready_log {
             if l.trim().is_empty() || l.len() > 200 {
                 bail!(
@@ -364,6 +380,16 @@ impl Recipe {
                 size: 0,
             })
             .collect();
+        if let Some(f) = &self.run.profile_file {
+            out.push(Fetch {
+                repo: self.model.repo.clone(),
+                revision: self.model.revision.clone(),
+                file: f.clone(),
+                local: self.local_path(f),
+                sha256: self.model.sha256.get(f).cloned(),
+                size: 0,
+            });
+        }
         if let Some(d) = &self.draft {
             let repo = if d.repo.is_empty() {
                 self.model.repo.clone()
@@ -420,6 +446,9 @@ impl Recipe {
             // a recipe that brings a profile starts warm the first time (never over one the engine already saved)
             if let Some(src) = self.run.profile.as_deref().filter(|_| !p.exists()) {
                 let _ = std::fs::copy(src, &p);
+            }
+            if let Some(f) = self.run.profile_file.as_deref().filter(|_| !p.exists()) {
+                let _ = std::fs::copy(models.join(self.local_path(f)), &p);
             }
             t = t.replace("{profile}", &p.to_string_lossy());
         }
@@ -541,10 +570,11 @@ impl Recipe {
 }
 
 /// Recipes that ship as TOML because the catalog's fields do not cover them (a draft model, engine flags).
-const BUILTIN_TOML: [&str; 3] = [
+const BUILTIN_TOML: [&str; 4] = [
     include_str!("../recipes/deepseek-v41-ista.toml"),
     include_str!("../recipes/deepseek-v41-ista-dspark.toml"),
     include_str!("../recipes/deepseek-v41-ista-iq1m.toml"),
+    include_str!("../recipes/rin-deepseek-v41-dspark.toml"),
 ];
 
 /// The built-in catalog as recipes, then the built-in TOML recipes.
@@ -871,6 +901,33 @@ temperature = 0.2
         assert_eq!(args[t + 1], crate::system::physical_cores().to_string());
         // the TOML that `flelink recipe` prints reads back the same
         assert_eq!(Recipe::parse(&r.to_toml(), "builtin").unwrap(), r);
+    }
+
+    #[test]
+    fn rin_fetches_its_usage_profile_and_starts_warm_from_it() {
+        let r = builtin()
+            .into_iter()
+            .find(|r| r.id == "rin-deepseek-v41-dspark")
+            .unwrap();
+        let f = r.fetches();
+        // six parts, the profile, then the draft model (draft_path reads the last one)
+        assert_eq!(f.len(), 8);
+        assert_eq!(f[6].file, "fle-usage-profile-ista-iq2_xxs.prof");
+        assert_eq!(f[7].file, "FLE-DSpark-V4.1-1017-Q2K-Q8.gguf");
+        let dir = std::env::temp_dir().join(format!("fle-rin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join(&f[6].local);
+        std::fs::create_dir_all(src.parent().unwrap()).unwrap();
+        std::fs::write(&src, b"hot-profile").unwrap();
+        let args = r.run_args(&dir);
+        assert!(!args.iter().any(|a| a.contains("cache-budget")), "{args:?}");
+        let env = r.fill("{profile}", &dir);
+        assert_eq!(std::fs::read(&env).unwrap(), b"hot-profile");
+        // a profile the engine saved is never overwritten
+        std::fs::write(&env, b"saved").unwrap();
+        r.fill("{profile}", &dir);
+        assert_eq!(std::fs::read(&env).unwrap(), b"saved");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

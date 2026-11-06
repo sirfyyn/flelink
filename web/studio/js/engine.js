@@ -49,6 +49,7 @@ export function mount(main) {
   }
   const boxes = {
     status: h("div", { class: "card pad-lg" }),
+    fle: h("div", { class: "card" }),
     connect: h("div", { class: "card" }),
     requests: h("div", { class: "card" }),
     best: h("div", { class: "card" }),
@@ -64,6 +65,7 @@ export function mount(main) {
       h("p", null, "FLE Link runs llama-server for you. Every start is a plain command that you can read, copy and change; "
         + "a profile keeps a command of your own, placeholders and all.")), modeSwitch),
     boxes.status,
+    boxes.fle,
     boxes.connect,
     boxes.requests,
     boxes.best,
@@ -901,12 +903,52 @@ export function mount(main) {
     );
   }
 
+  // ------------------------------------------------------------------------------------------- FLE status
+
+  // What the FLE engine says about itself (GET /fle/status, FLE v1.2.6 and newer, passed through by FLE Link): what it decided at
+  // start and its live numbers. Any other engine, or an older FLE, has no such page and the card stays hidden.
+  let fleBusy = false;
+  async function renderFle() {
+    if (fleBusy) return;
+    fleBusy = true;
+    let r = null;
+    try { r = await get("/api/engine/fle-status"); } catch { /* hidden below */ }
+    fleBusy = false;
+    const st = r?.available ? r.status : null;
+    boxes.fle.hidden = !st;
+    if (!st) return;
+    const n = (v, d = 1) => (v === null || v === undefined ? "–" : Number(v).toFixed(d));
+    const pct = (v) => (v === null || v === undefined ? "–" : `${Math.round(v * 100)} %`);
+    const live = st.live?.since_start || {};
+    const cache = st.gpu_cache || {};
+    const store = st.store || {};
+    const prof = st.profile || {};
+    const cell = (label, value, hint) => h("div", { class: "fle-cell", title: hint || "" },
+      h("div", { class: "fle-num mono" }, value), h("div", { class: "small muted" }, label));
+    const warns = (st.warnings || []).map((w) => h("div", { class: `callout ${w.level === "error" ? "bad" : "warn"}`, style: { marginTop: "10px" } },
+      icon("alert", "sm"), h("div", null, w.text, " ", h("code", { class: "mono" }, w.code))));
+    patch(boxes.fle,
+      h("div", { class: "card-head" }, icon("cpu"), h("div", { class: "grow" }, h("h3", null, "FLE engine"),
+        h("p", null, `${st.engine?.version || "FLE"}${st.engine?.model ? ` · ${st.engine.model}` : ""}${st.engine?.run_id ? ` · run ${String(st.engine.run_id).slice(0, 8)}` : ""}`))),
+      h("div", { class: "fle-grid" },
+        cell("decode tok/s", n(live.decode_tps), "Decode speed over the finished requests since the start"),
+        cell("prefill tok/s", n(live.prefill_tps, 0), "Prompt reading speed"),
+        cell("draft accepted", pct(live.draft_accept), st.draft?.kind ? `${st.draft.kind}, n-max ${st.draft.n_max ?? "–"}` : "No draft model"),
+        cell("requests", live.requests === undefined || live.requests === null ? "–" : String(live.requests), ""),
+        cell("usage profile", prof.state || "–", prof.path || ""),
+        cell("GPU cache", cache.fitted_mib ? `${Math.round(cache.fitted_mib / 1024 * 10) / 10} GiB` : "–", cache.experts ? `${cache.experts} experts, hit rate ${pct(cache.hit)}` : "Not used: the hot half of a split model is already on the card"),
+        cell("RAM store", store.gb ? `${store.gb} GB` : "–", store.warm_experts ? `${store.warm_experts} experts warm` : ""),
+        cell("CUDA", st.cuda?.runtime || "–", st.cuda?.driver ? `driver ${st.cuda.driver}` : "")),
+      ...warns);
+  }
+
   // ------------------------------------------------------------------------------------------- wiring
 
   function renderAll() {
     syncSelection();
     renderConnect();
     renderRequests();
+    renderFle();
     applyMode();
     renderStatus();
     renderLaunch();
@@ -922,7 +964,7 @@ export function mount(main) {
   // every third live tick (about 3 s): answers of the Anthropic format carry no engine timings to watch for; patch()
   // leaves the table alone when nothing changed
   let reqTick = 0;
-  unsub.push(on("live", () => { if (reqTick++ % 3 === 0) renderRequests(); }));
+  unsub.push(on("live", () => { if (reqTick++ % 3 === 0) { renderRequests(); renderFle(); } }));
   unsub.push(on("enginelog", () => { if (store.engine?.log_seq !== logSeq) fetchLog(); }));
   unsub.push(on("engine", () => {
     renderStatus();

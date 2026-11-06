@@ -532,11 +532,15 @@ pub struct Model {
     pub incomplete: Vec<String>,
 }
 
+/// An expert tensor, also in the split layout of FLE v1.2.6 (`_exps_hot` and `_exps_cold`, e.g. Rin): without them such a model
+/// counts no expert bytes and the plan would pin the whole model in RAM (`--load-mode none`), which switches the expert store off.
 fn is_expert(n: &str) -> bool {
     n.contains(".ffn_")
-        && ["gate_up", "gate", "up", "down"]
-            .iter()
-            .any(|k| n.contains(&format!(".ffn_{k}_exps.")))
+        && ["gate_up", "gate", "up", "down"].iter().any(|k| {
+            ["", "_hot", "_cold"]
+                .iter()
+                .any(|half| n.contains(&format!(".ffn_{k}_exps{half}.")))
+        })
 }
 fn is_input(n: &str) -> bool {
     n.split('.').any(|w| {
@@ -1068,4 +1072,19 @@ pub fn py_json(v: &Json) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod split_expert_tests {
+    use super::is_expert;
+
+    #[test]
+    fn the_split_layout_counts_as_experts() {
+        assert!(is_expert("blk.3.ffn_gate_exps.weight"));
+        assert!(is_expert("blk.3.ffn_down_exps_hot.weight"));
+        assert!(is_expert("blk.3.ffn_up_exps_cold.weight"));
+        // the lookup tables and the router are not experts
+        assert!(!is_expert("blk.3.ffn_exps_slot.weight"));
+        assert!(!is_expert("blk.3.ffn_gate_inp.weight"));
+    }
 }
