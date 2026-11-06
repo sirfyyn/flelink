@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A model with some parts already on the disk is no longer turned down for the disk space of all of them.** The fit check counted the whole
+  model once as soon as one part was missing (a recipe gave only a total size), so `flelink run` of Rin said "does not fit this machine" with
+  147 GiB free although only the 6 MB of part 1 were missing. Recipes can now list the bytes per file (`[model.sizes]`); then only the missing
+  parts count. The Rin recipe has them.
 - **The terminal interface lists the recipes too.** Besides the catalog models, the model list of `flelink` now shows the built-in recipes that
   are not in the catalog (DeepSeek V4.1 Flash with and without the draft model, Rin) with the same verdict (fits, tight, too big) and
   `[downloaded]` mark; the fit check runs before anything is downloaded, and the search row stays last.
