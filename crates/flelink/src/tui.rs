@@ -67,12 +67,15 @@ enum Msg {
     Err(String),
     Tok(bool, String),
     Done(Result<chat::Stats, String>),
+    Hits(Result<Vec<(String, String)>, String>),
+    Picked(Result<flelink_core::recipe::Recipe, String>),
 }
 
 #[derive(PartialEq, Clone, Copy)]
 enum Screen {
     Machine,
     Models,
+    Search,
     Loading,
     Chat,
 }
@@ -105,6 +108,13 @@ struct App {
     err: Option<String>,
     show_cmd: bool,
     quit: bool,
+    // the search for a model on Hugging Face (the last row of the model list)
+    query: String,
+    hits: Vec<(String, String)>,
+    hit_list: ListState,
+    in_list: bool,
+    dirty: bool,
+    searching: bool,
 }
 
 pub fn run(home: &Path) -> Result<()> {
@@ -134,6 +144,12 @@ pub fn run(home: &Path) -> Result<()> {
         err: None,
         show_cmd: false,
         quit: false,
+        query: String::new(),
+        hits: vec![],
+        hit_list: ListState::default(),
+        in_list: false,
+        dirty: false,
+        searching: false,
     };
     let mut term = ratatui::init();
     let res = main_loop(&mut term, &mut app);
@@ -197,6 +213,30 @@ impl App {
                     last.1.push_str(&t)
                 }
             }
+            Msg::Hits(r) => {
+                self.searching = false;
+                self.dirty = false;
+                match r {
+                    Ok(h) => {
+                        self.err = if h.is_empty() {
+                            Some("Nothing found. Try another word.".into())
+                        } else {
+                            None
+                        };
+                        self.hit_list
+                            .select(if h.is_empty() { None } else { Some(0) });
+                        self.hits = h;
+                    }
+                    Err(e) => self.err = Some(e),
+                }
+            }
+            Msg::Picked(r) => {
+                self.searching = false;
+                match r {
+                    Ok(rec) => self.begin_load(rec),
+                    Err(e) => self.err = Some(e),
+                }
+            }
             Msg::Done(r) => {
                 self.busy = false;
                 match r {
@@ -225,11 +265,58 @@ impl App {
                 }
                 KeyCode::Down => {
                     let i = self.list.selected().unwrap_or(0);
-                    self.list.select(Some((i + 1).min(self.models.len() - 1)));
+                    // one row more than the models: the search
+                    self.list.select(Some((i + 1).min(self.models.len())));
                 }
-                KeyCode::Enter => self.start_load(),
+                KeyCode::Enter => {
+                    if self.list.selected() == Some(self.models.len()) {
+                        self.err = None;
+                        self.screen = Screen::Search;
+                    } else {
+                        self.start_load()
+                    }
+                }
                 KeyCode::Esc | KeyCode::Left => self.screen = Screen::Machine,
                 KeyCode::Char('q') => self.quit = true,
+                _ => {}
+            },
+            Screen::Search => match code {
+                KeyCode::Esc => {
+                    self.err = None;
+                    self.screen = Screen::Models;
+                }
+                KeyCode::Down if !self.hits.is_empty() => {
+                    self.in_list = true;
+                    let i = self.hit_list.selected().unwrap_or(0);
+                    self.hit_list.select(Some((i + 1).min(self.hits.len() - 1)));
+                }
+                KeyCode::Up if self.in_list => {
+                    let i = self.hit_list.selected().unwrap_or(0);
+                    if i == 0 {
+                        self.in_list = false;
+                    } else {
+                        self.hit_list.select(Some(i - 1));
+                    }
+                }
+                KeyCode::Enter if !self.searching => {
+                    if self.in_list && !self.dirty {
+                        if let Some(i) = self.hit_list.selected() {
+                            self.pick(self.hits[i].0.clone());
+                        }
+                    } else if !self.query.trim().is_empty() {
+                        self.search();
+                    }
+                }
+                KeyCode::Backspace => {
+                    self.query.pop();
+                    self.in_list = false;
+                    self.dirty = true;
+                }
+                KeyCode::Char(c) if !mods.contains(KeyModifiers::CONTROL) => {
+                    self.query.push(c);
+                    self.in_list = false;
+                    self.dirty = true;
+                }
                 _ => {}
             },
             Screen::Loading => {
@@ -262,15 +349,23 @@ impl App {
             ));
             return;
         }
+        match flelink_core::recipe::find(&self.home, m.id) {
+            Ok(r) => self.begin_load(r),
+            Err(e) => self.err = Some(format!("{e:#}")),
+        }
+    }
+
+    /// Download what is missing, start the engine, open the chat: the same for a catalog model and a found one.
+    fn begin_load(&mut self, r: flelink_core::recipe::Recipe) {
         self.err = None;
         self.steps.clear();
         self.progress = None;
         self.logline.clear();
         self.screen = Screen::Loading;
-        let (tx, home, id) = (self.tx.clone(), self.home.clone(), m.id.to_string());
+        let (tx, home) = (self.tx.clone(), self.home.clone());
         std::thread::spawn(move || {
             let tx2 = tx.clone();
-            match flow::ensure_and_start(&home, &id, &mut |e| {
+            match flow::ensure_and_start_recipe(&home, &r, &mut |e| {
                 let _ = tx2.send(Msg::Ev(e));
             }) {
                 Ok(srv) => {
@@ -280,6 +375,53 @@ impl App {
                     let _ = tx.send(Msg::Err(format!("{e:#}")));
                 }
             }
+        });
+    }
+
+    fn search(&mut self) {
+        self.searching = true;
+        self.err = None;
+        let (tx, q) = (self.tx.clone(), self.query.trim().to_string());
+        std::thread::spawn(move || {
+            let r = flelink_api::hf::search(&q, 12, "").map(|v| {
+                v.iter()
+                    .map(|h| {
+                        let id = h["id"].as_str().unwrap_or("").to_string();
+                        let dl = h["downloads"].as_u64().unwrap_or(0);
+                        (id.clone(), format!("{id}   {} downloads", compact(dl)))
+                    })
+                    .filter(|(id, _)| !id.is_empty())
+                    .collect()
+            });
+            let _ = tx.send(Msg::Hits(r));
+        });
+    }
+
+    /// A found repo: look at its files, take the quantisation that fits this machine and turn it into a recipe.
+    fn pick(&mut self, repo: String) {
+        self.searching = true;
+        self.err = None;
+        let (tx, ram) = (self.tx.clone(), self.sys.ram_bytes);
+        std::thread::spawn(move || {
+            let r = (|| {
+                let files = flelink_api::hf::tree(&repo, "main", "")?;
+                let groups = flelink_api::hf::gguf_groups(&files, "Q4_K_M");
+                let g = pick_group(&groups, ram).ok_or_else(|| {
+                    format!(
+                        "No quantisation of {repo} fits this machine ({} memory).",
+                        system::gib(ram)
+                    )
+                })?;
+                let paths: Vec<String> = g["files"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|f| f["path"].as_str().map(|p| p.to_string()))
+                    .collect();
+                let toml = recipe_toml(&repo, &paths, g["size"].as_u64().unwrap_or(0));
+                flelink_core::recipe::Recipe::parse(&toml, "search").map_err(|e| format!("{e:#}"))
+            })();
+            let _ = tx.send(Msg::Picked(r));
         });
     }
 
@@ -315,6 +457,7 @@ impl App {
             match self.screen {
                 Screen::Machine => "· this machine",
                 Screen::Models => "· choose a model",
+                Screen::Search => "· search Hugging Face",
                 Screen::Loading => "· loading ",
                 Screen::Chat => "· chat",
             },
@@ -327,7 +470,10 @@ impl App {
         f.render_widget(Paragraph::new(title), head);
         let hint = match self.screen {
             Screen::Machine => "Enter: continue   q: quit",
-            Screen::Models => "up/down: choose   Enter: load   Esc: back   q: quit",
+            Screen::Models => "up/down: choose   Enter: load or search   Esc: back   q: quit",
+            Screen::Search => {
+                "type, Enter: search   Down: results   Enter on a result: load   Esc: back"
+            }
             Screen::Loading => "q: quit (stops the engine)",
             Screen::Chat => {
                 "Enter: send   Ctrl+O: API, agents and start command   Esc: clear   Ctrl+C: quit"
@@ -340,6 +486,7 @@ impl App {
         match self.screen {
             Screen::Machine => self.machine(f, body),
             Screen::Models => self.models_view(f, body),
+            Screen::Search => self.search_view(f, body),
             Screen::Loading => self.loading(f, body),
             Screen::Chat => self.chat_view(f, body),
         }
@@ -415,6 +562,13 @@ impl App {
                     ),
                 ]))
             })
+            .chain(std::iter::once(ListItem::new(Line::from(vec![
+                Span::styled(
+                    " search  ",
+                    Style::new().fg(FUCHSIA).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("            Search Hugging Face for another model ..."),
+            ]))))
             .collect();
         let list = List::new(items)
             .block(panel(
@@ -423,8 +577,62 @@ impl App {
             .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
             .highlight_symbol("> ");
         f.render_stateful_widget(list, top, &mut self.list);
-        let sel = &self.models[self.list.selected().unwrap_or(0)];
-        let mut lines = vec![Line::from(sel.note.to_string())];
+        let mut lines = vec![Line::from(match self.models.get(self.list.selected().unwrap_or(0)) {
+            Some(sel) => sel.note.to_string(),
+            None => "Type a name, for example qwen, llama or deepseek: FLE Link lists GGUF models from Hugging Face, takes the quantisation that fits this machine and loads it."
+                .to_string(),
+        })];
+        if let Some(e) = &self.err {
+            lines.push(Line::from(Span::styled(
+                e.clone(),
+                Style::new().fg(Color::Red),
+            )));
+        }
+        f.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: true })
+                .block(panel(" About ")),
+            bottom,
+        );
+    }
+
+    fn search_view(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
+        let [top, mid, bottom] = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Min(4),
+            Constraint::Length(4),
+        ])
+        .areas(area);
+        let cursor = if self.in_list { "" } else { "_" };
+        f.render_widget(
+            Paragraph::new(format!("> {}{}", self.query, cursor))
+                .block(panel(" Search Hugging Face for GGUF models ")),
+            top,
+        );
+        let items: Vec<ListItem> = self
+            .hits
+            .iter()
+            .map(|(_, label)| ListItem::new(format!(" {label}")))
+            .collect();
+        let title = if self.searching {
+            " searching ... "
+        } else if self.hits.is_empty() {
+            " Results (most downloaded first) "
+        } else {
+            " Results (most downloaded first), Enter loads the quantisation that fits "
+        };
+        let list = List::new(items)
+            .block(panel(title))
+            .highlight_style(if self.in_list {
+                Style::new().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::new()
+            })
+            .highlight_symbol(if self.in_list { "> " } else { "  " });
+        f.render_stateful_widget(list, mid, &mut self.hit_list);
+        let mut lines = vec![Line::from(
+            "The first load downloads the files; whether the model fits is checked before.",
+        )];
         if let Some(e) = &self.err {
             lines.push(Line::from(Span::styled(
                 e.clone(),
@@ -609,4 +817,120 @@ fn kv(k: &str, v: &str) -> Line<'static> {
         Span::styled(format!("  {k:<14}"), Style::new().fg(Color::DarkGray)),
         Span::raw(v.to_string()),
     ])
+}
+
+/// 12345 -> "12k", 3400000 -> "3.4M"
+fn compact(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1e6)
+    } else if n >= 1_000 {
+        format!("{}k", n / 1_000)
+    } else {
+        n.to_string()
+    }
+}
+
+/// The quantisation to load from a found repo: Q4_K_M when it fits (at most 95 % of the memory), otherwise the largest
+/// model file group that does. Groups are what `hf::gguf_groups` returns; only plain model files count.
+fn pick_group(groups: &[serde_json::Value], ram: u64) -> Option<&serde_json::Value> {
+    let limit = ram / 100 * 95;
+    let fits = |g: &&serde_json::Value| {
+        g["kind"] == "model" && g["size"].as_u64().is_some_and(|s| s > 0 && s <= limit)
+    };
+    groups
+        .iter()
+        .filter(fits)
+        .find(|g| {
+            g["name"]
+                .as_str()
+                .is_some_and(|n| n.eq_ignore_ascii_case("Q4_K_M"))
+        })
+        .or_else(|| {
+            groups
+                .iter()
+                .filter(fits)
+                .max_by_key(|g| g["size"].as_u64().unwrap_or(0))
+        })
+}
+
+/// A recipe for a found repo: the files of one quantisation, the default engine choice, nothing else.
+fn recipe_toml(repo: &str, files: &[String], size: u64) -> String {
+    let id: String = repo
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let list = files
+        .iter()
+        .map(|f| format!("\"{f}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "id = \"hf-{id}\"\ntitle = \"{repo}\"\n[model]\nrepo = \"{repo}\"\nfiles = [{list}]\nsize = {size}\n[engine]\nprefer = [\"fle\", \"upstream\"]\n"
+    )
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn g(name: &str, size: u64, kind: &str) -> serde_json::Value {
+        json!({"name": name, "size": size, "kind": kind, "files": [{"path": format!("{name}.gguf")}]})
+    }
+
+    #[test]
+    fn q4_k_m_is_taken_when_it_fits_else_the_largest_that_does() {
+        let gb = 1u64 << 30;
+        let groups = vec![
+            g("Q8_0", 20 * gb, "model"),
+            g("Q4_K_M", 12 * gb, "model"),
+            g("Q2_K", 6 * gb, "model"),
+            g("mmproj-f16", gb, "mmproj"),
+        ];
+        assert_eq!(pick_group(&groups, 32 * gb).unwrap()["name"], "Q4_K_M");
+        // 16 GB of memory: Q4_K_M (12 GB) still fits within 95 %
+        assert_eq!(pick_group(&groups, 16 * gb).unwrap()["name"], "Q4_K_M");
+        // 10 GB: only Q2_K fits
+        assert_eq!(pick_group(&groups, 10 * gb).unwrap()["name"], "Q2_K");
+        // 4 GB: nothing fits (the mmproj file is not a model)
+        assert!(pick_group(&groups, 4 * gb).is_none());
+    }
+
+    #[test]
+    fn a_found_repo_becomes_a_valid_recipe() {
+        let t = recipe_toml(
+            "owner/My Model-GGUF",
+            &[
+                "Q4/a-00001-of-00002.gguf".into(),
+                "Q4/a-00002-of-00002.gguf".into(),
+            ],
+            123,
+        );
+        let r = flelink_core::recipe::Recipe::parse(&t, "test");
+        assert!(r.is_err(), "a repo name with a space is not a valid repo");
+        let t = recipe_toml(
+            "owner/My-Model-GGUF",
+            &[
+                "Q4/a-00001-of-00002.gguf".into(),
+                "Q4/a-00002-of-00002.gguf".into(),
+            ],
+            123,
+        );
+        let r = flelink_core::recipe::Recipe::parse(&t, "test").unwrap();
+        assert_eq!(r.id, "hf-owner-My-Model-GGUF");
+        assert_eq!(r.model.files.len(), 2);
+    }
+
+    #[test]
+    fn download_counts_are_short() {
+        assert_eq!(compact(950), "950");
+        assert_eq!(compact(12_400), "12k");
+        assert_eq!(compact(3_400_000), "3.4M");
+    }
 }
