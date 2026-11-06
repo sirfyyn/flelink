@@ -576,6 +576,8 @@ fn run_praxis(a: &BenchArgs, id: &str) -> Result<i32> {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn();
+    } else if !a.json {
+        eprintln!("Compare with others: add --share to post this result (you read it first).");
     }
     Ok(0)
 }
