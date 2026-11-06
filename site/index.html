@@ -20,7 +20,7 @@
 <meta name="twitter:title" content="FLE Link">
 <meta name="twitter:description" content="Local models, wired up in one command. The layer between your inference engine and your tools.">
 <meta name="twitter:image" content="https://flelink.run/og.png">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "FLE Link", "url": "https://flelink.run/", "description": "FLE Link sits between an inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API, a browser Studio and a desktop app.", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS, Linux, Windows", "softwareVersion": "0.1.6", "downloadUrl": "https://github.com/sirfyyn/flelink/releases/latest", "sameAs": ["https://github.com/sirfyyn/flelink", "https://github.com/sirfyyn/FastLocalExperts", "https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-GGUF"], "license": "https://opensource.org/licenses/MIT", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "image": "https://flelink.run/og.png", "author": {"@type": "Person", "name": "Max Bitzer", "url": "https://sirfyyn.de/"}, "codeRepository": "https://github.com/sirfyyn/flelink"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "FLE Link", "url": "https://flelink.run/", "description": "FLE Link sits between an inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API, a browser Studio and a desktop app.", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS, Linux, Windows", "softwareVersion": "0.1.6", "downloadUrl": "https://github.com/sirfyyn/flelink/releases/latest", "sameAs": ["https://github.com/sirfyyn/flelink", "https://github.com/sirfyyn/FastLocalExperts", "https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF"], "license": "https://opensource.org/licenses/MIT", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "image": "https://flelink.run/og.png", "author": {"@type": "Person", "name": "Max Bitzer", "url": "https://sirfyyn.de/"}, "codeRepository": "https://github.com/sirfyyn/flelink"}</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -124,7 +124,7 @@
           <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, Ryzen 9 9950X3D, Linux. Experts a usage profile picks most sit on the card, a 90 GB expert store in RAM holds the rest. Through FLE Link the same recipe gives 49.9 tok/s (median of three, 5 Nov 2026)</li>
           <li><b>One command</b> <code>flelink run deepseek-v41-ista-dspark</code> installs the FLE engine, fetches the model and the draft, and uses copies already on your disk</li>
           <li><b>Without the draft</b> <code>deepseek-v41-ista</code>: exact, 37.6 tok/s started by hand, 37.2 through FLE Link</li>
-          <li><b>Rin</b> <code>rin-deepseek-v41-dspark</code>: a split 2-bit build of the same model, hot experts resident on the GPU. About +6 % speed for a bit more error: 53.4 tok/s, KL divergence 0.29 against the original (ISTA IQ2_XXS: 0.25). <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-GGUF">Model card</a></li>
+          <li><b>Rin</b> <code>rin-deepseek-v41-dspark</code>: a split 2-bit build of the same model, hot experts resident on the GPU. About +6 % speed for a bit more error: 53.4 tok/s, KL divergence 0.29 against the original (ISTA IQ2_XXS: 0.25). <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF">Model card</a></li>
           <li><b>Same as by hand</b> through FLE Link the engine runs the recipe's own command: started by hand or through FLE Link, the same answer token for token</li>
         </ul>
       </article>
@@ -364,7 +364,7 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
       <a href="https://github.com/sirfyyn/flelink">Source</a>
       <a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a>
       <a href="https://github.com/sirfyyn/FastLocalExperts/releases/latest">FLE engine releases</a>
-      <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-GGUF">Rin - Deepseek V4.1 Flash 1017</a>
+      <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF">Rin - Deepseek V4.1 Flash 1017</a>
       <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">DSpark draft model</a>
       <a href="https://github.com/sirfyyn/fle-durable">FLE Durable</a>
       <a href="https://huggingface.co/sirfyyn">Models on Hugging Face</a>

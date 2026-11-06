@@ -3,14 +3,14 @@ title = "Rin - Deepseek V4.1 Flash 1017 + DSpark (FLE)"
 note = "Rin is a 2-bit DeepSeek V4.1 Flash (763 B parameters) built from ISTA DASLab's GSQ-RCO quants and split into a hot half (resident on the GPU) and a cold half (served from RAM) along a usage profile, with FLE's DSpark draft model. About 53 tok/s decode on one 32 GB GPU with 120 GB RAM (FLE v1.2.6, 5 Nov 2026). Lossy: a bit worse than the ISTA IQ2_XXS it is made from, see the model card. Needs FLE v1.2.6 or newer and about 260 GB on a fast NVMe. Leave a few seconds between two starts: the GPU memory has to be free first."
 
 [model]
-repo = "sirfyyn/Rin-Deepseek-V4.1-Flash-1017-GGUF"
+repo = "sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF"
 files = [
-  "Rin-Deepseek-V4.1-Flash-1017-00001-of-00006.gguf",
-  "Rin-Deepseek-V4.1-Flash-1017-00002-of-00006.gguf",
-  "Rin-Deepseek-V4.1-Flash-1017-00003-of-00006.gguf",
-  "Rin-Deepseek-V4.1-Flash-1017-00004-of-00006.gguf",
-  "Rin-Deepseek-V4.1-Flash-1017-00005-of-00006.gguf",
-  "Rin-Deepseek-V4.1-Flash-1017-00006-of-00006.gguf",
+  "Rin-Deepseek-V4.1-Flash-1017-FLE-00001-of-00006.gguf",
+  "Rin-Deepseek-V4.1-Flash-1017-FLE-00002-of-00006.gguf",
+  "Rin-Deepseek-V4.1-Flash-1017-FLE-00003-of-00006.gguf",
+  "Rin-Deepseek-V4.1-Flash-1017-FLE-00004-of-00006.gguf",
+  "Rin-Deepseek-V4.1-Flash-1017-FLE-00005-of-00006.gguf",
+  "Rin-Deepseek-V4.1-Flash-1017-FLE-00006-of-00006.gguf",
 ]
 # sum of the six parts as written on Titan (5 Nov 2026); re-check against the final upload
 size = 237857494656
@@ -19,7 +19,7 @@ size = 237857494656
 # TODO before release: from /mnt/perf/forge/rin-sha256.txt (Titan)
 
 [draft]
-repo = "sirfyyn/Rin-Deepseek-V4.1-Flash-1017-GGUF"
+repo = "sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF"
 file = "FLE-DSpark-V4.1-1017-Q2K-Q8.gguf"
 sha256 = "c223adafb9aa0e125557907165f54c555f3fa576918f9561979136bca8822482"
 size = 5216519072
