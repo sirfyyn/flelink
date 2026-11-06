@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>FLE Link · local models, wired up in one command</title>
-<meta name="description" content="Run local AI models in one command. FLE Link picks the engine and a model that fit your machine and serves an OpenAI- and Anthropic-compatible API. Open source, MIT.">
+<title>FLE Link · run big local AI models in one command</title>
+<meta name="description" content="FLE Link runs big local AI models in one command: DeepSeek V4.1 Flash (763B) at about 50 tokens/s on one 32 GB GPU with the FLE engine, the Rin quant, an OpenAI- and Anthropic-compatible API. Open source, MIT.">
 <meta name="theme-color" content="#0b0e14">
 <link rel="icon" href="favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="favicon-64.png?v=2" type="image/png" sizes="64x64">
 <meta property="og:title" content="FLE Link">
@@ -20,7 +20,7 @@
 <meta name="twitter:title" content="FLE Link">
 <meta name="twitter:description" content="Local models, wired up in one command. The layer between your inference engine and your tools.">
 <meta name="twitter:image" content="https://flelink.run/og.png">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "FLE Link", "url": "https://flelink.run/", "description": "FLE Link sits between an inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API, a browser Studio and a desktop app.", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS, Linux, Windows", "softwareVersion": "0.1.0", "license": "https://opensource.org/licenses/MIT", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "image": "https://flelink.run/og.png", "author": {"@type": "Person", "name": "Max Bitzer", "url": "https://sirfyyn.de/"}, "codeRepository": "https://github.com/sirfyyn/flelink"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "FLE Link", "url": "https://flelink.run/", "description": "FLE Link sits between an inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API, a browser Studio and a desktop app.", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS, Linux, Windows", "softwareVersion": "0.1.6", "downloadUrl": "https://github.com/sirfyyn/flelink/releases/latest", "sameAs": ["https://github.com/sirfyyn/flelink", "https://github.com/sirfyyn/FastLocalExperts", "https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF"], "license": "https://opensource.org/licenses/MIT", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "image": "https://flelink.run/og.png", "author": {"@type": "Person", "name": "Max Bitzer", "url": "https://sirfyyn.de/"}, "codeRepository": "https://github.com/sirfyyn/flelink"}</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -47,8 +47,9 @@
   <div class="wrap hero-grid">
     <div class="hero-copy">
       <p class="eyebrow">Open source · MIT · macOS, Linux, Windows</p>
-      <h1>Local models,<br><span class="grad">wired up</span> in one command.</h1>
-      <p class="lede">FLE Link sits between your inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI- and Anthropic-compatible API. Nothing to configure.</p>
+      <h1>Big models.<br><span class="grad">One command.</span></h1>
+      <p class="hero-num"><b>50</b><span>tokens / second<br>DeepSeek V4.1 Flash, 763B parameters<br>2-bit quant (ISTA GSQ-RCO IQ2_XXS)<br>one 32 GB GPU</span></p>
+      <p class="lede">FLE Link installs the engine, fetches a model that fits your machine and serves an OpenAI- and Anthropic-compatible API. Nothing to configure.</p>
 
       <div class="install" data-install>
         <div class="tabs" role="tablist" aria-label="Your system">
@@ -59,13 +60,13 @@
           <code id="cmd-text" data-unix="curl -fsSL https://flelink.run/install.sh | sh" data-win="irm https://flelink.run/install.ps1 | iex">curl -fsSL https://flelink.run/install.sh | sh</code>
           <button class="copy" type="button" data-copy="#cmd-text" aria-label="Copy the install command">Copy</button>
         </div>
-        <p class="fine">One file. No Python, no git, no sudo. Checked against its SHA-256 before it runs. It offers the desktop app too, or get the app directly: <a href="https://github.com/sirfyyn/flelink/releases/latest">macOS · Windows · Linux</a>. The app is not signed by Apple or Microsoft: downloaded in a browser, macOS asks once (right-click the app, Open) and Windows shows "More info, Run anyway". Through the installer neither asks.</p>
+        <details class="more"><summary>About the installer and the unsigned app</summary><p class="fine">One file. No Python, no git, no sudo. Checked against its SHA-256 before it runs. It offers the desktop app too, or get the app directly: <a href="https://github.com/sirfyyn/flelink/releases/latest">macOS · Windows · Linux</a>. The app is not signed by Apple or Microsoft: downloaded in a browser, macOS asks once (right-click the app, Open) and Windows shows "More info, Run anyway". Through the installer neither asks.</p></details>
       </div>
 
       <dl class="proof">
+        <div><dt>50 tok/s</dt><dd>DeepSeek V4.1 Flash on one 32 GB GPU, same answer every run</dd></div>
         <div><dt>66 s</dt><dd>from nothing to the first answer on Linux with an NVIDIA card</dd></div>
-        <div><dt>68 s</dt><dd>the same on an 8 GB M2 MacBook, model download included</dd></div>
-        <div><dt>91 tok/s</dt><dd>a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp</dd></div>
+        <div><dt>91 tok/s</dt><dd>a 125B MoE on one GPU, 2.5× plain llama.cpp</dd></div>
       </dl>
       <p class="fine"><b>Best performance measured on Linux.</b> The speed figures on this page were measured on Linux; macOS and Windows run the same recipes.</p>
     </div>
@@ -118,13 +119,13 @@
           <h3>DeepSeek-V4.1-Flash-1017</h3>
           <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO IQ2_XXS by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 232 GiB</p>
         </header>
-        <div class="big-num">31.6 <span>tok/s through FLE Link, exact, experts in a RAM store; 41.9 with the DSpark draft</span></div>
+        <div class="big-num">50 <span>tok/s with the DSpark draft model, lossless: the same answer every run (FLE v1.2.5, three runs: 49.8, 50.8, 50.6)</span></div>
         <ul class="flag-list">
-          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, 22 GB expert cache on the card, 90 GB expert store in RAM, prefill windows, exact (no cache bias); a 3100-token three.js answer at 31.6 tok/s, its prompt in 2.5 s, FLE engine v1.2.4, Linux (3 Nov 2026). FLE's own release: 33.3 tok/s on such answers (n=6)</li>
-          <li><b>One command</b> <code>flelink run deepseek-v41-ista</code> installs the FLE engine, profiles the experts on the first run and uses copies of the model already on your disk</li>
-          <li><b>With the DSpark draft model</b> <code>deepseek-v41-ista-dspark</code>: 41.9 tok/s, lossless at temperature 0 (one run, FLE release)</li>
-          <li><b>Faster, less exact</b> <code>deepseek-v41-ista-iq1m</code>: the IQ1_M quant at 42.3 tok/s (n=6, before the prefill windows), KL divergence about 0.13 against IQ2_XXS</li>
-          <li><b>Same as by hand</b> through FLE Link the engine runs the recipe's own command: started by hand or through FLE Link, the same answer token for token (4 Nov 2026)</li>
+          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, Ryzen 9 9950X3D, Linux. Experts a usage profile picks most sit on the card, a 90 GB expert store in RAM holds the rest. Through FLE Link the same recipe gives 49.9 tok/s (median of three, 5 Nov 2026)</li>
+          <li><b>One command</b> <code>flelink run deepseek-v41-ista-dspark</code> installs the FLE engine, fetches the model and the draft, and uses copies already on your disk</li>
+          <li><b>Without the draft</b> <code>deepseek-v41-ista</code>: exact, 37.6 tok/s started by hand, 37.2 through FLE Link</li>
+          <li><b>Rin</b> <code>rin-deepseek-v41-dspark</code>: a split 2-bit build of the same model, hot experts resident on the GPU. About +6 % speed for a bit more error: 53.4 tok/s, KL divergence 0.29 against the original (ISTA IQ2_XXS: 0.25). <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF">Model card</a></li>
+          <li><b>Same as by hand</b> through FLE Link the engine runs the recipe's own command: started by hand or through FLE Link, the same answer token for token</li>
         </ul>
       </article>
     </div>
@@ -209,22 +210,22 @@ fle-iq3-m        82.8 GiB  <span class="bad">too big</span></pre>
     <div class="ways">
       <article>
         <h3>Terminal</h3>
-        <p><code>flelink</code> opens a full-screen interface: pick a model, watch it load, chat. <code>flelink ask</code> answers one question and cleans up.</p>
-        <figure class="shot" data-shot="tui"><span>TUI recording</span></figure>
+        <p><code>flelink</code> full screen: pick a model, watch it load, chat.</p>
+        <figure class="shot" data-shot="tui"><video src="media/tui.mp4" poster="media/tui-poster.png" autoplay muted loop playsinline preload="metadata" aria-label="The terminal interface: the model list with a search row, a search for ISTA DeepSeek V4.1 on Hugging Face, then loading a model and a chat answer"></video></figure>
       </article>
       <article>
         <h3>Studio in the browser</h3>
-        <p><code>flelink studio</code> on 127.0.0.1:8642: chat with live speed numbers, models, the engine log, launch profiles, MCP servers as chat tools.</p>
-        <figure class="shot" data-shot="studio"><video src="media/studio.mp4" poster="media/studio-chat.png" autoplay muted loop playsinline preload="metadata" aria-label="The Studio loads Llama 3.2 1B and answers a question at 556 tokens per second"></video></figure>
+        <p><code>flelink studio</code> chat with live speed, models, engine log, profiles and MCP tools.</p>
+        <figure class="shot" data-shot="studio"><video src="media/studio.mp4" poster="media/studio-chat.png" autoplay muted loop playsinline preload="metadata" aria-label="The Studio runs Rin, a 763B model, on one GPU: a prompt, the pagoda answer streaming, then the finished scene in the preview"></video></figure>
       </article>
       <article>
         <h3>Desktop app</h3>
-        <p>The same Studio in a window. Quitting stops the server and the model. The installer asks whether you want it (<code>--app</code> answers yes), or download it from the <a href="https://github.com/sirfyyn/flelink/releases/latest">releases page</a>.</p>
-        <figure class="shot" data-shot="app"><span>App screenshot</span></figure>
+        <p>The Studio in a window. Quitting stops the model. <a href="https://github.com/sirfyyn/flelink/releases/latest">Download</a></p>
+        <figure class="shot" data-shot="app"><img src="media/studio-engine.png" alt="The desktop app: the engine page with Rin loaded and the card with what the FLE engine reports" loading="lazy"></figure>
       </article>
       <article>
         <h3>API</h3>
-        <p>OpenAI- and Anthropic-compatible on one address. <code>flelink connect</code> prints the setting for Claude Code, Codex, OpenCode and pi.</p>
+        <p><code>flelink connect</code> OpenAI- and Anthropic-compatible; prints the settings for Claude Code, Codex, OpenCode and pi.</p>
 <pre class="out">$ flelink connect claude
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8642
 export ANTHROPIC_MODEL=&lt;the model it found&gt;
@@ -362,6 +363,9 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
     <nav aria-label="Links">
       <a href="https://github.com/sirfyyn/flelink">Source</a>
       <a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a>
+      <a href="https://github.com/sirfyyn/FastLocalExperts/releases/latest">FLE engine releases</a>
+      <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF">Rin - Deepseek V4.1 Flash 1017</a>
+      <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">DSpark draft model</a>
       <a href="https://github.com/sirfyyn/fle-durable">FLE Durable</a>
       <a href="https://huggingface.co/sirfyyn">Models on Hugging Face</a>
     </nav>
