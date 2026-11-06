@@ -80,6 +80,8 @@ pub fn rates(
 struct Inner {
     /// time of the last look at the live data (a page asked), `None` before the first
     seen: Option<Instant>,
+    /// the last time a page (not only an answer through the proxy) asked: only then the GPU is read
+    seen_page: Option<Instant>,
     history: VecDeque<Value>,
     responses: VecDeque<Value>,
     metrics_available: Option<bool>,
@@ -109,6 +111,7 @@ impl Live {
             engine,
             inner: Arc::new(Mutex::new(Inner {
                 seen: None,
+                seen_page: None,
                 history: VecDeque::new(),
                 responses: VecDeque::new(),
                 metrics_available: None,
@@ -147,8 +150,15 @@ impl Live {
                         tick = 0; // the counters kept running meanwhile; the first rate covers the time not watched
                         continue;
                     }
+                    // An answer through the proxy (Claude Code, an agent, a script) keeps the engine's /metrics and /slots going, but
+                    // nobody looks at the GPU then: without a page open there is no nvidia-smi, which cost this 16-thread engine about
+                    // 5 % (47.1 against 49.7 tokens/s measured on 6 Nov 2026).
+                    let page = me.page_watched();
+                    if !page {
+                        me.inner.lock().unwrap().gpu_stream = None;
+                    }
                     let t0 = Instant::now();
-                    me.sample(tick, n_gpus);
+                    me.sample(tick, if page { n_gpus } else { 0 });
                     tick += 1;
                     let spent = t0.elapsed().as_secs_f64();
                     std::thread::sleep(Duration::from_secs_f64(
@@ -160,10 +170,28 @@ impl Live {
         l
     }
 
-    /// Somebody looks (a page asked for the live data, or an answer went through the proxy).
+    /// A page asked for the live data: the sampler runs, GPU included.
     pub fn touch(&self) {
+        let mut i = self.inner.lock().unwrap();
+        let t = Some(Instant::now());
+        i.seen = t;
+        i.seen_page = t;
+        drop(i);
+        self.wake.notify_all();
+    }
+
+    /// An answer went through the proxy: the sampler runs for the engine's counters, without the GPU.
+    pub fn touch_api(&self) {
         self.inner.lock().unwrap().seen = Some(Instant::now());
         self.wake.notify_all();
+    }
+
+    pub fn page_watched(&self) -> bool {
+        self.inner
+            .lock()
+            .unwrap()
+            .seen_page
+            .is_some_and(|t| t.elapsed().as_secs_f64() < self.watch_seconds)
     }
 
     pub fn watched(&self) -> bool {
