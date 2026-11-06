@@ -15,6 +15,14 @@ files = [
 # sum of the six parts (final, checked with the upload's sha256 list, 6 Nov 2026)
 size = 237857494656
 
+[model.sizes]
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00001-of-00006.gguf" = 5781056
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00002-of-00006.gguf" = 38977517120
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00003-of-00006.gguf" = 36045837344
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00004-of-00006.gguf" = 35484362528
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00005-of-00006.gguf" = 16748705792
+"Rin-Deepseek-V4.1-Flash-1017-FLE-00006-of-00006.gguf" = 110595290816
+
 [model.sha256]
 "Rin-Deepseek-V4.1-Flash-1017-FLE-00001-of-00006.gguf" = "5b48a2ff4ecc738ae50dd0984bc344586b4788778a19c0addaaedadcaa66700d"
 "Rin-Deepseek-V4.1-Flash-1017-FLE-00002-of-00006.gguf" = "c9edbaca80ad0814656438001acc89d23c9fa1a87e6e12101acbe400df9f2116"

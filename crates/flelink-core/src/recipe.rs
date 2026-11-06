@@ -50,6 +50,10 @@ pub struct ModelSpec {
     /// Total bytes of all files, for the fit check before anything is downloaded.
     #[serde(default)]
     pub size: u64,
+    /// Bytes per file (path -> bytes), when known: with them the fit check counts only the parts that are still missing, so a model
+    /// of which five of six parts are on the disk is not turned down for the disk space of all six.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sizes: BTreeMap<String, u64>,
     /// A file stored under another name than in the repo (path in the repo -> file name next to the other parts), for
     /// a split model whose last part the publisher uploaded under a name of its own.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -290,6 +294,17 @@ impl Recipe {
                 bail!("recipe {}: run.profile must be an absolute path", self.id);
             }
         }
+        if let Some(k) = self
+            .model
+            .sizes
+            .keys()
+            .find(|k| !self.model.files.contains(k))
+        {
+            bail!(
+                "recipe {}: model.sizes names '{k}', which is not in model.files",
+                self.id
+            );
+        }
         if let Some(f) = &self.run.profile_file {
             if f.is_empty()
                 || !Path::new(f)
@@ -490,15 +505,27 @@ impl Recipe {
     pub fn missing_bytes(&self, models: &Path) -> u64 {
         let fetches = self.fetches();
         let parts = self.model.files.len();
-        let model_missing = fetches[..parts]
+        let missing: Vec<&Fetch> = fetches[..parts]
             .iter()
-            .any(|x| !models.join(&x.local).exists());
+            .filter(|x| !models.join(&x.local).exists())
+            .collect();
+        let model_missing = !missing.is_empty();
+        // per-file sizes known for every missing part: count exactly those
+        let known: Option<u64> = missing
+            .iter()
+            .map(|x| self.model.sizes.get(&x.file).copied())
+            .sum();
         let draft_missing = fetches[parts..]
             .iter()
             .filter(|x| !models.join(&x.local).exists())
             .map(|x| x.size)
             .sum::<u64>();
-        (if model_missing { self.model.size } else { 0 }) + draft_missing
+        let model_bytes = match (model_missing, known) {
+            (false, _) => 0,
+            (true, Some(k)) => k,
+            (true, None) => self.model.size,
+        };
+        model_bytes + draft_missing
     }
 
     /// Does it fit this machine. Disk: only what is still to download. Memory: what the recipe says it was measured
@@ -606,6 +633,7 @@ fn builtin_catalog() -> Vec<Recipe> {
                     files: m.files.iter().map(|f| f.to_string()).collect(),
                     sha256: sha,
                     size: m.size,
+                    sizes: BTreeMap::new(),
                     save_as: BTreeMap::new(),
                 },
                 draft: None,
@@ -927,6 +955,33 @@ temperature = 0.2
         std::fs::write(&env, b"saved").unwrap();
         r.fill("{profile}", &dir);
         assert_eq!(std::fs::read(&env).unwrap(), b"saved");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn with_per_file_sizes_only_the_missing_parts_count() {
+        let mut r = builtin()
+            .into_iter()
+            .find(|r| r.id == "rin-deepseek-v41-dspark")
+            .unwrap();
+        let dir = std::env::temp_dir().join(format!("fle-sizes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // nothing there: the whole model plus the drafter
+        let all = r.missing_bytes(&dir);
+        assert!(all > 230_000_000_000, "{all}");
+        // all parts there except the first (5.8 MB): only that part counts
+        for f in &r.model.files[1..] {
+            let p = dir.join(r.local_path(f));
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, b"x").unwrap();
+        }
+        let d = r.draft_path(&dir).unwrap();
+        std::fs::create_dir_all(d.parent().unwrap()).unwrap();
+        std::fs::write(&d, b"x").unwrap();
+        assert_eq!(r.missing_bytes(&dir), r.model.sizes[&r.model.files[0]]);
+        // without the sizes the old rule: the whole model counts once
+        r.model.sizes.clear();
+        assert_eq!(r.missing_bytes(&dir), r.model.size);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
