@@ -48,7 +48,7 @@
     <div class="hero-copy">
       <p class="eyebrow">Open source · MIT · macOS, Linux, Windows</p>
       <h1>Big models.<br><span class="grad">One command.</span></h1>
-      <p class="hero-num"><b>50</b><span>tokens / second<br>DeepSeek V4.1 Flash, 763B parameters<br>2-bit quant (ISTA GSQ-RCO IQ2_XXS)<br>one 32 GB GPU</span></p>
+      <p class="hero-num"><b>50</b><span>tokens / second<br>DeepSeek V4.1 Flash, 763B parameters<br>2-bit quant (ISTA GSQ-RCO IQ2_XXS)<br>one 32 GB GPU, 120 GB RAM</span></p>
       <p class="lede">FLE Link installs the engine, fetches a model that fits your machine and serves an OpenAI- and Anthropic-compatible API. Nothing to configure.</p>
 
       <div class="install" data-install>
@@ -64,7 +64,7 @@
       </div>
 
       <dl class="proof">
-        <div><dt>50 tok/s</dt><dd>DeepSeek V4.1 Flash on one 32 GB GPU, same answer every run</dd></div>
+        <div><dt>50 tok/s</dt><dd>DeepSeek V4.1 Flash on one 32 GB GPU with 120 GB RAM, same answer every run</dd></div>
         <div><dt>66 s</dt><dd>from nothing to the first answer on Linux with an NVIDIA card</dd></div>
         <div><dt>91 tok/s</dt><dd>a 125B MoE on one GPU, 2.5× plain llama.cpp</dd></div>
       </dl>
@@ -119,7 +119,7 @@
           <h3>DeepSeek-V4.1-Flash-1017</h3>
           <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO IQ2_XXS by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 232 GiB</p>
         </header>
-        <div class="big-num">50 <span>tok/s with the DSpark draft model, lossless: the same answer every run (FLE v1.2.5, three runs: 49.8, 50.8, 50.6)</span></div>
+        <div class="big-num">50 <span>tok/s with the DSpark draft model, which does not change the output: the same answer every run (FLE v1.2.5, three runs: 49.8, 50.8, 50.6). The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time</span></div>
         <ul class="flag-list">
           <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, Ryzen 9 9950X3D, Linux. Experts a usage profile picks most sit on the card, a 90 GB expert store in RAM holds the rest. Through FLE Link the same recipe gives 49.9 tok/s (median of three, 5 Nov 2026)</li>
           <li><b>One command</b> <code>flelink run deepseek-v41-ista-dspark</code> installs the FLE engine, fetches the model and the draft, and uses copies already on your disk</li>

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **`flelink bench --task` points to `--share`.** A run without it now ends with a one-line hint, and the README explains the option.
+
 ## 0.1.7 (2026-11-06)
 
 - **A model with some parts already on the disk is no longer turned down for the disk space of all of them.** The fit check counted the whole
