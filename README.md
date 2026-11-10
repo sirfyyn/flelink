@@ -31,7 +31,7 @@ webhooks, your messages), and FLE Link starts it with your model on the Agent pa
 | | |
 |---|---|
 | **66 s** | from nothing to the first answer on Linux with an NVIDIA card |
-| **68 s** | the same on an 8 GB M2 MacBook, model download included (FLE Link 0.1.3, fresh home, 3 Nov 2026). 46 s of it are the 0.8 GiB download. Measured again with 0.1.12 on 10 Nov: 84 s on a slower connection (68 s download), 16 s for everything else instead of 22 |
+| **68 s** | the same on an 8 GB M2 MacBook, model download included (FLE Link 0.1.3, fresh home, 3 Nov 2026). 46 s of it are the 0.8 GiB download. Measured again with 0.1.12 on 10 Nov, two runs: 74 s and 83 s on a slower connection (61 s and 68 s download); everything else took 13 s and 15 s instead of 22 |
 | **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine and its MTP draft head, 2.5× plain llama.cpp (`flelink run` starts it without the head so far) |
 | **50 tok/s** | DeepSeek-V4.1-Flash (763B, 2-bit quant ISTA GSQ-RCO IQ2_XXS, 232 GiB) on one 32 GB GPU with 120 GB RAM and the DSpark draft (FLE v1.2.5: 49.8 / 50.8 / 50.6; through FLE Link 49.9 median) (`flelink run deepseek-v41-ista-dspark`). The draft does not change the output: the same answer every run, 37.6 tok/s without it by hand, 37.2 through FLE Link. The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time |
 
