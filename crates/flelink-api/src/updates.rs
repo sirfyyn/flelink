@@ -162,8 +162,9 @@ pub fn app_place_of(os: &str, exe: &Path, appimage: Option<&str>) -> Option<AppP
                 .then(|| AppPlace::MacBundle(bundle.to_path_buf()))
         }
         "linux" => {
-            let f = PathBuf::from(appimage.filter(|a| !a.is_empty())?);
-            f.is_absolute().then_some(AppPlace::AppImage(f))
+            // a full path as the AppImage runtime gives it (not `is_absolute`: the tests ask this on Windows too)
+            let f = appimage.filter(|a| a.starts_with('/'))?;
+            Some(AppPlace::AppImage(PathBuf::from(f)))
         }
         _ => None,
     }
