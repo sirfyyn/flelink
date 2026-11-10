@@ -32,6 +32,11 @@
       const face = (p, col) => { ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) ctx.lineTo(p[k][0], p[k][1]); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); };
       ctx.globalAlpha = alpha;
       face([a, b, c, d], cols[0]); face([d, c, e, f], cols[1]); face([b, g, e, c], cols[2]);
+      // a thin light edge on top, so a settled pile still reads as single cubes and not as one block
+      ctx.globalAlpha = alpha * 0.22; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(d[0], d[1]); ctx.lineTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      ctx.globalAlpha = alpha * 0.5; ctx.strokeStyle = "#06080d";
+      ctx.beginPath(); ctx.moveTo(d[0], d[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(b[0], b[1]); ctx.moveTo(c[0], c[1]); ctx.lineTo(e[0], e[1]); ctx.stroke();
       if (heat > 0.03) { ctx.globalAlpha = alpha * heat; face([a, b, c, d], "#ffffff"); }
       ctx.globalAlpha = 1;
     };
@@ -75,8 +80,9 @@
     const hot = cubes.filter((c) => c.hot >= 0), cold = cubes.filter((c) => c.hot < 0);
     const s = stage(cv, (st) => {
       const narrow = st.W < 900;
-      st.u = Math.max(8, Math.min(st.W / (narrow ? 34 : 38), st.H / (narrow ? 32 : 25)));
-      st.ox = st.W * (narrow ? 0.36 : 0.57); st.oy = st.H * (narrow ? 0.5 : 0.5);
+      // the pile and the card together are about 23 cubes wide and 17 high; the words keep the upper left
+      st.u = Math.max(8, Math.min(st.W / (narrow ? 34 : 39), st.H / (narrow ? 32 : 28)));
+      st.ox = st.W * (narrow ? 0.36 : 0.54); st.oy = st.H * (narrow ? 0.46 : 0.5);
     });
     // ?t=9 starts later in the sequence (for looking at a state while building)
     let clock = parseFloat(new URLSearchParams(location.search).get("t")) || 0, step = -1, mode = "draft", rate = 0, due = 0;

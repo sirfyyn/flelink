@@ -5,12 +5,13 @@
 <title>flelink.run · Layout-Blatt</title>
 <!-- Layout-Blatt für flelink.run (10.11.2026). Max: „große Animationen, Blickfänge, die zeigen, was ich zeigen will, ohne dass die
      Seite überladen wirkt“ und „mach einmal einen Scratch vorher und ein Layout-Sheet mit Vorlage“. Erst dieses Blatt, dann der Bau.
-     Skizzen sind Kästen, keine fertigen Bilder. Wird nicht ausgerollt (ausrollen.sh lässt site/entwurf aus). -->
-<link rel="stylesheet" href="layout.css">
+     Skizzen sind Kästen, keine fertigen Bilder. Stand: Look „A, Tiefe“ und Würfelstapel (Max' Wahl). Wird nicht ausgerollt (ausrollen.sh lässt site/entwurf aus). -->
+<link rel="stylesheet" href="layout.css?v=2">
 <body>
 <header class="kopf">
   <p class="eti">flelink.run · Layout-Blatt · 10.11.2026</p>
   <h1>Sieben Szenen. Je ein Blickfang, ein Satz.</h1>
+  <p class="eti" style="margin-top:14px">Look A · Tiefe: dunkler Raum, Würfel, Pink glüht</p>
   <p class="lead">Erst dieses Blatt, dann der Bau. Oben das Drehbuch als Skizzen, darunter die Vorlage, nach der jede Szene gebaut wird, dann Schrift, Farben, Bausteine und die Regeln für Bewegung.</p>
   <nav><a href="#drehbuch">1 Drehbuch</a><a href="#vorlage">2 Vorlage</a><a href="#schrift">3 Schrift</a><a href="#farbe">4 Farbe</a><a href="#bausteine">5 Bausteine</a><a href="#bewegung">6 Bewegung</a><a href="#regeln">7 Regeln</a></nav>
 </header>
@@ -23,12 +24,12 @@
     <article class="sz">
       <div class="bild b1">
         <span class="w-h">232 GiB of model.<br><em>32 GB of card.</em></span>
-        <span class="w-raster"><u></u></span>
+        <span class="w-wuerfel"><i></i><u></u></span>
         <span class="w-zahl">50.6</span><span class="w-zeile"></span><span class="w-zeile kurz"></span>
       </div>
       <h3><b>1</b> Maßstab</h3>
       <p class="zeigt">Zeigt: ein riesiges Modell läuft auf einer kleinen Karte.</p>
-      <dl><dt>Blickfang</dt><dd>232 Quadrate über die ganze Breite, 32 pink gerahmt; sie leuchten auf, während die Zahl hochläuft.</dd>
+      <dl><dt>Blickfang</dt><dd>232 Würfel fallen zu einem Stapel, ein Würfel je GiB. Daneben die Karte: 32 Würfel, pink und glühend. Die Würfel, die gerade gebraucht werden, wandern auf die Karte, die Zahl läuft hoch.</dd>
           <dt>Wörter</dt><dd>7 in der Überschrift, sonst nur Zahl und Legende</dd>
           <dt>Bedienung</dt><dd>Schalter mit und ohne Entwurfsmodell</dd></dl>
     </article>
@@ -49,12 +50,13 @@
     <article class="sz">
       <div class="bild b3">
         <span class="w-satz">I have <em>a 16 GB card</em> and <em>64</em> GB of RAM.</span>
+        <span class="w-wuerfel klein"><i></i><u></u></span>
         <span class="w-riesig">125B</span>
         <span class="w-cmd klein"></span>
       </div>
       <h3><b>3</b> Deine Karte</h3>
       <p class="zeigt">Zeigt: was auf dem Rechner des Besuchers läuft.</p>
-      <dl><dt>Blickfang</dt><dd>Eine riesige Zahl, die beim Umstellen der Karte umspringt.</dd>
+      <dl><dt>Blickfang</dt><dd>Stapel und Karte in der Größe des Besuchers: beim Umstellen wächst oder schrumpft beides, die riesige Zahl springt um.</dd>
           <dt>Wörter</dt><dd>ein Satz zum Ausfüllen, Modellname, gemessenes Tempo</dd>
           <dt>Bedienung</dt><dd>zwei Auswahlfelder im Satz</dd></dl>
     </article>
@@ -156,22 +158,22 @@
 
 <section id="farbe">
   <h2><i>4</i> Farbe</h2>
-  <p class="lead">Ein dunkler Grund, ein Pink. Pink steht nur dort, wo etwas gemessen ist, sich bewegt oder gedrückt werden soll. Die Seite bleibt in beiden Systemthemen dunkel.</p>
+  <p class="lead">Ein fast schwarzer Grund, ein Pink, das glüht. Pink steht nur dort, wo etwas gemessen ist, sich bewegt oder gedrückt werden soll. Die Seite bleibt in beiden Systemthemen dunkel.</p>
   <div class="farben">
-    <div><i class="f f1"></i><b>#0b0e14</b><span>Grund</span></div>
-    <div><i class="f f2"></i><b>#0e1219</b><span>Band, jede zweite Szene</span></div>
-    <div><i class="f f3"></i><b>#090c12</b><span>Terminal, Befehl</span></div>
-    <div><i class="f f4"></i><b>#1f2633</b><span>Linie</span></div>
-    <div><i class="f f5"></i><b>#94a0b2</b><span>Text, gedämpft</span></div>
-    <div><i class="f f6"></i><b>#e9edf3</b><span>Text, Überschrift</span></div>
-    <div><i class="f f7"></i><b>#ff2d95</b><span>Signal: Zahl, Bewegung, Knopf</span></div>
+    <div><i class="f f1"></i><b>#06080d</b><span>Grund</span></div>
+    <div><i class="f f2"></i><b>#0a0d14</b><span>Band, jede zweite Szene</span></div>
+    <div><i class="f f3"></i><b>#0e121a</b><span>Fläche: Terminal, Befehl</span></div>
+    <div><i class="f f4"></i><b>#2a3346</b><span>Linie, ruhende Würfel</span></div>
+    <div><i class="f f5"></i><b>#8793a8</b><span>Text, gedämpft</span></div>
+    <div><i class="f f6"></i><b>#f2f5fa</b><span>Text, Überschrift</span></div>
+    <div><i class="f f7"></i><b>#ff2d95</b><span>Signal: Zahl, Karte, Knopf; mit Glühen</span></div>
     <div><i class="f f8"></i><b>#34d399</b><span>nur für „fits“ und „Ready“</span></div>
   </div>
 </section>
 
 <section id="bausteine">
   <h2><i>5</i> Bausteine</h2>
-  <p class="lead">Sechs Bausteine, aus denen alle Szenen bestehen. Eckig, flach, ohne Schatten und ohne Verläufe.</p>
+  <p class="lead">Sechs Bausteine, aus denen alle Szenen bestehen, dazu die Würfelbühne der Szenen 1 und 3. Eckig; Tiefe kommt aus den Würfeln und aus dem Glühen des Pink, nicht aus Schatten an Kästen.</p>
   <div class="bau">
     <div><p class="b-name">Befehl</p><div class="k-cmd"><code>curl -fsSL https://flelink.run/install.sh | sh</code><b>Copy</b></div><small>Pinker Rahmen, pinker Knopf. In Szene 7 so groß wie eine Überschrift.</small></div>
     <div><p class="b-name">Terminal</p><div class="k-term"><span>an empty MacBook Air · 8 GB</span><pre><i>==&gt;</i> Downloading Llama 3.2 1B Instruct (0.8 GiB)
@@ -190,9 +192,9 @@
   <table class="bew">
     <thead><tr><th>Szene</th><th>Was sich bewegt</th><th>Tempo</th><th>Start</th><th>Was echt ist</th></tr></thead>
     <tbody>
-      <tr><th>1 Maßstab</th><td>Quadrate erscheinen, 32 werden pink, dann leuchten sie im Takt der Token auf; die Zahl läuft hoch</td><td>5,6 s Vorlauf, dann 50,6 oder 37,6 Token je Sekunde</td><td>sofort</td><td>Größen und beide Tempi; welche Quadrate leuchten, ist Illustration</td></tr>
+      <tr><th>1 Maßstab</th><td>Würfel fallen zum Stapel, die Karte erscheint, heiße Würfel wandern auf die Karte; die Zahl läuft hoch</td><td>8,2 s Vorlauf, dann 50,6 oder 37,6 Token je Sekunde</td><td>sofort</td><td>Größen und beide Tempi; welche Würfel wandern, ist Illustration</td></tr>
       <tr><th>2 Ein Befehl</th><td>Terminal schreibt, Stoppuhr zählt</td><td>Echtzeit, 68 s</td><td>wenn im Bild</td><td>alles, Aufzeichnung vom 3. Nov.</td></tr>
-      <tr><th>3 Deine Karte</th><td>die große Zahl springt um</td><td>0,25 s</td><td>bei Auswahl</td><td>Urteil nach der Regel des Programms; Tempo nur, wo gemessen</td></tr>
+      <tr><th>3 Deine Karte</th><td>Stapel und Karte bauen sich um, die große Zahl springt um</td><td>unter 1 s</td><td>bei Auswahl</td><td>Urteil nach der Regel des Programms; Tempo nur, wo gemessen</td></tr>
       <tr><th>4 Das Rennen</th><td>drei Bahnen schreiben, Balken wachsen</td><td>91, 74, 36 Token je Sekunde</td><td>wenn im Bild</td><td>die drei Tempi; der Text ist Illustration</td></tr>
       <tr><th>5 Kaputt gemacht</th><td>Terminal schreibt</td><td>Echtzeit</td><td>bei Wahl des Reiters</td><td>alles, Aufzeichnungen vom 3. Nov.</td></tr>
       <tr><th>6 So sieht es aus</th><td>zwei Filme</td><td>wie aufgenommen</td><td>wenn im Bild, stumm</td><td>Bildschirmaufnahmen</td></tr>
@@ -213,7 +215,7 @@
     <div><b>Ein Blickfang je Szene.</b><span>Wenn zwei Dinge um den Blick streiten, fliegt eines raus oder bekommt eine eigene Szene.</span></div>
     <div><b>Höchstens zwei Zeilen Überschrift, kein Absatz.</b><span>Was erklärt werden muss, steht zugeklappt darunter.</span></div>
     <div><b>Jede Zahl ist gemessen.</b><span>Wo etwas Illustration ist, sagt das Kleingedruckte der Szene es.</span></div>
-    <div><b>Pink ist selten.</b><span>Eine Zahl, eine Bewegung, ein Knopf. Nie als Fläche hinter Text.</span></div>
+    <div><b>Pink ist selten.</b><span>Eine Zahl, eine Bewegung, ein Knopf. Es darf glühen, aber nie als Fläche hinter Text.</span></div>
     <div><b>Der Befehl steht zweimal.</b><span>In Szene 2 beim Zusehen und in Szene 7 zum Mitnehmen.</span></div>
     <div><b>Das Handy ist keine Verkleinerung.</b><span>Dieselben Szenen, dieselbe Reihenfolge, Bühne über die volle Breite.</span></div>
   </div>
