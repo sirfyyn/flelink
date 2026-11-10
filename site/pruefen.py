@@ -7,6 +7,7 @@ Regeln:
   version      `softwareVersion` im JSON-LD und jedes „FLE Link X.Y.Z“ im Text nennen die Version aus Cargo.toml
                (Ausnahme: Sätze, die sagen, womit eine Aufzeichnung gemacht wurde, „recorded … with FLE Link X.Y.Z“)
   platzhalter  kein {PLATZHALTER} im HTML
+  csp          kein eingebettetes Skript, kein eingebetteter Stil, kein on…-Attribut (der Server erlaubt nur Dateien von sich)
   sitemap      jede Seite in sitemap.xml gibt es als Datei, und keine davon trägt noindex
   links        jede lokale Datei, auf die index.html zeigt (href, src, poster, data-cast, data-end), liegt in site/
                (install.sh und install.ps1 kommen beim Ausrollen aus der Wurzel dazu)
@@ -49,6 +50,15 @@ def main() -> int:
                 funde.append(f"{datei.name}: version „FLE Link {v}“ statt {version}")
         for p in re.findall(r"\{[A-Z_0-9]+\}", roh):
             funde.append(f"{datei.name}: platzhalter {p}")
+        # Der Server schickt Content-Security-Policy "script-src 'self'; style-src 'self'": eingebettete Skripte, Stile und
+        # Ereignis-Attribute laufen dort nicht (lokal schon; am 10.11.2026 blieb so live das Raster ausgeblendet).
+        for skript in re.findall(r"<script\b([^>]*)>", roh):
+            if "src=" not in skript and "application/ld+json" not in skript:
+                funde.append(f"{datei.name}: csp eingebettetes <script> ohne src (der Server führt es nicht aus)")
+        if re.search(r"<style\b", roh) or re.search(r'\sstyle="', roh):
+            funde.append(f"{datei.name}: csp eingebetteter Stil (<style> oder style=\"…\"; der Server wendet ihn nicht an)")
+        if re.search(r'\son[a-z]+="', roh):
+            funde.append(f"{datei.name}: csp Ereignis-Attribut (on…=\"…\"; der Server führt es nicht aus)")
     for loc in re.findall(r"<loc>https://flelink\.run/([^<]*)</loc>", (SITE / "sitemap.xml").read_text(encoding="utf-8")):
         ziel = SITE / (loc or "index.html")
         if not ziel.is_file():
