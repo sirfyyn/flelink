@@ -37,6 +37,7 @@
     const rows = document.getElementById("fit-rows");
     const big = document.getElementById("fit-b");
     const what = document.getElementById("fit-what");
+    const nameEl = document.getElementById("fit-name"), tokEl = document.getElementById("fit-tok"), cmdEl = document.getElementById("fit-cmd");
     const anySize = document.getElementById("any-size");
     const anyOut = document.getElementById("any-out");
     const PARAMS = { "llama-3.2-1b": 1, "katy-27b-dflash": 27, "fle-iq3-m": 125, "deepseek-v41-ista-dspark": 763, "rin-deepseek-v41-dspark": 763 };
@@ -67,13 +68,23 @@
       }).join("");
 
       const name = vendor === "apple" ? `Apple Silicon with ${ram} GB` : vendor === "none" ? `no GPU and ${ram} GB RAM` : `an NVIDIA card with ${gpu} GB and ${ram} GB RAM`;
+      // the scene: a huge number, the model, its speed where one was measured, the command; and the cubes (cubes.js):
+      // a pile as big as the model, a card as big as the memory the GPU may use
+      const cardGib = Math.round(m.gpu / F.GIB);
       if (best) {
         big.textContent = PARAMS[best.model.id] + "B";
-        what.textContent = `parameters is the biggest model in the catalog that ${best.fit === "tight" ? "runs (tight)" : "fits"} on ${name}: ${best.model.title}` +
-          (best.s ? `, measured at ${best.s.about ? "about " : ""}${num(best.s.tok)} tok/s on this hardware.` : ". Nobody has measured its speed on this size yet.");
+        nameEl.textContent = best.model.title;
+        tokEl.innerHTML = best.s ? `<b>${best.s.about ? "~" : ""}${num(best.s.tok)}</b> tok/s, measured on this hardware` : "Nobody has measured this size yet.";
+        cmdEl.textContent = "flelink run " + best.model.id;
+        what.textContent = `The biggest model in the catalog that ${best.fit === "tight" ? "runs (tight: slower)" : "fits"} on ${name}.` + (best.s ? " " + best.s.note + "." : "");
+        if (window.FLECubes) window.FLECubes.fit(Math.max(1, Math.round(best.model.size / F.GIB)), cardGib);
       } else {
-        big.textContent = "0";
-        what.textContent = `of these models fit on ${name}. A smaller GGUF may: try a size below.`;
+        big.textContent = "–";
+        nameEl.textContent = "None of the five";
+        tokEl.textContent = "A smaller GGUF may fit: open the list below and try a size.";
+        cmdEl.textContent = "flelink models";
+        what.textContent = `Nothing in the catalog fits on ${name}.`;
+        if (window.FLECubes) window.FLECubes.fit(0, cardGib);
       }
       any(m);
     };

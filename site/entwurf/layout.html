@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>flelink.run · Layout-Blatt</title>
+<!-- Layout-Blatt für flelink.run (10.11.2026). Max: „große Animationen, Blickfänge, die zeigen, was ich zeigen will, ohne dass die
+     Seite überladen wirkt“ und „mach einmal einen Scratch vorher und ein Layout-Sheet mit Vorlage“. Erst dieses Blatt, dann der Bau.
+     Skizzen sind Kästen, keine fertigen Bilder. Wird nicht ausgerollt (ausrollen.sh lässt site/entwurf aus). -->
+<link rel="stylesheet" href="layout.css">
+<body>
+<header class="kopf">
+  <p class="eti">flelink.run · Layout-Blatt · 10.11.2026</p>
+  <h1>Sieben Szenen. Je ein Blickfang, ein Satz.</h1>
+  <p class="lead">Erst dieses Blatt, dann der Bau. Oben das Drehbuch als Skizzen, darunter die Vorlage, nach der jede Szene gebaut wird, dann Schrift, Farben, Bausteine und die Regeln für Bewegung.</p>
+  <nav><a href="#drehbuch">1 Drehbuch</a><a href="#vorlage">2 Vorlage</a><a href="#schrift">3 Schrift</a><a href="#farbe">4 Farbe</a><a href="#bausteine">5 Bausteine</a><a href="#bewegung">6 Bewegung</a><a href="#regeln">7 Regeln</a></nav>
+</header>
+
+<section id="drehbuch">
+  <h2><i>1</i> Drehbuch</h2>
+  <p class="lead">Jede Szene füllt einen Bildschirm. Grau ist Fläche, Pink ist das, was sich bewegt. Unter jeder Skizze steht, was sie zeigen soll und wie viele Wörter sie höchstens trägt.</p>
+  <div class="szenen">
+
+    <article class="sz">
+      <div class="bild b1">
+        <span class="w-h">232 GiB of model.<br><em>32 GB of card.</em></span>
+        <span class="w-raster"><u></u></span>
+        <span class="w-zahl">50.6</span><span class="w-zeile"></span><span class="w-zeile kurz"></span>
+      </div>
+      <h3><b>1</b> Maßstab</h3>
+      <p class="zeigt">Zeigt: ein riesiges Modell läuft auf einer kleinen Karte.</p>
+      <dl><dt>Blickfang</dt><dd>232 Quadrate über die ganze Breite, 32 pink gerahmt; sie leuchten auf, während die Zahl hochläuft.</dd>
+          <dt>Wörter</dt><dd>7 in der Überschrift, sonst nur Zahl und Legende</dd>
+          <dt>Bedienung</dt><dd>Schalter mit und ohne Entwurfsmodell</dd></dl>
+    </article>
+
+    <article class="sz">
+      <div class="bild b2">
+        <span class="w-h">One command.<br><em>68 seconds.</em></span>
+        <span class="w-cmd"></span>
+        <span class="w-term"><u></u><u></u><u class="p"></u><u></u></span>
+      </div>
+      <h3><b>2</b> Ein Befehl</h3>
+      <p class="zeigt">Zeigt: von nichts zur Antwort, ohne etwas einzustellen.</p>
+      <dl><dt>Blickfang</dt><dd>Die echte Aufzeichnung läuft in Echtzeit, die Stoppuhr zählt groß mit.</dd>
+          <dt>Wörter</dt><dd>4 in der Überschrift, der Befehl</dd>
+          <dt>Bedienung</dt><dd>Abspielen, Sprungmarken, 1× / 4× / 16×</dd></dl>
+    </article>
+
+    <article class="sz">
+      <div class="bild b3">
+        <span class="w-satz">I have <em>a 16 GB card</em> and <em>64</em> GB of RAM.</span>
+        <span class="w-riesig">125B</span>
+        <span class="w-cmd klein"></span>
+      </div>
+      <h3><b>3</b> Deine Karte</h3>
+      <p class="zeigt">Zeigt: was auf dem Rechner des Besuchers läuft.</p>
+      <dl><dt>Blickfang</dt><dd>Eine riesige Zahl, die beim Umstellen der Karte umspringt.</dd>
+          <dt>Wörter</dt><dd>ein Satz zum Ausfüllen, Modellname, gemessenes Tempo</dd>
+          <dt>Bedienung</dt><dd>zwei Auswahlfelder im Satz</dd></dl>
+    </article>
+
+    <article class="sz">
+      <div class="bild b4">
+        <span class="w-h">Same model. Same card.<br><em>2.5× faster.</em></span>
+        <span class="w-bahn a"><u></u></span><span class="w-bahn b"><u></u></span><span class="w-bahn c"><u></u></span>
+      </div>
+      <h3><b>4</b> Das Rennen</h3>
+      <p class="zeigt">Zeigt: FLE ist schneller als die anderen, bei gleicher Datei.</p>
+      <dl><dt>Blickfang</dt><dd>Drei Bahnen schreiben gleichzeitig mit 91, 74 und 36 Token pro Sekunde.</dd>
+          <dt>Wörter</dt><dd>6 in der Überschrift, drei Namen, drei Zahlen</dd>
+          <dt>Bedienung</dt><dd>„Run it again“</dd></dl>
+    </article>
+
+    <article class="sz">
+      <div class="bild b5">
+        <span class="w-h">We broke it on purpose.<br><em>Then recorded it.</em></span>
+        <span class="w-reiter"><u class="p"></u><u></u><u></u><u></u></span>
+        <span class="w-term flach"><u></u><u class="p"></u></span>
+      </div>
+      <h3><b>5</b> Kaputt gemacht</h3>
+      <p class="zeigt">Zeigt: es hält, wenn etwas schiefgeht.</p>
+      <dl><dt>Blickfang</dt><dd>Ein Download bricht bei 45 % ab und läuft beim zweiten Aufruf dort weiter.</dd>
+          <dt>Wörter</dt><dd>8 in der Überschrift, ein Satz je Reiter</dd>
+          <dt>Bedienung</dt><dd>vier Reiter, je eine echte Aufzeichnung</dd></dl>
+    </article>
+
+    <article class="sz">
+      <div class="bild b6">
+        <span class="w-h">Terminal, browser,<br><em>or your own tools.</em></span>
+        <span class="w-film"></span><span class="w-film"></span>
+        <span class="w-links"><u></u><u></u><u></u><u></u></span>
+      </div>
+      <h3><b>6</b> So sieht es aus</h3>
+      <p class="zeigt">Zeigt: Oberfläche und was es sonst noch kann.</p>
+      <dl><dt>Blickfang</dt><dd>Zwei Filme nebeneinander: Terminal und Studio.</dd>
+          <dt>Wörter</dt><dd>6 in der Überschrift, acht Links mit je einer Zeile</dd>
+          <dt>Bedienung</dt><dd>keine, die Filme laufen stumm</dd></dl>
+    </article>
+
+    <article class="sz">
+      <div class="bild b7">
+        <span class="w-h mitte">One command.<br><em>Then an answer.</em></span>
+        <span class="w-cmd gross"></span>
+        <span class="w-fragen"><u></u><u></u><u></u><u></u></span>
+      </div>
+      <h3><b>7</b> Installieren</h3>
+      <p class="zeigt">Zeigt: den einen Schritt, den der Besucher jetzt tun soll.</p>
+      <dl><dt>Blickfang</dt><dd>Der Befehl, so groß wie eine Überschrift.</dd>
+          <dt>Wörter</dt><dd>6 in der Überschrift, eine Zeile, vier zugeklappte Fragen</dd>
+          <dt>Bedienung</dt><dd>Kopieren</dd></dl>
+    </article>
+
+  </div>
+  <div class="weg">
+    <h3>Was dafür wegfällt</h3>
+    <p>Die Textabschnitte der jetzigen Seite. Sie werden zu den acht Links in Szene 6 oder zu Kleingedrucktem, das zugeklappt unter der jeweiligen Szene steht.</p>
+    <ul><li>Flagship models (Zahlen stehen im Rennen und in „Deine Karte“)</li><li>Where it sits (Schichtbild)</li><li>How it works (drei Schritte)</li><li>In the Studio (zehn Punkte)</li><li>Coding agents, Agent · FLE Durable, Host mode</li><li>Roadmap</li></ul>
+  </div>
+</section>
+
+<section id="vorlage">
+  <h2><i>2</i> Vorlage einer Szene</h2>
+  <p class="lead">Jede Szene hat dieselben drei Zonen. Wer eine neue Szene baut, füllt diese Vorlage und nichts sonst.</p>
+  <div class="vorlage">
+    <div class="v-rahmen">
+      <div class="v-zone a"><b>A · Aussage</b><span>Überschrift, höchstens zwei Zeilen, die zweite in Pink. Kein Absatz darunter.</span></div>
+      <div class="v-zone b"><b>B · Bühne</b><span>Der eine Blickfang. Nimmt mindestens die halbe Höhe. Volle Spaltenbreite.</span></div>
+      <div class="v-zone c"><b>C · Kleingedrucktes</b><span>Eine zugeklappte Zeile: womit gemessen, was Illustration ist.</span></div>
+      <i class="v-m l"></i><i class="v-m r"></i>
+    </div>
+    <dl class="v-masse">
+      <dt>Höhe</dt><dd>mindestens ein Bildschirm (100svh), nie fest: lange Inhalte dürfen wachsen</dd>
+      <dt>Spalte</dt><dd>1120 px, links und rechts mindestens 20 px Rand</dd>
+      <dt>Abstand A zu B</dt><dd>32 px</dd>
+      <dt>Abstand B zu C</dt><dd>20 px</dd>
+      <dt>Innenabstand oben und unten</dt><dd>80 px, am Handy 56 px</dd>
+      <dt>Wechsel</dt><dd>Szenen wechseln zwischen Grund und leicht gehobenem Band; eine Linie trennt sie</dd>
+      <dt>Handy</dt><dd>dieselben Zonen untereinander, Bühne zuerst sichtbar; nichts läuft seitlich über</dd>
+    </dl>
+  </div>
+</section>
+
+<section id="schrift">
+  <h2><i>3</i> Schrift</h2>
+  <p class="lead">Zwei Schriften. DM Sans für alles, was man liest, JetBrains Mono für alles, was man misst oder tippt.</p>
+  <div class="schrift">
+    <div><span class="p-h1">232 GiB of model.</span><small>Überschrift Szene 1 · DM Sans 700 · 42 bis 96 px · Zeilenhöhe 1,0 · Laufweite −3 %</small></div>
+    <div><span class="p-h2">One command. <em>68 seconds.</em></span><small>Überschrift Szene · DM Sans 700 · 35 bis 80 px · zweite Zeile Pink</small></div>
+    <div><span class="p-zahl">50.6</span><small>Große Zahl · JetBrains Mono 700 · 64 bis 208 px · Laufweite −6 % · immer Pink</small></div>
+    <div><span class="p-satz">I have <em>a 16 GB NVIDIA card</em></span><small>Satz zum Ausfüllen · DM Sans 700 · 27 bis 51 px · Auswahl unterstrichen in Pink</small></div>
+    <div><span class="p-text">The same command again continues at 45 %.</span><small>Ein Satz · DM Sans 400 · 17 bis 19 px · gedämpftes Grau</small></div>
+    <div><span class="p-mono">$ flelink run deepseek-v41-ista-dspark</span><small>Befehl, Terminal · JetBrains Mono 400 · 13 bis 15 px</small></div>
+    <div><span class="p-eti">measured on this hardware</span><small>Etikett · JetBrains Mono 500 · 11 bis 12 px · Versalien · Laufweite +10 %</small></div>
+  </div>
+</section>
+
+<section id="farbe">
+  <h2><i>4</i> Farbe</h2>
+  <p class="lead">Ein dunkler Grund, ein Pink. Pink steht nur dort, wo etwas gemessen ist, sich bewegt oder gedrückt werden soll. Die Seite bleibt in beiden Systemthemen dunkel.</p>
+  <div class="farben">
+    <div><i class="f f1"></i><b>#0b0e14</b><span>Grund</span></div>
+    <div><i class="f f2"></i><b>#0e1219</b><span>Band, jede zweite Szene</span></div>
+    <div><i class="f f3"></i><b>#090c12</b><span>Terminal, Befehl</span></div>
+    <div><i class="f f4"></i><b>#1f2633</b><span>Linie</span></div>
+    <div><i class="f f5"></i><b>#94a0b2</b><span>Text, gedämpft</span></div>
+    <div><i class="f f6"></i><b>#e9edf3</b><span>Text, Überschrift</span></div>
+    <div><i class="f f7"></i><b>#ff2d95</b><span>Signal: Zahl, Bewegung, Knopf</span></div>
+    <div><i class="f f8"></i><b>#34d399</b><span>nur für „fits“ und „Ready“</span></div>
+  </div>
+</section>
+
+<section id="bausteine">
+  <h2><i>5</i> Bausteine</h2>
+  <p class="lead">Sechs Bausteine, aus denen alle Szenen bestehen. Eckig, flach, ohne Schatten und ohne Verläufe.</p>
+  <div class="bau">
+    <div><p class="b-name">Befehl</p><div class="k-cmd"><code>curl -fsSL https://flelink.run/install.sh | sh</code><b>Copy</b></div><small>Pinker Rahmen, pinker Knopf. In Szene 7 so groß wie eine Überschrift.</small></div>
+    <div><p class="b-name">Terminal</p><div class="k-term"><span>an empty MacBook Air · 8 GB</span><pre><i>==&gt;</i> Downloading Llama 3.2 1B Instruct (0.8 GiB)
+    model  ━━━━━━━━━━━━  60.3 %
+<u>Ready:</u> llama-3.2-1b</pre></div><small>Echte Aufzeichnung, feste Höhe, neueste Zeile bleibt im Bild.</small></div>
+    <div><p class="b-name">Große Zahl</p><p class="k-zahl">125B</p><small>Eine je Szene, höchstens. Trägt immer eine Einheit oder einen Satz daneben.</small></div>
+    <div><p class="b-name">Auswahl im Satz</p><p class="k-satz">I have <em>a 16 GB NVIDIA card</em> and <em>64</em> GB of RAM.</p><small>Die Auswahl ist Teil des Satzes, keine Formularzeile.</small></div>
+    <div><p class="b-name">Reiter und Schalter</p><div class="k-reiter"><b>Download killed at 45 %</b><span>Engine killed</span><span>Port taken</span></div><small>Der gewählte ist pink gefüllt. Nie mehr als vier.</small></div>
+    <div><p class="b-name">Kleingedrucktes</p><p class="k-klein">▸ How this was measured</p><small>Zugeklappt. Hier steht alles, was ehrlich dazugehört und nicht groß stehen muss.</small></div>
+  </div>
+</section>
+
+<section id="bewegung">
+  <h2><i>6</i> Bewegung</h2>
+  <p class="lead">Bewegung zeigt hier etwas Gemessenes oder Aufgezeichnetes. Nichts bewegt sich nur zur Zierde.</p>
+  <table class="bew">
+    <thead><tr><th>Szene</th><th>Was sich bewegt</th><th>Tempo</th><th>Start</th><th>Was echt ist</th></tr></thead>
+    <tbody>
+      <tr><th>1 Maßstab</th><td>Quadrate erscheinen, 32 werden pink, dann leuchten sie im Takt der Token auf; die Zahl läuft hoch</td><td>5,6 s Vorlauf, dann 50,6 oder 37,6 Token je Sekunde</td><td>sofort</td><td>Größen und beide Tempi; welche Quadrate leuchten, ist Illustration</td></tr>
+      <tr><th>2 Ein Befehl</th><td>Terminal schreibt, Stoppuhr zählt</td><td>Echtzeit, 68 s</td><td>wenn im Bild</td><td>alles, Aufzeichnung vom 3. Nov.</td></tr>
+      <tr><th>3 Deine Karte</th><td>die große Zahl springt um</td><td>0,25 s</td><td>bei Auswahl</td><td>Urteil nach der Regel des Programms; Tempo nur, wo gemessen</td></tr>
+      <tr><th>4 Das Rennen</th><td>drei Bahnen schreiben, Balken wachsen</td><td>91, 74, 36 Token je Sekunde</td><td>wenn im Bild</td><td>die drei Tempi; der Text ist Illustration</td></tr>
+      <tr><th>5 Kaputt gemacht</th><td>Terminal schreibt</td><td>Echtzeit</td><td>bei Wahl des Reiters</td><td>alles, Aufzeichnungen vom 3. Nov.</td></tr>
+      <tr><th>6 So sieht es aus</th><td>zwei Filme</td><td>wie aufgenommen</td><td>wenn im Bild, stumm</td><td>Bildschirmaufnahmen</td></tr>
+      <tr><th>7 Installieren</th><td>nichts</td><td></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <ul class="punkte">
+    <li>Eine Bewegung je Szene. Was nicht im Bild ist, steht still und rechnet nicht.</li>
+    <li>Keine Einblend-Effekte beim Scrollen, kein Mitwandern, kein Festhalten des Bildschirms.</li>
+    <li>Wer im System „Bewegung reduzieren“ gewählt hat, sieht jede Szene im Endzustand.</li>
+    <li>Ohne JavaScript steht in jeder Szene dasselbe als Text und Endzustand.</li>
+  </ul>
+</section>
+
+<section id="regeln">
+  <h2><i>7</i> Regeln</h2>
+  <div class="regeln">
+    <div><b>Ein Blickfang je Szene.</b><span>Wenn zwei Dinge um den Blick streiten, fliegt eines raus oder bekommt eine eigene Szene.</span></div>
+    <div><b>Höchstens zwei Zeilen Überschrift, kein Absatz.</b><span>Was erklärt werden muss, steht zugeklappt darunter.</span></div>
+    <div><b>Jede Zahl ist gemessen.</b><span>Wo etwas Illustration ist, sagt das Kleingedruckte der Szene es.</span></div>
+    <div><b>Pink ist selten.</b><span>Eine Zahl, eine Bewegung, ein Knopf. Nie als Fläche hinter Text.</span></div>
+    <div><b>Der Befehl steht zweimal.</b><span>In Szene 2 beim Zusehen und in Szene 7 zum Mitnehmen.</span></div>
+    <div><b>Das Handy ist keine Verkleinerung.</b><span>Dieselben Szenen, dieselbe Reihenfolge, Bühne über die volle Breite.</span></div>
+  </div>
+</section>
+</body>
+</html>

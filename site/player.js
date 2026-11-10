@@ -85,6 +85,7 @@
     if (labels[0]) fig.insertBefore(caption, pre);
     const [btn, clockEl, seek, rateBtn] = [bar.querySelector(".cast-play"), bar.querySelector(".cast-clock"), bar.querySelector(".cast-seek"), bar.querySelector(".cast-rate")];
     const marks = fig.querySelector(".cast-marks");
+    const bigClock = fig.dataset.clock ? document.querySelector(fig.dataset.clock) : null;   // a large stopwatch outside the figure
 
     const load = () => loading || (loading = Promise.all(urls.map((u) => fetch(u).then((r) => { if (!r.ok) throw new Error(u); return r.text(); }).then(parse)))
       .then((list) => {
@@ -121,6 +122,7 @@
       pre.innerHTML = screen.html(rows, pre.clientWidth < 620) + (playing && t < total ? '<span class="cast-cur"></span>' : "");
       pre.scrollTop = pre.scrollHeight; // like a terminal: from the top while it fits, then the newest lines stay in view
       clockEl.firstElementChild.textContent = clock(t - start);
+      if (bigClock) bigClock.textContent = clock(t - start);
       seek.value = total ? String(Math.round((t / total) * 1000)) : "0";
       fig.classList.toggle("is-done", t >= total);
       fig.classList.toggle("is-waiting", t < start);

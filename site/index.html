@@ -21,10 +21,14 @@
 <meta name="twitter:description" content="Big local AI models in one command. Watch the uncut first run, pick your card, see what fits.">
 <meta name="twitter:image" content="https://flelink.run/og.png">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "FLE Link", "url": "https://flelink.run/", "description": "FLE Link sits between an inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API, a browser Studio and a desktop app.", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS, Linux, Windows", "softwareVersion": "0.1.12", "downloadUrl": "https://github.com/sirfyyn/flelink/releases/latest", "sameAs": ["https://github.com/sirfyyn/flelink", "https://github.com/sirfyyn/FastLocalExperts", "https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF"], "license": "https://opensource.org/licenses/MIT", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "image": "https://flelink.run/og.png", "author": {"@type": "Person", "name": "Max Bitzer", "url": "https://sirfyyn.de/"}, "codeRepository": "https://github.com/sirfyyn/flelink"}</script>
-<link rel="stylesheet" href="style.css?v=3">
-<script src="js.js?v=3"></script>
+<link rel="stylesheet" href="style.css?v=7">
+<script src="js.js?v=7"></script>
 </head>
 <body>
+
+<!-- The page is a sequence of scenes (since 10 Nov 2026, Max: "große Animationen, Blickfänge, ohne dass die Seite überladen
+     wirkt"). One screen each, one thing that moves, one sentence. What used to be paragraphs is a row of links at the end.
+     Every number is measured; where something is an illustration, the scene says so in its small print. -->
 
 <header class="top">
   <div class="wrap top-in">
@@ -32,73 +36,57 @@
       <img src="logo-mark.svg" alt="" width="34" height="34"><span><b>FLE</b> Link</span>
     </a>
     <nav class="top-nav" aria-label="Main">
-      <a href="#fit">Your machine</a>
-      <a href="#models">Models</a>
-      <a href="#how">How it works</a>
+      <a href="#run">68 seconds</a>
+      <a href="#fit">Your card</a>
+      <a href="#race">The race</a>
       <a href="#broken">Broken on purpose</a>
-      <a href="#ways">Ways in</a>
-      <a class="btn ghost" href="https://github.com/sirfyyn/flelink">GitHub</a>
+      <a class="btn" href="https://github.com/sirfyyn/flelink">GitHub</a>
     </nav>
   </div>
 </header>
 
 <main>
 
-<!-- The first screen: the model drawn to scale (scale.js). One square is one GiB of DeepSeek V4.1 Flash; the pink ones are
-     the size of the card. Sizes and speeds are measured; which squares light up is an illustration, and the screen says so. -->
-<section class="hero scale" data-scale>
-  <div class="wrap">
-    <div class="hero-grid">
-      <div class="hero-copy">
-        <p class="eyebrow">FLE Link · open source · macOS, Linux, Windows</p>
-        <h1>232 GiB of model.<br><span class="hi">32 GB of card.</span></h1>
-        <p class="lede">DeepSeek V4.1 Flash has 763 billion parameters. FLE Link runs it on one graphics card, with one command. One square below is one gibibyte.</p>
-      </div>
-      <div class="install" data-install>
-        <div class="tabs" role="tablist" aria-label="Your system">
-          <button role="tab" id="tab-unix" aria-selected="true" data-os="unix">macOS · Linux</button>
-          <button role="tab" id="tab-win" aria-selected="false" data-os="win">Windows</button>
-        </div>
-        <div class="cmd">
-          <code id="cmd-text" data-unix="curl -fsSL https://flelink.run/install.sh | sh" data-win="irm https://flelink.run/install.ps1 | iex">curl -fsSL https://flelink.run/install.sh | sh</code>
-          <button class="copy" type="button" data-copy="#cmd-text" aria-label="Copy the install command">Copy</button>
-        </div>
-        <details class="more"><summary>About the installer and the unsigned app</summary><p class="fine">One file. No Python, no git, no sudo. Checked against its SHA-256 before it runs. It offers the desktop app too, or get the app directly: <a href="https://github.com/sirfyyn/flelink/releases/latest">macOS · Windows · Linux</a>. The app is not signed by Apple or Microsoft: downloaded in a browser, macOS asks once (right-click the app, Open) and Windows shows "More info, Run anyway". Through the installer neither asks.</p></details>
-      </div>
-    </div>
-
-    <p class="scale-say" data-say aria-hidden="true">This is the model: 232 GiB.</p>
-    <canvas class="scale-grid" role="img" aria-label="232 squares, one for each gibibyte of the model. 32 of them are framed in pink: the size of the graphics card. 90 more are the expert store in RAM, the rest is read from NVMe. Squares light up as tokens are generated."></canvas>
-    <ul class="scale-key">
-      <li class="k-card"><b>32</b> the card</li>
-      <li class="k-ram"><b>90</b> expert store in RAM</li>
-      <li class="k-disk"><b>110</b> read from NVMe</li>
-    </ul>
-    <div class="scale-run">
-      <p class="scale-rate"><b data-rate>50.6</b><span>tokens per second</span></p>
-      <p class="scale-out" data-out aria-hidden="true">A mixture-of-experts model does not use all of itself for every word. Each layer holds hundreds of experts, and a router picks a few of them per token. The ones that are picked most often stay on the graphics card.</p>
+<!-- 1 · SCALE (scale.js): one square is one GiB of DeepSeek V4.1 Flash; the pink ones are the size of the card. -->
+<section class="scene scale" data-scale>
+  <canvas class="stage" role="img" aria-label="A pile of 232 cubes, one for each gibibyte of the model. Next to it the outline of the graphics card, big enough for 32. The 32 busiest cubes fly from the pile onto the card, then they light up as tokens are generated."></canvas>
+  <div class="wrap over">
+    <h1>232 GiB of model.<br><span class="hi">32 GB of card.</span></h1>
+    <p class="say-line" data-say aria-hidden="true">This is the model.</p>
+    <div class="scale-foot">
+      <p class="num"><b data-rate>50.6</b><span>tokens per second</span></p>
       <div class="scale-mode" role="group" aria-label="With or without the draft model">
         <button type="button" data-mode="draft" aria-pressed="true">with the draft model<i>50.6</i></button>
         <button type="button" data-mode="exact" aria-pressed="false">without<i>37.6</i></button>
+        <button type="button" data-replay>again</button>
       </div>
     </div>
-    <p class="fine scale-fine">Measured: the sizes, and both speeds (FLE v1.2.5, one RTX PRO 4500, 120 GB RAM, Linux; three runs with the draft, the same text each time). Illustration: which squares light up, and the text. The draft model does not change the answer; the 2-bit quant of the model itself is lossy, see below.</p>
+    <details class="small"><summary>DeepSeek V4.1 Flash, 763 billion parameters, one RTX PRO 4500. How this was measured</summary><p>Measured: the sizes, and both speeds (FLE v1.2.5, 120 GB RAM, Linux; three runs with the draft model, the same text each time; through FLE Link 49.9). Illustration: which cubes move and light up; one cube is one gibibyte. The draft model does not change the answer. The 2-bit quant of the model itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time. <a href="https://sirfyyn.de/en/fle/">Every measurement →</a></p></details>
   </div>
 </section>
 
-<!-- The whole first run, recorded: real (asciicast v2, recorded on 3 Nov 2026 with FLE Link 0.1.3 by a script that starts
-     with an empty HOME on a MacBook Air M2 with 8 GB) and played in the time it took. The <pre> holds its end state for
+<!-- 2 · ONE COMMAND: the real first run (asciicast v2, recorded on 3 Nov 2026 with FLE Link 0.1.3 by a script that starts
+     with an empty HOME on a MacBook Air M2 with 8 GB), played in the time it took. The <pre> holds the end state for
      readers without JavaScript; site/casts_einsetzen.py writes it from the file. -->
-<section class="band" id="run">
+<section class="scene" id="run">
   <div class="wrap">
-    <p class="eyebrow">One command</p>
-    <h2>From an empty laptop to an answer in 68 seconds</h2>
-    <p class="intro">That was the big machine. This is the small one: a MacBook Air with 8 GB and nothing installed. One line, typed once, recorded as it happened.</p>
-
-    <figure class="cast run" data-cast="casts/erstlauf-mac.cast" data-start="5.11" data-rows="24" data-autoplay aria-label="Recording of a first run of FLE Link on a MacBook Air with 8 GB: install, engine, model download, first answer, 68 seconds">
+    <div class="run-head">
+      <h2>One command.<br><span class="hi">68 seconds.</span></h2>
+      <p class="num clock"><b id="run-clock">1:08</b><span>from Enter to the answer</span></p>
+    </div>
+    <div class="install" data-install>
+      <div class="tabs" role="tablist" aria-label="Your system">
+        <button role="tab" id="tab-unix" aria-selected="true" data-os="unix">macOS · Linux</button>
+        <button role="tab" id="tab-win" aria-selected="false" data-os="win">Windows</button>
+      </div>
+      <div class="cmd">
+        <code id="cmd-text" data-unix="curl -fsSL https://flelink.run/install.sh | sh" data-win="irm https://flelink.run/install.ps1 | iex">curl -fsSL https://flelink.run/install.sh | sh</code>
+        <button class="copy" type="button" data-copy="#cmd-text" aria-label="Copy the install command">Copy</button>
+      </div>
+    </div>
+    <figure class="cast run" data-cast="casts/erstlauf-mac.cast" data-start="5.11" data-rows="20" data-clock="#run-clock" data-autoplay aria-label="Recording of a first run of FLE Link on a MacBook Air with 8 GB: install, engine, model download, first answer, 68 seconds">
       <div class="cast-head">
-        <span class="cast-title"><i></i><i></i><i></i>first run · MacBook Air M2 · 8 GB · empty home folder</span>
-        <span class="cast-big"><b>68</b> seconds, nothing cut</span>
+        <span class="cast-title"><i></i><i></i><i></i>an empty MacBook Air · 8 GB · recorded, nothing cut</span>
       </div>
       <pre class="cast-screen" data-end="casts/erstlauf-mac.cast">Done. Start with:
   flelink          the terminal interface (first run sets everything up)
@@ -129,211 +117,94 @@ A Mixture-of-Experts (MoE) model is a multi-component model that consists of a n
       <div class="cast-marks" aria-label="Jump to a step">
         <button type="button" data-find="Downloading flelink">installer <i></i></button>
         <button type="button" data-find="Installing the engine">engine <i></i></button>
-        <button type="button" data-find="Downloading Llama">model, 0.8 GiB <i></i></button>
+        <button type="button" data-find="Downloading Llama">model <i></i></button>
         <button type="button" data-find="Starting the engine">start <i></i></button>
         <button type="button" data-find="tok/s decode">answer <i></i></button>
       </div>
-      <figcaption>Recorded on 3 Nov 2026 with FLE Link 0.1.3, by a script that starts from an empty home folder and types one line. 68 seconds from Enter to the answer: installer, engine, a 0.8 GiB model, 59 tokens at 91 tok/s. The file is <a href="casts/erstlauf-mac.cast">here</a>; any asciinema player replays it.</figcaption>
     </figure>
-
-    <dl class="proof">
-      <div><dt>68 s</dt><dd>from an empty MacBook Air to the first answer, download included</dd></div>
-      <div><dt>66 s</dt><dd>the same on Linux with an NVIDIA card</dd></div>
-      <div><dt>50 tok/s</dt><dd>DeepSeek V4.1 Flash, 763B parameters, on one 32 GB GPU with 120 GB RAM</dd></div>
-      <div><dt>91 tok/s</dt><dd>a 125B mixture of experts on the same card, 2.5× plain llama.cpp</dd></div>
-    </dl>
-    <p class="fine"><b>Best performance measured on Linux.</b> The big-model figures on this page were measured on Linux; macOS and Windows run the same recipes.</p>
+    <details class="small"><summary>Is this recording real?</summary><p>Yes. Recorded on 3 Nov 2026 with FLE Link 0.1.3, by a script that starts from an empty home folder and types one line. 68 seconds from Enter to the answer: installer, engine, a 0.8 GiB model, 59 tokens at 91 tok/s. The <a href="casts/erstlauf-mac.cast">file</a> plays in any asciinema player. On Linux with an NVIDIA card the same takes 66 seconds. The app is not signed by Apple or Microsoft; through the installer neither asks.</p></details>
   </div>
 </section>
 
-<!-- "Your machine": the rule is site/fit.js, a port of the program's own (catalog.rs, recipe.rs), tested against the same
-     cases (tests/site-fit.test.mjs). Speeds appear only for the hardware they were measured on. Without JavaScript the
-     table below shows the machine everything was measured on. -->
-<section class="band" id="fit">
-  <div class="wrap">
-    <p class="eyebrow">Your machine</p>
-    <h2>What runs on your machine?</h2>
-    <p class="intro">Tell the page what you have. The verdict is the rule FLE Link applies before it downloads anything, and a speed appears only where it was measured on that hardware. The page does not look at your computer; this is arithmetic in your browser.</p>
-
-    <form class="pick" data-fit aria-label="Your machine">
-      <fieldset>
-        <legend>Graphics</legend>
-        <label><input type="radio" name="gpu" value="none:0"><span>No GPU</span></label>
-        <label><input type="radio" name="gpu" value="apple:0"><span>Apple Silicon</span></label>
-        <label><input type="radio" name="gpu" value="nvidia:8"><span>NVIDIA · 8 GB</span></label>
-        <label><input type="radio" name="gpu" value="nvidia:12"><span>12 GB</span></label>
-        <label><input type="radio" name="gpu" value="nvidia:16"><span>16 GB</span></label>
-        <label><input type="radio" name="gpu" value="nvidia:24"><span>24 GB</span></label>
-        <label><input type="radio" name="gpu" value="nvidia:32" checked><span>32 GB</span></label>
-        <label><input type="radio" name="gpu" value="nvidia:48"><span>48 GB</span></label>
-      </fieldset>
-      <fieldset>
-        <legend>Memory</legend>
-        <label><input type="radio" name="ram" value="8"><span>8 GB</span></label>
-        <label><input type="radio" name="ram" value="16"><span>16 GB</span></label>
-        <label><input type="radio" name="ram" value="32"><span>32 GB</span></label>
-        <label><input type="radio" name="ram" value="64"><span>64 GB</span></label>
-        <label><input type="radio" name="ram" value="128" checked><span>128 GB</span></label>
-      </fieldset>
+<!-- 3 · YOUR CARD: the rule is site/fit.js, a port of the program's own (catalog.rs, recipe.rs), tested against the same
+     cases (tests/site-fit.test.mjs). A speed appears only for the hardware it was measured on. -->
+<section class="scene band card" id="fit">
+  <canvas class="stage" data-fit-stage role="img" aria-label="A pile of cubes as big as the model that fits, one cube per gibibyte, next to a card as big as the memory you chose."></canvas>
+  <div class="wrap over">
+    <form class="say" data-fit aria-label="Your machine">
+      <p class="satz">I have <select name="gpu" aria-label="Graphics">
+          <option value="none:0">no GPU</option>
+          <option value="apple:0">an Apple Silicon Mac</option>
+          <option value="nvidia:8">an 8 GB NVIDIA card</option>
+          <option value="nvidia:12">a 12 GB NVIDIA card</option>
+          <option value="nvidia:16">a 16 GB NVIDIA card</option>
+          <option value="nvidia:24">a 24 GB NVIDIA card</option>
+          <option value="nvidia:32" selected>a 32 GB NVIDIA card</option>
+          <option value="nvidia:48">a 48 GB NVIDIA card</option>
+        </select> and <select name="ram" aria-label="Memory">
+          <option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option>
+        </select> GB of RAM.</p>
     </form>
-
-    <div class="fit-top" aria-live="polite">
-      <p class="fit-big"><b id="fit-b">763B</b><span id="fit-what">parameters is the biggest model that fits: DeepSeek V4.1 Flash, measured at 49.9 tok/s on this hardware.</span></p>
-    </div>
-
-    <div class="fit-scroll">
-      <table class="fit-table">
-        <thead><tr><th scope="col">Model</th><th scope="col">Does it fit?</th><th scope="col">Measured on this hardware</th><th scope="col">One command</th></tr></thead>
-        <tbody id="fit-rows">
-          <tr><th scope="row">Llama 3.2 1B<small>1B, a first try on any laptop</small></th><td><span class="v v-fits">fits</span></td><td class="none">not measured on this size</td><td><code>flelink run llama-3.2-1b</code></td></tr>
-          <tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><span class="v v-fits">fits</span></td><td><b>104</b> tok/s<small>from 20 GB up all 66 layers are on the card; one run, engine direct, context 32768, in a machine with 120 GB RAM</small></td><td><code>flelink run katy-27b-dflash</code></td></tr>
-          <tr><th scope="row">Qwen3.8-Flash-Next<small>125B mixture of experts, 88.9 GB</small></th><td><span class="v v-fits">fits</span></td><td><b>91</b> tok/s<small>32 GB card, 120 GB RAM, with the engine's MTP draft head started by hand; flelink run starts it without the head so far</small></td><td><code>flelink run fle-iq3-m</code></td></tr>
-          <tr><th scope="row">DeepSeek V4.1 Flash + DSpark<small>763B mixture of experts, 232 GiB</small></th><td><span class="v v-fits">fits</span></td><td><b>49.9</b> tok/s<small>32 GB card, 120 GB RAM, through FLE Link, median of three (5 Nov 2026); 37.2 without the draft</small></td><td><code>flelink run deepseek-v41-ista-dspark</code></td></tr>
-          <tr><th scope="row">Rin (DeepSeek V4.1 Flash, split)<small>763B, hot half on the GPU</small></th><td><span class="v v-fits">fits</span></td><td><b>53.4</b> tok/s<small>32 GB card, 120 GB RAM, FLE v1.2.6; lossy, see the model card</small></td><td><code>flelink run rin-deepseek-v41-dspark</code></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="fit-any">
-      <label for="any-size">Any other GGUF: its size in GB</label>
-      <input id="any-size" type="number" inputmode="decimal" min="0.1" max="2000" step="0.1" value="8">
-      <output id="any-out" for="any-size">needs about 10 GB: <span class="v v-fits">fits</span></output>
-    </div>
-
-    <div class="fit-notes">
-      <p><b>The rule.</b> A model needs about 1.25 times its size. That is compared with the memory the GPU may use, or half the RAM, whichever is larger. Up to 80 %: fits. Up to 100 %: tight, it runs but slower. Models for the FLE engine keep their experts in RAM, so RAM decides, and a recipe that was measured states what it was measured with. <a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">The rules in full →</a></p>
-      <p><b>Your size is missing?</b> The big-model numbers come from one machine. <code>flelink bench --task pagoda --share</code> runs a real task and opens a filled-in post for the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>: you read it before it is posted, FLE Link uploads nothing. A result from other hardware is what this table needs most.</p>
-    </div>
-  </div>
-</section>
-
-<section id="models">
-  <div class="wrap">
-    <p class="eyebrow">Flagship models</p>
-    <h2>Big mixture-of-experts models on one workstation</h2>
-    <p class="intro">The FLE engine keeps the experts a token needs on the GPU and the rest in RAM. FLE Link picks the build and the settings for your machine.</p>
-    <div class="flags">
-      <article class="flag">
-        <header>
-          <p class="flag-tag">Measured</p>
-          <h3>Qwen3.8-Flash-Next · FLE</h3>
-          <p class="flag-sub">125B MoE · FLE quant, 88.9 GB · <a href="https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF">on Hugging Face</a></p>
-        </header>
-        <div class="bars" role="img" aria-label="Decode speed on the same machine: FLE 91, Strata 74, llama.cpp 36 tokens per second">
-          <div class="bar fle v91"><span>FLE</span><b>91 tok/s</b></div>
-          <div class="bar v74"><span>Strata</span><b>74 tok/s</b></div>
-          <div class="bar v36"><span>llama.cpp</span><b>36 tok/s</b></div>
-        </div>
-        <p class="fine">Decode, median over six tasks, same machine and model: one 32 GB RTX PRO 4500, 120 GB RAM, 16 cores, Linux (6 Oct 2026). Smaller than Unsloth's IQ4_XS at the same KL divergence to BF16. Prefill (reading long prompts) was where FLE trailed in this run; it has been reworked since, and new numbers follow when they are measured the same way.</p>
-      </article>
-      <article class="flag">
-        <header>
-          <p class="flag-tag">Measured</p>
-          <h3>DeepSeek-V4.1-Flash-1017</h3>
-          <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO IQ2_XXS by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 232 GiB</p>
-        </header>
-        <div class="big-num"><b>50 <small>tok/s</small></b><span>With the DSpark draft model, which does not change the output: the same answer every run (FLE v1.2.5, three runs: 49.8, 50.8, 50.6). The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time.</span></div>
-        <ul class="flag-list">
-          <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, Ryzen 9 9950X3D, Linux. Experts a usage profile picks most sit on the card, a 90 GB expert store in RAM holds the rest. Through FLE Link the same recipe gives 49.9 tok/s (median of three, 5 Nov 2026)</li>
-          <li><b>One command</b> <code>flelink run deepseek-v41-ista-dspark</code> installs the FLE engine, fetches the model and the draft, and uses copies already on your disk</li>
-          <li><b>Without the draft</b> <code>deepseek-v41-ista</code>: exact, 37.6 tok/s started by hand, 37.2 through FLE Link</li>
-          <li><b>Rin</b> <code>rin-deepseek-v41-dspark</code>: a split 2-bit build of the same model, hot experts resident on the GPU. About +6 % speed for a bit more error: 53.4 tok/s, KL divergence 0.29 against the original (ISTA IQ2_XXS: 0.25). <a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF">Model card</a></li>
-          <li><b>Same as by hand</b> through FLE Link the engine runs the recipe's own command: started by hand or through FLE Link, the same answer token for token</li>
-        </ul>
-      </article>
-    </div>
-  </div>
-</section>
-
-<section class="band" id="where">
-  <div class="wrap">
-    <p class="eyebrow">Where it sits</p>
-    <h2>The layer between the engine and your tools</h2>
-    <p class="intro">Inference engines are fast and bare: you pick the build, the flags, the context, the cache. Chat apps, editors and agents just want an endpoint. FLE Link does the part in between, and the engine underneath can be swapped.</p>
-
-    <div class="stack" aria-label="Your tools talk to FLE Link, FLE Link runs the engine">
-      <div class="tier">
-        <span class="tier-label">Your tools</span>
-        <ul class="chips"><li>Chat page</li><li>Editor</li><li>Agent</li><li>Any OpenAI client</li></ul>
-      </div>
-      <div class="link-arrow" aria-hidden="true"><span>/v1</span></div>
-      <div class="tier core">
-        <span class="tier-label"><img src="logo-mark.svg" alt="" width="24" height="24"> FLE Link</span>
-        <ul class="does">
-          <li>reads the machine</li><li>checks fit before downloading</li><li>installs and verifies the engine</li>
-          <li>picks the start settings</li><li>supervises and restarts</li><li>shows what the engine does</li>
-        </ul>
-      </div>
-      <div class="link-arrow" aria-hidden="true"><span>llama-server</span></div>
-      <div class="tier">
-        <span class="tier-label">Engine</span>
-        <div class="engines" id="engines">
-          <span class="engine on" data-e="0"><b>FLE</b> expert offloading for big MoE models</span>
-          <span class="engine" data-e="1"><b>llama.cpp</b> the upstream build, as fallback</span>
-          <span class="engine" data-e="2"><b>Your build</b> any llama-server compatible binary</span>
-        </div>
+    <div class="card-out" aria-live="polite">
+      <p class="card-b" id="fit-b">763B</p>
+      <div class="card-what">
+        <h2 id="fit-name">DeepSeek V4.1 Flash + DSpark</h2>
+        <p class="card-tok" id="fit-tok"><b>49.9</b> tok/s, measured on this hardware</p>
+        <div class="cmd"><code id="fit-cmd">flelink run deepseek-v41-ista-dspark</code><button class="copy" type="button" data-copy="#fit-cmd" aria-label="Copy the command">Copy</button></div>
+        <p class="card-note" id="fit-what">The biggest model in the catalog that fits on an NVIDIA card with 32 GB and 128 GB RAM.</p>
       </div>
     </div>
+    <details class="small"><summary>All five models on this machine, the rule, and any other GGUF</summary>
+      <div class="fit-scroll">
+        <table class="fit-table">
+          <thead><tr><th scope="col">Model</th><th scope="col">Does it fit?</th><th scope="col">Measured on this hardware</th><th scope="col">One command</th></tr></thead>
+          <tbody id="fit-rows">
+            <tr><th scope="row">Llama 3.2 1B<small>1B, a first try on any laptop</small></th><td><span class="v v-fits">fits</span></td><td class="none">not measured on this size</td><td><code>flelink run llama-3.2-1b</code></td></tr>
+            <tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><span class="v v-fits">fits</span></td><td><b>104</b> tok/s</td><td><code>flelink run katy-27b-dflash</code></td></tr>
+            <tr><th scope="row">Qwen3.8-Flash-Next<small>125B mixture of experts, 88.9 GB</small></th><td><span class="v v-fits">fits</span></td><td><b>91</b> tok/s</td><td><code>flelink run fle-iq3-m</code></td></tr>
+            <tr><th scope="row">DeepSeek V4.1 Flash + DSpark<small>763B mixture of experts, 232 GiB</small></th><td><span class="v v-fits">fits</span></td><td><b>49.9</b> tok/s</td><td><code>flelink run deepseek-v41-ista-dspark</code></td></tr>
+            <tr><th scope="row">Rin (DeepSeek V4.1 Flash, split)<small>763B, hot half on the GPU</small></th><td><span class="v v-fits">fits</span></td><td><b>53.4</b> tok/s</td><td><code>flelink run rin-deepseek-v41-dspark</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="fit-any">
+        <label for="any-size">Any other GGUF: its size in GB</label>
+        <input id="any-size" type="number" inputmode="decimal" min="0.1" max="2000" step="0.1" value="8">
+        <output id="any-out" for="any-size">needs about 10 GB: <span class="v v-fits">fits</span></output>
+      </div>
+      <p>The verdict is the rule FLE Link applies before it downloads anything: a model needs about 1.25 times its size, compared with the memory the GPU may use or half the RAM. Models for the FLE engine keep their experts in RAM, and a recipe that was measured states what it was measured with. <a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">The rules in full →</a> The page does not look at your computer; this is arithmetic in your browser. A size nobody measured yet? <code>flelink bench --task pagoda --share</code> posts yours to the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>.</p>
+    </details>
   </div>
 </section>
 
-<section id="how">
+<!-- 4 · THE RACE (race.js): the same text at the three measured decode speeds, at the same time. -->
+<section class="scene" id="race" data-race>
   <div class="wrap">
-    <p class="eyebrow">How it works</p>
-    <h2>Three steps, each one you can read</h2>
-    <ol class="steps">
-      <li>
-        <h3>It reads the machine</h3>
-        <p>CPU, memory, GPU and free disk, and which engine build fits.</p>
-<pre class="out"><span class="p">$</span> flelink system
-OS        macos arm64
-CPU       Apple M2 (8 cores)
-Memory    8.0 GiB
-GPU usable 5.3 GiB
-
-Engines that fit (best first):
-  llama.cpp for Apple Silicon (Metal)</pre>
-      </li>
-      <li>
-        <h3>It checks fit before downloading</h3>
-        <p>No 80 GB download that ends in an out-of-memory error. And a model you already have, in the Hugging Face cache, LM Studio or Ollama, is found, checked by its SHA-256 and used instead of downloaded again.</p>
-<pre class="out"><span class="p">$</span> flelink models
-llama-3.2-1b      0.8 GiB  <span class="ok">fits</span>
-llama-3.2-1b-q8   1.2 GiB  <span class="ok">fits</span>
-fle-iq3-m        82.8 GiB  <span class="bad">too big</span></pre>
-      </li>
-      <li>
-        <h3>It serves, and shows the command</h3>
-        <p>Every start is a plain llama-server command you can copy and run without FLE Link. You saw it in the recording: "Command (shown, never needed)".</p>
-<pre class="out"><span class="ok">Ready:</span> llama-3.2-1b
-  API: http://127.0.0.1:8080/v1
-  Command (shown, never needed):
-    llama-server -m Llama-3.2-1B-Instruct-Q4_K_M.gguf
-      -c 32768 --jinja --metrics -ngl 99</pre>
-      </li>
-    </ol>
-    <p class="intro"><a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">The rules and numbers behind each step →</a></p>
+    <h2>Same model. Same card.<br><span class="hi">2.5× faster.</span></h2>
+    <div class="lanes">
+      <div class="lane fle" data-tok="91"><p class="lane-name"><b>FLE</b><span>91<small>tok/s</small></span></p><p class="lane-text" aria-hidden="true"></p><div class="lane-bar"><i></i></div><p class="lane-time"></p></div>
+      <div class="lane" data-tok="74"><p class="lane-name"><b>Strata</b><span>74<small>tok/s</small></span></p><p class="lane-text" aria-hidden="true"></p><div class="lane-bar"><i></i></div><p class="lane-time"></p></div>
+      <div class="lane" data-tok="36"><p class="lane-name"><b>llama.cpp</b><span>36<small>tok/s</small></span></p><p class="lane-text" aria-hidden="true"></p><div class="lane-bar"><i></i></div><p class="lane-time"></p></div>
+    </div>
+    <button class="again" type="button" data-again>Run it again</button>
+    <details class="small"><summary>Qwen3.8-Flash-Next, 125 billion parameters, the same file on the same 32 GB card. How this was measured</summary><p>Decode speed, median over six tasks, one RTX PRO 4500 with 120 GB RAM and 16 cores, Linux, 6 Oct 2026. The text in the lanes is written for this page; the three speeds are the measured ones. The <a href="https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF">FLE quant</a> is smaller than Unsloth's IQ4_XS at the same KL divergence to BF16. Reading long prompts was where FLE trailed in this run; it has been reworked since. <a href="https://sirfyyn.de/en/fle/">Every measurement, including the ones that did not work →</a></p></details>
   </div>
 </section>
 
-<!-- "Broken on purpose": four real recordings from the fault tests (Linux, 3 Nov 2026). Without JavaScript every panel is
-     visible with its end state. -->
-<section class="band" id="broken">
+<!-- 5 · BROKEN ON PURPOSE: four real recordings from the fault tests (Linux, 3 Nov 2026). -->
+<section class="scene band" id="broken">
   <div class="wrap">
-    <p class="eyebrow">Tested by breaking it</p>
-    <h2>Broken on purpose, and recorded</h2>
-    <p class="intro">Every command runs in the test suite twice: once as intended, once with something broken on purpose. These four are recordings of that, not descriptions. The tests run on macOS, Linux and Windows.</p>
-
+    <h2>We broke it on purpose.<br><span class="hi">Then recorded it.</span></h2>
     <div class="breaks" data-cast-tabs>
       <div class="break-tabs" role="tablist" aria-label="What was broken">
         <button type="button" role="tab" id="bt-1" aria-controls="bp-1" aria-selected="true">Download killed at 45 %</button>
         <button type="button" role="tab" id="bt-2" aria-controls="bp-2" aria-selected="false">Engine killed</button>
-        <button type="button" role="tab" id="bt-3" aria-controls="bp-3" aria-selected="false">Port 8080 taken</button>
+        <button type="button" role="tab" id="bt-3" aria-controls="bp-3" aria-selected="false">Port taken</button>
         <button type="button" role="tab" id="bt-4" aria-controls="bp-4" aria-selected="false">Model file cut off</button>
       </div>
       <div class="break-panel" role="tabpanel" id="bp-1" aria-labelledby="bt-1">
-        <p class="break-say">Ctrl+C in the middle of an 808 MB download. The same command again continues where it stopped and checks the hash at the end.</p>
-        <figure class="cast" data-cast="casts/kaputt-a1-download-abbruch.cast casts/kaputt-a2-download-weiter.cast" data-labels="1 of 2 · stopped with Ctrl+C at 45 %|2 of 2 · the same command again" data-rows="16">
+        <p class="break-say">Ctrl+C in the middle of the download. The same command again continues at 45 %.</p>
+        <figure class="cast" data-cast="casts/kaputt-a1-download-abbruch.cast casts/kaputt-a2-download-weiter.cast" data-labels="1 of 2 · stopped with Ctrl+C at 45 %|2 of 2 · the same command again" data-rows="14">
           <pre class="cast-screen" data-end="casts/kaputt-a2-download-weiter.cast">$ flelink run llama-3.2-1b
 
 ==&gt; Engine: FLE engine (NVIDIA CUDA) - The FLE build: GPU expert cache, MTP drafting, pinned expert loading.
@@ -355,8 +226,8 @@ Stopping the engine</pre>
         </figure>
       </div>
       <div class="break-panel" role="tabpanel" id="bp-2" aria-labelledby="bt-2">
-        <p class="break-say"><code>kill -9</code> on the engine while it serves. FLE Link says what happened and where the log is; the API answers 503 until a restart.</p>
-        <figure class="cast" data-cast="casts/kaputt-b1-engine-tot.cast" data-rows="16">
+        <p class="break-say"><code>kill -9</code> on the engine. FLE Link says what happened and where the log is.</p>
+        <figure class="cast" data-cast="casts/kaputt-b1-engine-tot.cast" data-rows="14">
           <pre class="cast-screen" data-end="casts/kaputt-b1-engine-tot.cast">$ flelink run llama-3.2-1b
 
 ==&gt; Engine: FLE engine (NVIDIA CUDA) - The FLE build: GPU expert cache, MTP drafting, pinned expert loading.
@@ -376,8 +247,8 @@ flelink: the engine stopped by itself (signal: 9 (SIGKILL)); its log: /home/sirf
         </figure>
       </div>
       <div class="break-panel" role="tabpanel" id="bp-3" aria-labelledby="bt-3">
-        <p class="break-say">Something else already listens on 8080. FLE Link takes the next free port and prints it: 41185.</p>
-        <figure class="cast" data-cast="casts/kaputt-c1-port-belegt.cast" data-rows="16">
+        <p class="break-say">Port 8080 is taken. FLE Link uses the next free one and prints it: 41185.</p>
+        <figure class="cast" data-cast="casts/kaputt-c1-port-belegt.cast" data-rows="14">
           <pre class="cast-screen" data-end="casts/kaputt-c1-port-belegt.cast">$ flelink run llama-3.2-1b
 
 ==&gt; Engine: FLE engine (NVIDIA CUDA) - The FLE build: GPU expert cache, MTP drafting, pinned expert loading.
@@ -397,8 +268,8 @@ Stopping the engine</pre>
         </figure>
       </div>
       <div class="break-panel" role="tabpanel" id="bp-4" aria-labelledby="bt-4">
-        <p class="break-say">A model file that ends after 286 of 770 MiB. <code>flelink verify</code> names what is wrong instead of loading it.</p>
-        <figure class="cast" data-cast="casts/kaputt-c2-datei-kaputt.cast" data-rows="16">
+        <p class="break-say">A model file that ends after 286 of 770 MiB. <code>flelink verify</code> names what is wrong.</p>
+        <figure class="cast" data-cast="casts/kaputt-c2-datei-kaputt.cast" data-rows="14">
           <pre class="cast-screen" data-end="casts/kaputt-c2-datei-kaputt.cast">$ flelink verify llama-3.2-1b-cut.gguf
 verify: failed
 [ok] first part: /tmp/flelink-video-abgeschnitten.gguf
@@ -412,164 +283,47 @@ verify: failed
         </figure>
       </div>
     </div>
-
-    <ul class="faults">
-      <li><b>No network</b> A clear message in under a second, no hang.</li>
-      <li><b>Program stopped</b> Ctrl+C or a signal ends the engine with it; after a crash the engine left behind is stopped before a second one loads.</li>
-      <li><b>Wrong key on the network</b> Refused, and every wrong guess waits a second.</li>
-      <li><b>Bad requests</b> Broken JSON, huge bodies, path tricks: all refused, the server keeps running.</li>
-    </ul>
-    <p class="fine">Recorded on Linux on 3 Nov 2026 with the same script each time. The suite is <a href="https://github.com/sirfyyn/flelink/tree/main/tests/fulltest">tests/fulltest</a>; run it against your own build.</p>
+    <details class="small"><summary>Every command runs in the test suite twice: once as intended, once broken</summary><p>Also covered: no network (a clear message in under a second), the program stopped (the engine ends with it; one left behind by a crash is stopped before a second loads), a wrong key on the network (refused, and every wrong guess waits a second), broken requests (refused, the server keeps running). Recorded on Linux on 3 Nov 2026. The suite is <a href="https://github.com/sirfyyn/flelink/tree/main/tests/fulltest">tests/fulltest</a>; the tests run on macOS, Linux and Windows.</p></details>
   </div>
 </section>
 
-<section id="ways">
+<!-- 6 · WAYS IN: what it looks like, three moving pictures, and the rest as links. -->
+<section class="scene" id="ways">
   <div class="wrap">
-    <p class="eyebrow">Ways in</p>
-    <h2>Terminal, browser, desktop or API</h2>
-    <div class="ways">
-      <article>
-        <h3>Terminal</h3>
-        <p><code>flelink</code> full screen: pick a model, watch it load, chat.</p>
-        <figure class="shot" data-shot="tui"><video src="media/tui.mp4" poster="media/tui-poster.png" autoplay muted loop playsinline preload="metadata" aria-label="The terminal interface: the model list with a search row, a search for ISTA DeepSeek V4.1 on Hugging Face, then loading a model and a chat answer"></video></figure>
-      </article>
-      <article>
-        <h3>Studio in the browser</h3>
-        <p><code>flelink studio</code> chat with live speed, models, engine log, profiles and MCP tools.</p>
-        <figure class="shot" data-shot="studio"><video src="media/studio.mp4" poster="media/studio-chat.png" autoplay muted loop playsinline preload="metadata" aria-label="The Studio runs Rin, a 763B model, on one GPU: a prompt, the pagoda answer streaming, then the finished scene in the preview"></video></figure>
-      </article>
-      <article>
-        <h3>Desktop app</h3>
-        <p>The Studio in a window. Quitting stops the model. <a href="https://github.com/sirfyyn/flelink/releases/latest">Download</a></p>
-        <figure class="shot" data-shot="app"><img src="media/studio-engine.png" alt="The desktop app: the engine page with Rin loaded and the card with what the FLE engine reports" loading="lazy"></figure>
-      </article>
-      <article>
-        <h3>API</h3>
-        <p><code>flelink connect</code> OpenAI- and Anthropic-compatible; prints the settings for Claude Code, Codex, OpenCode and pi.</p>
-<pre class="out">$ flelink connect claude
-export ANTHROPIC_BASE_URL=http://127.0.0.1:8642
-export ANTHROPIC_MODEL=&lt;the model it found&gt;
-claude</pre>
-      </article>
+    <h2>Terminal, browser,<br><span class="hi">or your own tools.</span></h2>
+    <div class="shots">
+      <figure class="shot"><video src="media/tui.mp4" poster="media/tui-poster.png" autoplay muted loop playsinline preload="metadata" aria-label="The terminal interface: the model list with a search row, a search for ISTA DeepSeek V4.1 on Hugging Face, then loading a model and a chat answer"></video><figcaption><code>flelink</code> in the terminal</figcaption></figure>
+      <figure class="shot"><video src="media/studio.mp4" poster="media/studio-chat.png" autoplay muted loop playsinline preload="metadata" aria-label="The Studio runs Rin, a 763B model, on one GPU: a prompt, the pagoda answer streaming, then the finished scene in the preview"></video><figcaption><code>flelink studio</code> in the browser, or as a <a href="https://github.com/sirfyyn/flelink/releases/latest">desktop app</a></figcaption></figure>
     </div>
-  </div>
-</section>
-
-<section class="band" id="studio-more">
-  <div class="wrap">
-    <p class="eyebrow">In the Studio</p>
-    <h2>Measure it, tune it, build your own</h2>
-    <ul class="faults">
-      <li><b>Speed test</b> The same requests every time, compared with your last run of the same setting.</li>
-      <li><b>Practical test</b> <code>flelink bench --task pagoda</code>: a real three.js answer of up to 8000 tokens at temperature 0, through any <code>/v1</code>, with a check that it is complete and the machine in the result file, so two people can compare.</li>
-      <li><b>Best for my machine</b> A tuner that keeps a change only when it is faster with a 95 % interval that excludes zero.</li>
-      <li><b>A/B/A</b> Two settings compared with a drift check, so a machine that warms up does not decide.</li>
-      <li><b>Quality next to speed</b> KL divergence against the reference and a knowledge probe, right after a speed test.</li>
-      <li><b>Expert cache</b> Hit rate over time and per layer, read from the FLE engine.</li>
-      <li><b>Forge</b> Build your own quant: whole expert layers from other quants, the best mix for your size budget, expert pruning, a KL check, and a recipe others can rebuild.</li>
-      <li><b>Live preview</b> HTML and SVG from an answer run right under the code, sandboxed, with no access to the Studio.</li>
-      <li><b>Tools</b> MCP servers, local or remote with sign-in, as chat tools that ask before each call.</li>
-      <li><b>Recipes</b> Model, engine and settings in one small file to share; plugins add engines and recipes as files.</li>
+    <ul class="more">
+      <li><a href="https://github.com/sirfyyn/flelink#connect-your-tools"><b>OpenAI and Anthropic API</b> for Claude Code, Codex, OpenCode, pi</a></li>
+      <li><a href="https://github.com/sirfyyn/flelink#let-a-coding-agent-drive-it-mcp"><b>MCP server</b> so an agent runs FLE Link itself</a></li>
+      <li><a href="https://github.com/sirfyyn/fle-durable"><b>FLE Durable</b> an agent that keeps running next to your model</a></li>
+      <li><a href="https://github.com/sirfyyn/flelink#host-mode"><b>Host mode</b> the GPU box computes, the laptop asks</a></li>
+      <li><a href="https://github.com/sirfyyn/flelink#in-the-studio"><b>Forge</b> build and check your own quant</a></li>
+      <li><a href="https://github.com/sirfyyn/flelink/blob/main/docs/RECIPES.md"><b>Recipes</b> model, engine and settings in one file</a></li>
+      <li><a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md"><b>How it works</b> every rule and number</a></li>
+      <li><a href="https://github.com/sirfyyn/FastLocalExperts"><b>The FLE engine</b> big mixture-of-experts models on small GPUs</a></li>
     </ul>
   </div>
 </section>
 
-<section id="agents">
-  <div class="wrap two">
-    <div>
-      <p class="eyebrow">Coding agents</p>
-      <h2>Your coding agent, on your own model</h2>
-      <p>The engine answers the OpenAI API and the Anthropic API on one address, so Claude Code, Codex, OpenCode and pi talk to the local model in the format they already speak. <code>flelink connect</code> finds the loaded model and prints the setting for each of them; the Engine page shows the same with a copy button.</p>
-      <p>And the agent can run FLE Link itself: <code>flelink mcp</code> is an MCP server that lists what fits the machine, downloads and loads a model, stops it, reads the engine log, changes settings and tests the model with one prompt.</p>
-    </div>
-<pre class="out"><span class="p">$</span> flelink connect claude
-Found: http://127.0.0.1:8642  (model Qwen3.8-Flash-Next)
-
-Claude Code  run in the terminal
-  export ANTHROPIC_BASE_URL=http://127.0.0.1:8642
-  export ANTHROPIC_AUTH_TOKEN=flelink
-  export ANTHROPIC_MODEL=Qwen3.8-Flash-Next
-  claude
-
-<span class="p">$</span> claude mcp add flelink -- flelink mcp</pre>
-  </div>
-</section>
-
-<section class="band" id="durable">
-  <div class="wrap two">
-    <div>
-      <p class="eyebrow">Agent · FLE Durable</p>
-      <h2>An agent that keeps running next to your model</h2>
-      <p>The Agent page starts <a href="https://github.com/sirfyyn/fle-durable">FLE Durable</a> with the model you run: a local agent that is always on and works from events instead of waiting for you to type. You plan things on its agenda (once, daily, on certain days, every few minutes), it plans its own follow-ups, and any tool can hand it an event by webhook.</p>
-      <p>Every event lands in one durable queue before the agent sees it, so a crash or a reboot neither loses one nor runs one twice. Only destructive steps wait for your approval; everything else it simply does. Open source, Apache-2.0, built on pi-durable.</p>
-      <p>Connect your Google account under Settings &gt; Accounts and your Google Calendar shows up on the Agent page and for the agent, so it knows your day. FLE Link reads the events on your computer and keeps them there; nothing goes to us. How it handles your Google data: <a href="privacy.html#google">Privacy</a>.</p>
-    </div>
-<pre class="out"><span class="p">$</span> git clone https://github.com/sirfyyn/fle-durable
-<span class="p">$</span> cd fle-durable && npm ci --ignore-scripts
-
-Agent → Set up → Start
-
-<span class="p">$</span> curl -X POST http://127.0.0.1:8642/api/p/agent/events \
-    -H 'X-Agent-Key: …' \
-    -d '{"id":"ci-42","text":"Build 42 failed on main"}'
-{"ok":true,"id":"webhook:ci-42","queued":true}</pre>
-  </div>
-</section>
-
-<section id="host">
-  <div class="wrap two">
-    <div>
-      <p class="eyebrow">Host mode</p>
-      <h2>Run it on the GPU box, use it from the laptop</h2>
-      <p><code>flelink studio --host 0.0.0.0</code> opens the Studio to your network. Other machines sign in with an access key, over https with a certificate of its own whose fingerprint is printed at start.</p>
-      <p>Or pair two FLE Links: the GPU box shows a code (<code>flelink pair-code</code>), the laptop enters it and works with the big machine's models. Rights per device, revocable any time, by address or through an SSH tunnel.</p>
-    </div>
-<pre class="out"><span class="p">$</span> flelink studio --host 0.0.0.0
-FLE Link is open to the network. Access key:
-  4-yB…Tc
-FLE Link 0.1.12 — https://127.0.0.1:8642/
-Other machines: https://192.168.1.20:8642/
-Certificate fingerprint (SHA-256): 9f3c…</pre>
-  </div>
-</section>
-
-<section class="band" id="roadmap">
+<!-- 7 · INSTALL -->
+<section class="scene band cta" id="install">
   <div class="wrap">
-    <p class="eyebrow">Roadmap</p>
-    <h2>Open, and built to be changed</h2>
-    <p class="intro">MIT licensed. The engine sits behind an adapter, so a new engine is a new adapter, not a fork.</p>
-    <ol class="road">
-      <li class="now"><span>0.1</span><div><b>Now</b> one command from nothing to an answer, any GGUF from Hugging Face with a fit check, models you already have, Studio, desktop app, host mode and remote access, OpenAI and Anthropic API with <code>flelink connect</code> for coding agents, an MCP server so agents run FLE Link, engine adapters for FLE, llama.cpp and your own build, recipes and plugins as files, the Forge for your own quants</div></li>
-      <li><span>next</span><div><b>More engines</b> adapters for vLLM and ik_llama.cpp</div></li>
-      <li><span>later</span><div><b>Training</b> LoRA adapters on your own data</div></li>
-    </ol>
-  </div>
-</section>
-
-<section id="faq">
-  <div class="wrap faq">
-    <p class="eyebrow">Questions</p>
-    <h2>Before you install</h2>
-    <details><summary>Does anything leave my computer?</summary><p>No. FLE Link only connects to GitHub (to fetch the engine and its checksums) and Hugging Face (when you download a model). Nothing is sent to us, there is no account and no telemetry.</p></details>
-    <details><summary>Which models work?</summary><p>The built-in catalog shows what fits your machine. Any GGUF file works with <code>flelink run /path/to/model.gguf</code>. The FLE engine is made for large mixture-of-experts models on small GPUs, see <a href="https://github.com/sirfyyn/FastLocalExperts">FastLocalExperts</a>.</p></details>
-    <details><summary>macOS says the app is from an unidentified developer</summary><p>The builds are not signed, to keep the project free of yearly fees. Right-click the app, choose Open, then confirm once. The command-line install is checked against its SHA-256 instead.</p></details>
-    <details><summary>Windows SmartScreen warns about it</summary><p>Same reason, the build is unsigned. Choose More info, then Run anyway.</p></details>
-    <details><summary>Can I use my own llama.cpp build?</summary><p>Yes. Point FLE Link at any llama-server compatible binary; it reads <code>--help</code> to see what the build can do.</p></details>
-    <details><summary>Is the recording at the top real?</summary><p>Yes. A script started with an empty home folder on a MacBook Air M2 with 8 GB, typed the one line and recorded the terminal with its timing (asciicast v2). Nothing was cut or sped up; the <a href="casts/erstlauf-mac.cast">file</a> is on this site and plays in any asciinema player.</p></details>
-  </div>
-</section>
-
-<section class="band cta" id="install">
-  <div class="wrap">
-    <p class="eyebrow">Install</p>
-    <h2>One command, then an answer</h2>
-    <p class="intro">FLE Link reads your machine first and only downloads what fits. No account, nothing to configure.</p>
-    <div class="install">
+    <h2>One command.<br><span class="hi">Then an answer.</span></h2>
+    <div class="install big">
       <div class="cmd">
         <code id="cmd-text-2" data-unix="curl -fsSL https://flelink.run/install.sh | sh" data-win="irm https://flelink.run/install.ps1 | iex">curl -fsSL https://flelink.run/install.sh | sh</code>
         <button class="copy" type="button" data-copy="#cmd-text-2" aria-label="Copy the install command">Copy</button>
       </div>
-      <p class="fine">Or get the <a href="https://github.com/sirfyyn/flelink/releases/latest">desktop app</a>, read the <a href="https://github.com/sirfyyn/flelink">source</a>, or see how the <a href="https://sirfyyn.de/en/fle/">FLE engine</a> underneath was measured.</p>
+    </div>
+    <p class="cta-line">Open source, MIT. No account, no telemetry. macOS, Linux, Windows. <a href="https://github.com/sirfyyn/flelink/releases/latest">Desktop app</a> · <a href="https://github.com/sirfyyn/flelink">Source</a></p>
+    <div class="faq">
+      <details><summary>Does anything leave my computer?</summary><p>No. FLE Link only connects to GitHub (to fetch the engine and its checksums) and Hugging Face (when you download a model). Nothing is sent to us, there is no account and no telemetry.</p></details>
+      <details><summary>Which models work?</summary><p>The built-in catalog shows what fits your machine. Any GGUF file works with <code>flelink run /path/to/model.gguf</code>, and your own llama-server compatible build works as the engine.</p></details>
+      <details><summary>macOS or Windows warns about the app</summary><p>The builds are not signed, to keep the project free of yearly fees. On macOS, right-click the app, choose Open, then confirm once. On Windows, choose More info, then Run anyway. The command-line install is checked against its SHA-256 instead.</p></details>
+      <details><summary>Does the agent see my Google Calendar?</summary><p>Only if you connect your Google account under Settings &gt; Accounts. FLE Link then reads the events on your computer and keeps them there; nothing goes to us. How it handles your Google data: <a href="privacy.html#google">Privacy</a>.</p></details>
     </div>
   </div>
 </section>
@@ -601,9 +355,10 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
   </div>
 </footer>
 
-<script src="fit.js?v=3" defer></script>
-<script src="scale.js?v=3" defer></script>
-<script src="player.js?v=3" defer></script>
-<script src="site.js?v=3" defer></script>
+<script src="fit.js?v=7" defer></script>
+<script src="cubes.js?v=7" defer></script>
+<script src="player.js?v=7" defer></script>
+<script src="race.js?v=7" defer></script>
+<script src="site.js?v=7" defer></script>
 </body>
 </html>
