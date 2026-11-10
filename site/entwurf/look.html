@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>flelink.run · one scene, three looks (prototype)</title>
+<!-- Dieselbe erste Szene in drei Looks (10.11.2026), nach Max: „mutigere Blickfänge“ und „anderer Look“. Der Blickfang ist neu:
+     das Modell als Stapel aus 232 Würfeln (einer je GiB) neben der Karte, auf die nur 32 passen. Größen und Tempo sind gemessen;
+     welche Würfel wandern und aufleuchten, ist Illustration. Wird nicht ausgerollt. -->
+<style>
+@font-face{font-family:"DM Sans";font-weight:400 700;font-display:swap;src:url("../fonts/dm-sans-latin-1.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:400 500;font-display:swap;src:url("../fonts/jetbrains-mono-latin-5.woff2") format("woff2")}
+*{box-sizing:border-box;margin:0}
+body{font:17px/1.5 "DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:#111}
+.nav{position:fixed;top:0;left:0;right:0;z-index:9;display:flex;gap:8px;align-items:center;padding:9px 18px;background:#111;color:#eee;font:500 .76rem "JetBrains Mono",monospace;border-bottom:1px solid #333}
+.nav b{margin-right:auto;letter-spacing:.08em;text-transform:uppercase;color:#999}
+.nav a{color:#eee;text-decoration:none;border:1px solid #444;padding:5px 11px}
+.nav a:hover{border-color:#ff2d95}
+.look{position:relative;height:100vh;min-height:620px;overflow:hidden;color:var(--text);background:var(--bg)}
+.look canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.schicht{position:absolute;inset:0;padding:74px clamp(20px,5vw,72px) 34px;display:flex;flex-direction:column;pointer-events:none}
+.schicht>*{pointer-events:auto}
+.eti{font:500 .74rem "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--signal);margin-bottom:14px}
+.eti span{color:var(--muted);margin-left:10px;letter-spacing:.03em;text-transform:none}
+h1{font-size:clamp(2.6rem,7.4vw,7rem);line-height:.96;letter-spacing:-.04em;font-weight:700;max-width:11ch}
+h1 em{font-style:normal;color:var(--signal)}
+.sagt{font:500 .86rem "JetBrains Mono",monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--signal);margin-top:18px;min-height:1.5em}
+.unten{margin-top:auto;display:flex;flex-direction:column;align-items:flex-start;gap:22px}
+.zahl{font:700 clamp(4rem,13vw,12rem)/.8 "JetBrains Mono",monospace;letter-spacing:-.07em;color:var(--signal);font-variant-numeric:tabular-nums}
+.zahl small{display:block;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:500;margin-top:12px}
+.cmd{display:flex;align-items:center;gap:12px;border:2px solid var(--cmd-rand);background:var(--cmd-bg);color:var(--cmd-text);padding:13px 13px 13px 18px;font:.9rem "JetBrains Mono",monospace}
+.cmd::before{content:"$";color:var(--cmd-signal)}
+.cmd b{background:var(--cmd-signal);color:var(--cmd-knopf);padding:6px 13px;font:700 .8rem "DM Sans",sans-serif}
+
+/* A · Tiefe: dunkel, mit Licht und Raum */
+.a{--bg:#06080d;--text:#f2f5fa;--muted:#8793a8;--signal:#ff2d95;--cmd-rand:#ff2d95;--cmd-bg:rgba(6,8,13,.7);--cmd-text:#f2f5fa;--cmd-signal:#ff2d95;--cmd-knopf:#06080d}
+.a .zahl{text-shadow:0 0 60px rgba(255,45,149,.55)}
+/* B · Papier: hell, Tusche, viel Luft */
+.b{--bg:#f3efe6;--text:#14110d;--muted:#6f675a;--signal:#e4007f;--cmd-rand:#14110d;--cmd-bg:#14110d;--cmd-text:#f3efe6;--cmd-signal:#ff5fb0;--cmd-knopf:#14110d}
+.b h1{font-weight:700}
+/* C · Flut: die Signalfarbe als Grund */
+.c{--bg:#ff2d95;--text:#0b0e14;--muted:#5a0a34;--signal:#0b0e14;--cmd-rand:#0b0e14;--cmd-bg:#0b0e14;--cmd-text:#fff;--cmd-signal:#ff2d95;--cmd-knopf:#0b0e14}
+.c h1 em{color:#fff}
+.c .zahl{color:#fff}
+.c .sagt{color:#0b0e14}
+@media (max-width:760px){.unten{flex-direction:column;align-items:flex-start}.cmd{font-size:.7rem}}
+</style>
+<body>
+<div class="nav"><b>one scene, three looks</b><a href="#a">A · Tiefe</a><a href="#b">B · Papier</a><a href="#c">C · Flut</a></div>
+
+<section class="look a" id="a" data-look="a"><canvas></canvas><div class="schicht">
+  <p class="eti">A · Tiefe<span>dunkel, mit Licht und Raum</span></p>
+  <h1>232 GiB of model.<br><em>32 GB of card.</em></h1><p class="sagt" data-sagt></p>
+  <div class="unten"><p class="zahl"><span data-zahl>0.0</span><small>tokens per second</small></p><div class="cmd">curl -fsSL https://flelink.run/install.sh | sh <b>Copy</b></div></div>
+</div></section>
+
+<section class="look b" id="b" data-look="b"><canvas></canvas><div class="schicht">
+  <p class="eti">B · Papier<span>hell, Tusche, viel Luft</span></p>
+  <h1>232 GiB of model.<br><em>32 GB of card.</em></h1><p class="sagt" data-sagt></p>
+  <div class="unten"><p class="zahl"><span data-zahl>0.0</span><small>tokens per second</small></p><div class="cmd">curl -fsSL https://flelink.run/install.sh | sh <b>Copy</b></div></div>
+</div></section>
+
+<section class="look c" id="c" data-look="c"><canvas></canvas><div class="schicht">
+  <p class="eti">C · Flut<span>die Signalfarbe als Grund</span></p>
+  <h1>232 GiB of model.<br><em>32 GB of card.</em></h1><p class="sagt" data-sagt></p>
+  <div class="unten"><p class="zahl"><span data-zahl>0.0</span><small>tokens per second</small></p><div class="cmd">curl -fsSL https://flelink.run/install.sh | sh <b>Copy</b></div></div>
+</div></section>
+
+<script>
+(() => {
+  // Farben je Look: [oben, links, rechts] der Würfelflächen, dazu Strich und Signal
+  const LOOK = {
+    a: { cube: ["#3a4458", "#232b3a", "#161c28"], hot: ["#ff5fb0", "#e0177c", "#a80f5c"], stroke: null, slab: "#ff2d95", glow: true, floor: "rgba(120,140,180,.10)", flash: "#ffffff" },
+    b: { cube: ["#fffdf8", "#e9e3d6", "#d8d0bf"], hot: ["#ff5fb0", "#e4007f", "#b50064"], stroke: "#14110d", slab: "#14110d", glow: false, floor: "rgba(20,17,13,.10)", flash: "#14110d" },
+    c: { cube: ["#1b2030", "#11141d", "#0b0e14"], hot: ["#ffffff", "#e9edf3", "#c9d1dc"], stroke: null, slab: "#0b0e14", glow: false, floor: "rgba(11,14,20,.14)", flash: "#ff2d95" },
+  };
+  const STEPS = [[0, "This is the model."], [3.0, "This is your card."], [5.0, "FLE moves the busiest experts onto it."], [8.2, "Now it answers."]];
+  const N = 232, CARD = 32, NX = 8, NY = 6;            // Stapel: 8 × 6 je Lage, fünf Lagen (die oberste nicht voll); Karte: 8 × 4, eine Lage
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.querySelectorAll("[data-look]").forEach((sec) => {
+    const L = LOOK[sec.dataset.look], cv = sec.querySelector("canvas"), ctx = cv.getContext("2d");
+    const sagt = sec.querySelector("[data-sagt]"), zahl = sec.querySelector("[data-zahl]");
+    let W = 0, H = 0, u = 20, ox = 0, oy = 0, clock = 0, last = 0, raf = 0, visible = false, step = -1, rate = 0, due = 0;
+    // jeder Würfel: Platz im Stapel, und für die 32 „heißen“ ein Platz auf der Karte
+    const cubes = [];
+    for (let i = 0; i < N; i++) cubes.push({ x: i % NX, y: Math.floor(i / NX) % NY, z: Math.floor(i / (NX * NY)), hot: -1, heat: 0 });
+    // heiße Experten: verstreut aus den oberen und vorderen Lagen, damit man sie wandern sieht
+    const order = cubes.map((c, i) => i).sort((p, q) => (cubes[q].z * 7 + ((q * 37) % 11)) - (cubes[p].z * 7 + ((p * 37) % 11)));
+    order.slice(0, CARD).forEach((i, k) => { cubes[i].hot = k; });
+
+    function layout() {
+      const dpr = Math.min(2, devicePixelRatio || 1), r = cv.getBoundingClientRect();
+      W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      u = Math.max(9, Math.min(W / 38, H / 25));       // Kantenlänge eines Würfels auf dem Bildschirm
+      ox = W * (W < 760 ? 0.34 : 0.56); oy = H * (W < 760 ? 0.56 : 0.5);
+    }
+    // isometrisch: x nach rechts unten, y nach links unten, z nach oben
+    const iso = (x, y, z) => [ox + (x - y) * u * 0.86, oy + (x + y) * u * 0.5 - z * u];
+    function cube(x, y, z, cols, alpha, heat) {
+      const [ax, ay] = iso(x, y, z + 1), [bx, by] = iso(x + 1, y, z + 1), [cx2, cy2] = iso(x + 1, y + 1, z + 1), [dx, dy] = iso(x, y + 1, z + 1);
+      const [ex, ey] = iso(x + 1, y + 1, z), [fx, fy] = iso(x, y + 1, z), [gx, gy] = iso(x + 1, y, z);
+      ctx.globalAlpha = alpha;
+      const face = (pts, col) => { ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); if (L.stroke) { ctx.strokeStyle = L.stroke; ctx.lineWidth = 1; ctx.stroke(); } };
+      face([ax, ay, bx, by, cx2, cy2, dx, dy], cols[0]);
+      face([dx, dy, cx2, cy2, ex, ey, fx, fy], cols[1]);
+      face([bx, by, gx, gy, ex, ey, cx2, cy2], cols[2]);
+      if (heat > 0.03) { ctx.globalAlpha = alpha * heat; face([ax, ay, bx, by, cx2, cy2, dx, dy], L.flash); }
+      ctx.globalAlpha = 1;
+    }
+    const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+    function draw(t) {
+      ctx.clearRect(0, 0, W, H);
+      // Karte: eine flache Lage rechts vorn neben dem Stapel, erst als leerer Umriss
+      const CX = NX + 2, CY = -3, cardIn = ease((t - 3.0) / 0.8);
+      if (cardIn > 0) {
+        ctx.globalAlpha = cardIn; ctx.strokeStyle = L.slab; ctx.lineWidth = 2.5; ctx.setLineDash(t < 5 ? [6, 5] : []);
+        const p = [iso(CX, CY, 0), iso(CX + 8, CY, 0), iso(CX + 8, CY + 4, 0), iso(CX, CY + 4, 0)];
+        ctx.beginPath(); ctx.moveTo(...p[0]); p.slice(1).forEach((q) => ctx.lineTo(...q)); ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+        if (L.glow) { ctx.globalAlpha = cardIn * 0.14; ctx.fillStyle = L.slab; ctx.fill(); }
+        ctx.globalAlpha = 1;
+      }
+      // Würfel von hinten nach vorn; wandernde zuletzt, damit sie über allem fliegen
+      const list = [];
+      for (const c of cubes) {
+        const born = ease((t - (c.z * 0.42 + (c.x + c.y) * 0.03)) / 0.5);
+        if (born <= 0) continue;
+        let x = c.x, y = c.y, z = c.z + (1 - born) * 9, hot = false, fly = 0;
+        if (c.hot >= 0) {
+          fly = ease((t - 5.0 - c.hot * 0.07) / 1.1);
+          if (fly > 0) { const tx = CX + (c.hot % 8), ty = CY + Math.floor(c.hot / 8); x += (tx - x) * fly; y += (ty - y) * fly; z = z * (1 - fly) + Math.sin(fly * Math.PI) * 5; hot = true; }
+        }
+        list.push({ c, x, y, z, hot, fly, born, key: (fly > 0 && fly < 1 ? 1e6 : 0) + (x + y) * 10 + z });
+      }
+      list.sort((p, q) => p.key - q.key);
+      const dim = ease((t - 5.4) / 1.5);                 // der Stapel tritt zurück, wenn die Karte gefüllt ist
+      for (const o of list) {
+        if (L.glow && o.hot) { ctx.shadowColor = "#ff2d95"; ctx.shadowBlur = 18 * o.fly; }
+        cube(o.x, o.y, o.z, o.hot ? L.hot : L.cube, o.born * (o.hot ? 1 : 1 - dim * 0.45), o.c.heat);
+        ctx.shadowBlur = 0;
+      }
+    }
+    function frame(now) {
+      raf = 0; if (!visible) return;
+      const dt = Math.min(0.1, (now - last) / 1000); last = now; clock += dt;
+      const s = STEPS.reduce((a, x, i) => (clock >= x[0] ? i : a), 0);
+      if (s !== step) { step = s; sagt.textContent = STEPS[s][1]; }
+      for (const c of cubes) if (c.heat > 0.03) c.heat *= Math.pow(0.84, dt * 60);
+      if (clock > 8.2) {
+        due += dt * 50.6;
+        while (due >= 1) { due -= 1; const r = Math.random(); const pool = cubes.filter((c) => (r < 0.72 ? c.hot >= 0 : c.hot < 0)); pool[Math.floor(Math.random() * pool.length)].heat = 1; }
+        rate += (50.6 - rate) * Math.min(1, dt * 3); zahl.textContent = (Math.abs(rate - 50.6) < 0.05 ? 50.6 : rate).toFixed(1);
+      }
+      draw(clock);
+      raf = requestAnimationFrame(frame);
+    }
+    clock = parseFloat(new URLSearchParams(location.search).get("t")) || 0;   // ?t=12 springt in den Ablauf (zum Ansehen)
+    layout(); addEventListener("resize", () => { layout(); draw(still ? 99 : clock); });
+    if (still) { sagt.textContent = STEPS[3][1]; zahl.textContent = "50.6"; draw(99); return; }
+    sec.addEventListener("click", (e) => { if (e.target.closest(".cmd")) return; clock = 0; step = -1; rate = 0; zahl.textContent = "0.0"; });
+    new IntersectionObserver((e) => { visible = e[0].isIntersecting; if (visible && !raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }, { threshold: 0.25 }).observe(sec);
+  });
+})();
+</script>
+</body>
+</html>
