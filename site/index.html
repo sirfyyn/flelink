@@ -119,7 +119,7 @@
           <h3>DeepSeek-V4.1-Flash-1017</h3>
           <p class="flag-sub">763B MoE, 384 experts · GSQ-RCO IQ2_XXS by <a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA-DASLab</a>, 232 GiB</p>
         </header>
-        <div class="big-num">50 <span>tok/s with the DSpark draft model, which does not change the output: the same answer every run (FLE v1.2.5, three runs: 49.8, 50.8, 50.6). The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time</span></div>
+        <div class="big-num"><b>50 <small>tok/s</small></b><span>With the DSpark draft model, which does not change the output: the same answer every run (FLE v1.2.5, three runs: 49.8, 50.8, 50.6). The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time.</span></div>
         <ul class="flag-list">
           <li><b>One 32 GB GPU</b> RTX PRO 4500, 120 GB RAM, Ryzen 9 9950X3D, Linux. Experts a usage profile picks most sit on the card, a 90 GB expert store in RAM holds the rest. Through FLE Link the same recipe gives 49.9 tok/s (median of three, 5 Nov 2026)</li>
           <li><b>One command</b> <code>flelink run deepseek-v41-ista-dspark</code> installs the FLE engine, fetches the model and the draft, and uses copies already on your disk</li>
@@ -356,6 +356,21 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
   </div>
 </section>
 
+<section class="band cta" id="install">
+  <div class="wrap">
+    <p class="eyebrow">Install</p>
+    <h2>One command, then an answer</h2>
+    <p class="intro">FLE Link reads your machine first and only downloads what fits. No account, nothing to configure.</p>
+    <div class="install">
+      <div class="cmd">
+        <code id="cmd-text-2" data-unix="curl -fsSL https://flelink.run/install.sh | sh" data-win="irm https://flelink.run/install.ps1 | iex">curl -fsSL https://flelink.run/install.sh | sh</code>
+        <button class="copy" type="button" data-copy="#cmd-text-2" aria-label="Copy the install command">Copy</button>
+      </div>
+      <p class="fine">Or get the <a href="https://github.com/sirfyyn/flelink/releases/latest">desktop app</a>, read the <a href="https://github.com/sirfyyn/flelink">source</a>, or see how the <a href="https://sirfyyn.de/en/fle/">FLE engine</a> underneath was measured.</p>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <footer class="foot">
@@ -369,6 +384,9 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
       <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">DSpark draft model</a>
       <a href="https://github.com/sirfyyn/fle-durable">FLE Durable</a>
       <a href="https://huggingface.co/sirfyyn">Models on Hugging Face</a>
+      <a href="https://sirfyyn.de/en/fle/">How FLE was measured</a>
+      <a href="https://sirfyyn.de/fyos/en/">FYOS</a>
+      <a href="https://sirfyyn.de/en/">sirfyyn.de</a>
     </nav>
     <nav aria-label="Legal">
       <a href="impressum.html">Impressum</a>

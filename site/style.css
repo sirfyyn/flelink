@@ -196,8 +196,16 @@ section[id]{scroll-margin-top:64px}
 .flag-list b{display:block;color:var(--text)}
 @media (max-width:900px){.flags{grid-template-columns:minmax(0,1fr)}}
 .bar.v91{--v:91}.bar.v74{--v:74}.bar.v36{--v:36}
-.big-num{font:700 2.6rem/1 var(--font);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.big-num span{font-size:1rem;font-weight:500;color:var(--muted)}
+/* The number stands alone; the sentence under it has its own line height (inline it inherited the 2.6rem line box and ran with gaps). */
+.big-num b{display:block;font:700 2.6rem/1 var(--font);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.big-num b small{font-size:1.05rem;font-weight:500;color:var(--muted);letter-spacing:0}
+.big-num span{display:block;margin-top:10px;font-size:.95rem;color:var(--muted)}
+.two p + p{margin-top:14px}
+
+/* closing call: the install command once more, where the page ends */
+.cta .install{margin-top:22px}
+.cta .fine{margin-top:14px}
+.cta .fine a{color:var(--muted)}
 
 /* style Werkbank: one big number, quiet details */
 .hero-num{display:flex;align-items:center;gap:20px;margin:26px 0 8px}
