@@ -26,7 +26,7 @@ export const T = {
   "Previous 7 days": "Последние 7 дней",
   "Older": "Раньше",
   "Your conversations stay on this computer.": "Ваши разговоры остаются на этом компьютере.",
-  "Measuring, the expert cache, the agent and building your own quants": "Измерения, кэш экспертов, агент и собственные кванты",
+  "Measuring, the expert cache and building your own quants": "Измерения, кэш экспертов и собственные кванты",
   "Not running": "Не запущен",
   "No model loaded": "Модель не загружена",
   "Open the engine page": "Открыть страницу движка",

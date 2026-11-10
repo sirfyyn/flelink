@@ -14,4 +14,8 @@ Use the release's own tag. For an engine release use `--repo sirfyyn/FastLocalEx
 
 An update of FLE Link without `SHA256SUMS.minisig` is refused, and so is an FLE engine newer than v1.2.6. The first install through `install.sh` cannot check the signature: no key is on the machine yet.
 
+To try the update itself after signing (download, signature check, replacement, restart) without waiting for the next
+release, start the desktop app or `flelink studio` with `FLE_UPDATE_FORCE=1`: Settings then offers the newest release
+again although it is the running version.
+
 Keep the secret key and its password in the password manager. Without them no further release can be signed, and a new key means a new FLE Link release that carries it.

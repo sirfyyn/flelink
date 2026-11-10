@@ -172,7 +172,7 @@ pub fn run(o: RunOptions) -> i32 {
         }
         let Some(listener) = bound else {
             return Err(format!(
-                "FLE Studio could not start its web server: {}",
+                "FLE Link could not start its web server: {}",
                 last.map(|e| e.to_string()).unwrap_or_default()
             ));
         };
@@ -399,6 +399,9 @@ pub fn start_embedded(home: Option<PathBuf>, web_dir: Option<PathBuf>) -> Result
             };
             let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
             let _ = ready_tx.send(Ok(port));
+            // the Remote access section reads this; without it the app said "Listening on :0"
+            *st.listen.lock().unwrap() =
+                serde_json::json!({"host": "127.0.0.1", "port": port, "tls": false});
             announce(&home_a, &format!("http://127.0.0.1:{port}/"), &st.token);
             let _ = serve_listener(st.clone(), listener, async {
                 let _ = stop_rx.await;

@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+## 0.1.11 (2026-11-10)
+
+A critical pass over the app, the command line, the terminal interface and the agent.
+
+- **The desktop app updates itself.** On macOS and for the Linux AppImage, "Update now" downloads the app of the new
+  release, checks it against the signed checksum list, puts it in the place of the running one and starts it. Until now
+  every update meant a new download by hand. An app from a package (deb, rpm) or the Windows setup still points to the
+  release page. `FLE_UPDATE_FORCE=1` offers the newest release again although it is the running version, to try the whole
+  way.
+- **The MCP hub reaches the agent again** (FLE Durable 0.2.1): since 0.1.8 the hub from Settings only reached the chat.
+  FLE Durable 0.2.1 also introduces itself to the model as the FLE Durable agent.
+- **The agent follows the model.** FLE Durable reads the model's name and context window once, at its start. An agent
+  that came up before the model (start at login, or the app opened without a model) kept a 4,096-token window and
+  1,024-token answers until someone restarted it by hand. FLE Link now starts it again when a model is ready that is not
+  the one it was started with.
+- **The agent chat says when it cannot answer.** Without a loaded model the status said "Ready", a message got no
+  answer, now or later, and nothing said why. The chat now shows that no model is loaded and does not send; a turn the
+  model server refused shows its reason. Approvals can be decided in the chat (the buttons never appeared).
+- **`flelink update`**: the newest version from the terminal, checked against the signed release list like the button in
+  the Studio; `--check` only says whether there is one. A Studio that runs as a service on macOS or Linux can now update
+  itself (it is replaced in place), and one started by hand in a desktop terminal is no longer taken for a service.
+- An update stops the agent before FLE Link starts again; before, the old agent kept running next to the new one.
+- **`flelink connect`** prints the address of the running Studio or app also while no model is loaded (it fell back to
+  port 8642, which is wrong when the app had to take another port).
+- **Terminal interface**: the About box says why a model does not fit (disk, memory or GPU, with the numbers) and shows the
+  whole note; an error no longer stays when another row is chosen.
+- `flelink system` also lists a llama-server found elsewhere on the machine (PATH, Homebrew), the one `doctor` uses.
+- **German**: about 480 more texts and 100 patterns, so chat, models, engine, settings, remote access, the agent chat and the
+  Agent page are in German throughout (Lab, expert cache, tuner and Forge are still mostly English).
+  `ci/i18n_gaps.py` lists texts without a translation.
+- The Agent page is in the main navigation, not under Lab.
+- Settings → About shows FLE Link's version (it showed the page API version, 0.4.1, and an empty "Python" row); Remote
+  access in the desktop app shows where it listens (it said ":0").
+- Messages say "FLE Link" where they still said "FLE Studio".
+
 ## 0.1.10 (2026-11-10)
 
 - **The desktop app starts once.** A second start brings the open window to the front; before, each start ran its own server and agent on the same data.

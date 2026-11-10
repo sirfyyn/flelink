@@ -26,7 +26,7 @@ export const T = {
   "Previous 7 days": "最近 7 天",
   "Older": "更早",
   "Your conversations stay on this computer.": "你的对话只保存在这台电脑上。",
-  "Measuring, the expert cache, the agent and building your own quants": "测量、专家缓存、智能体和自制量化",
+  "Measuring, the expert cache and building your own quants": "测量、专家缓存和自制量化",
   "Not running": "未运行",
   "No model loaded": "未加载模型",
   "Open the engine page": "打开引擎页面",

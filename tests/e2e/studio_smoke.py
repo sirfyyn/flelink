@@ -53,7 +53,7 @@ try:
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(base + "/", wait_until="domcontentloaded")
         try:
-            expect(page).to_have_title("FLE Studio", timeout=30000)
+            expect(page).to_have_title("FLE Link", timeout=30000)
             expect(page.locator("#nav a").first).to_be_visible(timeout=30000); print("nav entries:", page.locator("#nav a").count())
             expect(page.locator("#engine-card .pill")).to_have_text("Ready", timeout=30000)
             step("Open the app", True, "title, 7 nav entries, engine card Ready")

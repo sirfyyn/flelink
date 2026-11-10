@@ -316,22 +316,26 @@ pub fn compare(label: &str, a: &Resp, b: &Resp, ta: &str, tb: &str) {
     }
     let ct = a.h("content-type").first().copied().unwrap_or("");
     if ct.starts_with("application/json") && !a.body.is_empty() {
-        // the two servers run in folders that differ only in their suffix
+        // the two servers run in folders that differ only in their suffix, and messages name the product (D11)
         let norm = |b: &[u8]| {
             serde_json::from_str::<Value>(
                 &String::from_utf8_lossy(b)
                     .replace("-rs", "-X")
-                    .replace("-py", "-X"),
+                    .replace("-py", "-X")
+                    .replace("FLE Studio", "FLE Link"),
             )
             .unwrap()
         };
         let (x, y): (Value, Value) = (canon(norm(&a.body)), canon(norm(&b.body)));
         assert_eq!(x, y, "[{label}] JSON body differs");
     } else {
-        let (x, y) = (
-            String::from_utf8_lossy(&a.body).replace(ta, "TOKEN"),
-            String::from_utf8_lossy(&b.body).replace(tb, "TOKEN"),
-        );
+        // the name first (D11): an empty token would otherwise be put between every two letters
+        let text = |r: &Resp, tok: &str| {
+            String::from_utf8_lossy(&r.body)
+                .replace("FLE Studio", "FLE Link")
+                .replace(tok, "TOKEN")
+        };
+        let (x, y) = (text(a, ta), text(b, tb));
         assert_eq!(x, y, "[{label}] body differs");
     }
 }

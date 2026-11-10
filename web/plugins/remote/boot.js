@@ -362,8 +362,8 @@ function accessCard({ section, toggle }) {
     const local = ["127.0.0.1", "localhost", "::1"].includes(listen.host);
     const rows = [];
     if (local) {
-      rows.push(h("div", { class: "callout" }, "This Studio listens on this computer only. To let other computers connect, start it "
-        + "with --host 0.0.0.0 (or the address of your network or tailnet). An SSH host needs no change here."));
+      rows.push(h("div", { class: "callout" }, "FLE Link listens on this computer only. To let other computers connect, run `flelink studio --host 0.0.0.0` "
+        + "in a terminal (or name the address of your network or tailnet). An SSH host needs no change here."));
     } else {
       rows.push(h("div", { class: "small muted" }, `Listening on ${listen.host}:${listen.port}, ${listen.tls ? "with TLS" : "without TLS (browsers only)"}.`));
     }

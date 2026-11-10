@@ -26,7 +26,7 @@ export const T = {
   "Previous 7 days": "過去 7 日",
   "Older": "それ以前",
   "Your conversations stay on this computer.": "会話はこのコンピューターの中だけに残ります。",
-  "Measuring, the expert cache, the agent and building your own quants": "計測、エキスパートキャッシュ、エージェント、独自量子化の作成",
+  "Measuring, the expert cache and building your own quants": "計測、エキスパートキャッシュ、独自量子化の作成",
   "Not running": "停止中",
   "No model loaded": "モデル未読み込み",
   "Open the engine page": "エンジンページを開く",

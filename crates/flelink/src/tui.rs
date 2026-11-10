@@ -269,9 +269,11 @@ impl App {
                 KeyCode::Up => {
                     let i = self.list.selected().unwrap_or(0);
                     self.list.select(Some(i.saturating_sub(1)));
+                    self.err = None; // it belonged to the row before
                 }
                 KeyCode::Down => {
                     let i = self.list.selected().unwrap_or(0);
+                    self.err = None;
                     // one row more than the models: the search
                     self.list
                         .select(Some((i + 1).min(self.models.len() + self.rezepte.len())));
@@ -353,11 +355,7 @@ impl App {
     fn start_load(&mut self) {
         let m = self.models[self.list.selected().unwrap_or(0)].clone();
         if catalog::fit(&m, &self.sys) == catalog::Fit::TooBig {
-            self.err = Some(format!(
-                "{} does not fit this machine ({} memory).",
-                m.title,
-                system::gib(self.sys.ram_bytes)
-            ));
+            self.err = Some(format!("{} does not fit this machine.", m.title));
             return;
         }
         match flelink_core::recipe::find(&self.home, m.id) {
@@ -370,12 +368,7 @@ impl App {
     fn start_recipe(&mut self, k: usize) {
         let r = self.rezepte[k].clone();
         if r.fit(&self.home.join("models"), &self.sys) == catalog::Fit::TooBig {
-            self.err = Some(format!(
-                "{} does not fit this machine ({} memory, {} free on disk).",
-                r.title,
-                system::gib(self.sys.ram_bytes),
-                system::gib(self.sys.disk_free_bytes)
-            ));
+            self.err = Some(format!("{} does not fit this machine.", r.title));
             return;
         }
         self.begin_load(r);
@@ -565,8 +558,9 @@ impl App {
     }
 
     fn models_view(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
+        // the note of a big recipe is several lines long, and the reason it does not fit comes before it
         let [top, bottom] =
-            Layout::vertical([Constraint::Min(5), Constraint::Length(5)]).areas(area);
+            Layout::vertical([Constraint::Min(5), Constraint::Length(9)]).areas(area);
         let items: Vec<ListItem> = self
             .models
             .iter()
@@ -626,14 +620,25 @@ impl App {
             .highlight_symbol("> ");
         f.render_stateful_widget(list, top, &mut self.list);
         let sel_i = self.list.selected().unwrap_or(0);
-        let mut lines = vec![Line::from(match self.models.get(sel_i) {
+        let why = match self.models.get(sel_i) {
+            Some(sel) => catalog::fit_reason(sel, &self.sys),
+            None => self
+                .rezepte
+                .get(sel_i.saturating_sub(self.models.len()))
+                .and_then(|r| r.fit_reason(&self.home.join("models"), &self.sys)),
+        };
+        let mut lines = vec![];
+        if let Some(w) = why {
+            lines.push(Line::from(Span::styled(w, Style::new().fg(Color::Yellow))));
+        }
+        lines.push(Line::from(match self.models.get(sel_i) {
             Some(sel) => sel.note.to_string(),
             None if sel_i < self.models.len() + self.rezepte.len() => {
                 self.rezepte[sel_i - self.models.len()].note.clone()
             }
             None => "Type a name, for example qwen, llama or deepseek: FLE Link lists GGUF models from Hugging Face, takes the quantisation that fits this machine and loads it."
                 .to_string(),
-        })];
+        }));
         if let Some(e) = &self.err {
             lines.push(Line::from(Span::styled(
                 e.clone(),
