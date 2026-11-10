@@ -410,7 +410,19 @@ impl Engines {
             )));
         }
         matches.sort_by(|a, b| b.0.cmp(&a.0));
-        let (_, main, cuda) = matches.remove(0);
+        let (_, mut main, cuda) = matches.remove(0);
+        // an FLE release is checked against its signed checksums (only against GitHub itself, not a test server)
+        if source == FLE_REPO && self.inner.github_api == GITHUB_API {
+            let (tag, name) = (
+                rel["tag_name"].as_str().unwrap_or(""),
+                main["name"].as_str().unwrap_or(""),
+            );
+            let signed = flelink_core::engines::fle_signed_sha(tag, name)
+                .map_err(|e| Runtime(format!("{e:#}")))?;
+            if let Some(sha) = signed {
+                main["digest"] = json!(format!("sha256:{sha}"));
+            }
+        }
         let mut files = vec![main];
         if let Some(c) = &cuda {
             let p = cudart_pattern(os, &arch, c);

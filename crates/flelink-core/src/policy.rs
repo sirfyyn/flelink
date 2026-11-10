@@ -5,7 +5,6 @@ pub const FLE_POLICY_ENV: &[(&str, &str)] = &[
     ("FLE_MOE_PROFILE_SAVE_SEC", "600"),
     ("FLE_MOE_ADMIT_FREQ", "2000"),
     ("FLE_MOE_EVICT_OLDEST", "32"),
-    ("FLE_MOE_CACHE_BIAS", "0.001"),
     ("FLE_MOE_OBS_MAXTOK", "8"),
     ("FLE_MC_OVERLAP", "2"),
     ("FLE_HC_FUSED", "1"),

@@ -3,6 +3,7 @@
 export const DE = {
   "Choose…": "Wählen …",
   "Run {a language model} on your own machine": "Starte {ein Sprachmodell} auf deinem eigenen Rechner",
+  "What should {your agent} work on?": "Woran soll {dein Agent} arbeiten?",
   "Use a folder on another drive": "Einen Ordner auf einer anderen Platte nehmen",
   "· free some space, then Resume": "· etwas Platz schaffen, dann Fortsetzen",
   "more": "mehr",

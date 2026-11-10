@@ -289,7 +289,16 @@ pub fn run(
 
     let free: u64 = host.gpus.iter().map(|g| g.memory_free).sum();
     if profile != "off" {
-        if host.gpus.is_empty() {
+        if host.gpus.is_empty() && cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            // Apple Silicon: no NVIDIA card, the Metal GPU shares the system memory; the FLE profile needs CUDA, upstream runs on Metal
+            let usable = crate::system::detect(&crate::data_dir()).gpu_usable_bytes;
+            checks.push(check(
+                "GPU",
+                "ok",
+                format!("Apple GPU (Metal), up to {} of the shared memory", human_bytes(usable)),
+                "The FLE profile needs an NVIDIA GPU; on this Mac FLE Link runs upstream llama.cpp with Metal.",
+            ));
+        } else if host.gpus.is_empty() {
             checks.push(check(
                 "GPU",
                 "fail",

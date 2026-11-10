@@ -12,18 +12,42 @@ pub fn model_path(home: &Path, m: &catalog::Model) -> std::path::PathBuf {
         .join(m.file)
 }
 
-/// Install the engine for this machine if needed, download the model if needed (resumable, checked), start the engine
-/// with automatic settings and wait until it answers. `model_id` is a recipe: a built-in or user recipe id, a `.toml`
-/// file or an `https://` URL.
-pub fn ensure_and_start(
-    home: &Path,
-    model_id: &str,
-    emit: &mut dyn FnMut(Event),
-) -> Result<Server> {
-    let r = crate::recipe::find(home, model_id)?;
-    ensure_and_start_recipe(home, &r, emit)
+/// Why a recipe is refused: what this machine has and, when the recipe says so, what it asks for.
+fn too_big_text(r: &crate::recipe::Recipe, sys: &system::SysInfo) -> String {
+    let wanted: Vec<String> = [
+        r.requires.ram_gib.map(|g| format!("{g} GB RAM")),
+        r.requires.vram_gib.map(|g| format!("{g} GB GPU memory")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let asks = if wanted.is_empty() {
+        String::new()
+    } else {
+        format!("; the recipe asks for {}", wanted.join(", "))
+    };
+    format!(
+        "{} does not fit this machine ({} RAM, {} GPU memory, {} free on disk{asks}). `flelink recipes` shows what fits.",
+        r.title,
+        system::gib(sys.ram_bytes),
+        system::gib(sys.gpu_usable_bytes),
+        system::gib(sys.disk_free_bytes)
+    )
 }
 
+/// Engine downloads and installs report to the same event.
+fn progress(emit: &mut dyn FnMut(Event)) -> impl FnMut(&str, u64, u64) + '_ {
+    move |label: &str, done, total| {
+        emit(Event::Progress {
+            label: label.into(),
+            done,
+            total,
+        })
+    }
+}
+
+/// Install the engine for this machine if needed, download the model if needed (resumable, checked), start the engine
+/// with automatic settings and wait until it answers.
 pub fn ensure_and_start_recipe(
     home: &Path,
     r: &crate::recipe::Recipe,
@@ -33,12 +57,7 @@ pub fn ensure_and_start_recipe(
     // copies already on this machine first: the fit check then counts only what is really missing
     crate::locate::adopt(r, home, &home.join("models"), &mut |e| emit(e));
     if r.fit(&home.join("models"), &sys) == catalog::Fit::TooBig {
-        bail!(
-            "{} does not fit this machine ({} RAM, {} free on disk)",
-            r.title,
-            system::gib(sys.ram_bytes),
-            system::gib(sys.disk_free_bytes)
-        );
+        bail!("{}", too_big_text(r, &sys));
     }
     // an engine a plugin brings, when the recipe prefers one and no built-in engine comes before it
     let builtin_first = r
@@ -57,13 +76,8 @@ pub fn ensure_and_start_recipe(
             "Engine: {} (plugin {})",
             e.label, m.id
         )));
-        let server_bin = crate::plugin::server(home, &e, &sys.os, &sys.arch, &mut |l, d, t| {
-            emit(Event::Progress {
-                label: l.into(),
-                done: d,
-                total: t,
-            })
-        })?;
+        let server_bin =
+            crate::plugin::server(home, &e, &sys.os, &sys.arch, &mut progress(&mut *emit))?;
         return start_with(
             home,
             r,
@@ -97,17 +111,26 @@ pub fn ensure_and_start_recipe(
     emit(Event::Step(format!("Engine: {} - {}", v.label, v.why)));
     let existing = engines::newest_installed(home, v.id);
     let server_bin = match existing {
-        // a newer FLE release replaces the installed one for this start; the old folder stays (a failed update keeps it)
+        // a recipe's numbers belong to an engine: a newer release is only taken when this recipe needs it (the old folder
+        // stays, so a failed update keeps it)
         Some((name, p)) => match engines::update_available(home, &v, &name) {
+            Some(tag)
+                if !r
+                    .engine
+                    .min_version
+                    .as_deref()
+                    .is_some_and(|min| crate::recipe::engine_too_old(&name, min)) =>
+            {
+                emit(Event::Step(format!(
+                    "{} {tag} is available; this start stays on {name} (install it on the Engine page)",
+                    v.label
+                )));
+                p
+            }
             Some(tag) => {
                 emit(Event::Step(format!("Updating {} to {tag}", v.label)));
-                match engines::install(home, &v, &sys, &mut |l, d, t| {
-                    emit(Event::Progress {
-                        label: l.into(),
-                        done: d,
-                        total: t,
-                    })
-                }) {
+                let updated = engines::install(home, &v, &sys, &mut progress(&mut *emit));
+                match updated {
                     Ok(p2) => p2,
                     Err(e) => {
                         emit(Event::Log(format!(
@@ -123,13 +146,7 @@ pub fn ensure_and_start_recipe(
             emit(Event::Step(
                 "Installing the engine (checked against the SHA-256 GitHub publishes)".into(),
             ));
-            engines::install(home, &v, &sys, &mut |l, d, t| {
-                emit(Event::Progress {
-                    label: l.into(),
-                    done: d,
-                    total: t,
-                })
-            })?
+            engines::install(home, &v, &sys, &mut progress(&mut *emit))?
         }
     };
     start_with(home, r, &sys, &server_bin, v.kind, v.label, None, emit)
@@ -147,6 +164,7 @@ fn start_with(
     plugin: Option<&crate::plugin::PluginEngine>,
     emit: &mut dyn FnMut(Event),
 ) -> Result<Server> {
+    crate::orphans::wait_for_port(home, 8080, Duration::from_secs(12));
     let parts = r.model.files.len();
     for (i, x) in r.fetches().iter().enumerate() {
         let path = home.join("models").join(&x.local);
@@ -280,6 +298,9 @@ fn start_with(
         )));
         let t0 = std::time::Instant::now();
         loop {
+            if crate::server::stop_requested() {
+                anyhow::bail!("stopped while the model was warming up"); // dropping the Server ends the engine
+            }
             let log = std::fs::read_to_string(&srv.log).unwrap_or_default();
             if log.contains(want) {
                 break;
@@ -300,4 +321,31 @@ fn start_with(
         command,
     });
     Ok(srv)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_refusal_names_the_gpu_memory_and_what_was_measured() {
+        let r = crate::recipe::builtin()
+            .into_iter()
+            .find(|r| r.id == "katy-27b-dflash")
+            .unwrap();
+        let sys = system::SysInfo {
+            os: "linux".into(),
+            arch: "x64".into(),
+            cpu: String::new(),
+            cores: 8,
+            ram_bytes: 64 << 30,
+            disk_free_bytes: 500 << 30,
+            avx2: true,
+            gpus: vec![],
+            gpu_usable_bytes: 8 << 30,
+        };
+        let t = too_big_text(&r, &sys);
+        assert!(t.contains("8.0 GiB GPU memory"), "{t}");
+        assert!(t.contains("asks for 24 GB RAM, 12 GB GPU memory"), "{t}");
+    }
 }

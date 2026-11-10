@@ -58,7 +58,9 @@ pub struct Studio {
     pub toolbox: crate::mcp::ToolBox,
     /// FLE Durable next to the model (the agent plugin, agent.rs)
     pub agent: crate::agent::Agent,
+    pub desktop: crate::desktop::Desktop,
     pub github: crate::github::GitHub,
+    pub accounts: Arc<crate::accounts::Accounts>,
     /// the port this server listens on (for the sign-in's loopback redirect); set when it starts serving
     pub port: std::sync::atomic::AtomicU16,
     pub live: Live,
@@ -194,14 +196,22 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
     let home = opts.home.clone();
     let config = Arc::new(Mutex::new(config));
     let tok = config.clone();
+    let accounts = Arc::new(crate::accounts::Accounts::new(&home));
+    let signed_in = accounts.clone();
     let downloads = Downloads::new(
         &home,
         Box::new(move || {
-            tok.lock()
+            let saved = tok
+                .lock()
                 .unwrap()
                 .get("hf_token")
                 .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_default()
+                .unwrap_or_default();
+            if saved.is_empty() {
+                signed_in.hugging_face_token()
+            } else {
+                saved
+            }
         }),
     );
     let engines = Engines::new(&home, downloads.clone(), config.clone(), &opts.github_api);
@@ -244,7 +254,9 @@ pub fn new_studio_lan(opts: Options, lan: bool) -> Ctx {
         cache,
         toolbox: crate::mcp::ToolBox::new(&home),
         agent: crate::agent::Agent::new(&home),
+        desktop: crate::desktop::Desktop::new(),
         github: crate::github::GitHub::new(&home),
+        accounts,
         port: std::sync::atomic::AtomicU16::new(0),
         engine,
         profiles: Mutex::new(Profiles::new(&home)),
@@ -1196,15 +1208,87 @@ impl Studio {
     /// Start the agent with the model the engine runs now (name and context window), and wait until it answers.
     fn agent_start(&self) -> Result<(), String> {
         let (s, _) = self.agent_settings();
+        if !s.url.is_empty() {
+            return Ok(()); // it runs on its own; FLE Link only talks to it
+        }
         let eng = self.engine.status();
         let model = eng["model"]["name"].as_str().unwrap_or("").to_string();
         let n_ctx = eng["n_ctx"].as_u64().unwrap_or(0);
         let port = self.port.load(std::sync::atomic::Ordering::SeqCst);
-        self.agent.start(&s, port, &model, n_ctx)?;
+        self.agent
+            .start(&s, port, &model, n_ctx, self.desktop.token())?;
         self.agent.wait_ready(std::time::Duration::from_secs(30))
     }
 
     /// `agent.autostart`: start the agent once the server listens (in the background; a failure shows on the Agent page).
+    /// Keeps the agent's mirror of connected calendars current (calendars.rs): every five minutes, and at once after a sign-in.
+    pub fn calendar_mirror(self: &Arc<Self>) {
+        const EVERY: std::time::Duration = std::time::Duration::from_secs(300);
+        let weak = Arc::downgrade(self);
+        let _ = std::thread::Builder::new()
+            .name("calendar-mirror".into())
+            .spawn(move || {
+                let mut last: Option<std::time::Instant> = None;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    let Some(st) = weak.upgrade() else {
+                        return;
+                    };
+                    let due = match last {
+                        None => true,
+                        Some(t) => t.elapsed() >= EVERY,
+                    };
+                    if !st.agent.running() || !(st.accounts.take_kick() || due) {
+                        continue;
+                    }
+                    last = Some(std::time::Instant::now());
+                    st.calendar_sync();
+                }
+            });
+    }
+
+    fn calendar_sync(&self) {
+        use chrono::{Duration, SecondsFormat, Utc};
+        let at = |d: chrono::DateTime<Utc>| d.to_rfc3339_opts(SecondsFormat::Secs, true);
+        let from = at(Utc::now() - Duration::days(crate::calendars::DAYS_BACK));
+        let to = at(Utc::now() + Duration::days(crate::calendars::DAYS_AHEAD));
+        // signed out: the whole mirror goes, also what has slid out of the window since
+        for source in self.accounts.to_forget() {
+            let all = json!({"source": source, "from": "1970-01-01T00:00:00Z", "to": "2200-01-01T00:00:00Z", "entries": []});
+            if self
+                .agent
+                .call("POST", "/api/calendar/sync", Some(&all))
+                .is_ok()
+            {
+                self.accounts.forgotten(source);
+            }
+        }
+        let mut bodies = vec![];
+        if self.accounts.google_signed_in() {
+            let read = self
+                .accounts
+                .google_token()
+                .and_then(|t| crate::calendars::google_read(&t, &from, &to));
+            bodies.push(match read {
+                Ok(entries) => {
+                    json!({"source": "google", "from": from, "to": to, "entries": entries})
+                }
+                Err(reason) => json!({"source": "google", "reason": reason}),
+            });
+        }
+        if let Some((user, password)) = self.accounts.icloud() {
+            bodies.push(match crate::caldav::read(&user, &password, &from, &to) {
+                Ok(entries) => {
+                    json!({"source": "icloud", "from": from, "to": to, "entries": entries})
+                }
+                Err(reason) => json!({"source": "icloud", "reason": reason}),
+            });
+        }
+        for body in bodies {
+            let _ = self.agent.call("POST", "/api/calendar/sync", Some(&body));
+        }
+    }
+
     pub fn agent_autostart(self: &Arc<Self>) {
         if !self.agent_settings().1 {
             return;
@@ -1214,6 +1298,27 @@ impl Studio {
             .name("agent-autostart".into())
             .spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(2));
+                // the model loads at the same start: the agent needs its name and window, so it waits for it
+                let t0 = std::time::Instant::now();
+                while t0.elapsed() < std::time::Duration::from_secs(1800) {
+                    let Some(st) = weak.upgrade() else { return };
+                    let loading = st
+                        .config
+                        .lock()
+                        .unwrap()
+                        .get("launch.autostart")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    let state = st.engine.status()["state"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                    if !loading || matches!(state.as_str(), "ready" | "attached" | "crashed") {
+                        break;
+                    }
+                    drop(st);
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                }
                 if let Some(st) = weak.upgrade() {
                     if let Err(e) = st.agent_start() {
                         eprintln!("[agent] autostart: {e}");
@@ -1237,10 +1342,38 @@ impl Studio {
         };
         let status = || {
             let (s, auto) = self.agent_settings();
-            self.agent.status(&s, auto)
+            let mut v = self.agent.status(&s, auto);
+            v["always_on"] = json!(flelink_core::service::installed());
+            v
         };
         match (method, rest) {
+            // Always on: FLE Link starts at login with the last model and the agent (from the next login; this one runs already)
+            ("POST", "always") => {
+                let on = body()?.get("on").and_then(Value::as_bool).unwrap_or(false);
+                crate::agent::set_always_on(
+                    &self.opts.home,
+                    &mut self.config.lock().unwrap(),
+                    &self.agent,
+                    on,
+                    false,
+                )
+                .map_err(|e| ApiError(400, e))?;
+                Ok(status())
+            }
             ("GET", "" | "status") => Ok(status()),
+            // Computer use: only the page, not a client paired from another computer, and never the agent (it has no page token)
+            ("GET", "desktop") => Ok(self.desktop.status()),
+            ("POST", "desktop") => {
+                if !r.client.is_null() {
+                    return Err(ApiError(
+                        403,
+                        "Computer use can only be allowed on this computer.".into(),
+                    ));
+                }
+                let minutes = body()?.get("minutes").and_then(Value::as_u64).unwrap_or(0);
+                self.desktop.allow(minutes);
+                Ok(self.desktop.status())
+            }
             ("POST", "start") => self
                 .agent_start()
                 .map(|_| status())
@@ -1261,17 +1394,28 @@ impl Studio {
                     .map_err(|e| ApiError(400, e))?;
                 Ok(status())
             }
+            // FLE Link fetches FLE Durable at DURABLE_PIN into <data>/agent/app (git, then npm ci); also updates that copy
+            ("POST", "install") => {
+                let (s, _) = self.agent_settings();
+                self.agent.install(&s).map_err(|e| ApiError(400, e))?;
+                Ok(status())
+            }
             ("POST", "chat") => self.agent.chat_url(),
             _ => {
                 let (m, path) = crate::agent::proxied(method, rest)
                     .ok_or_else(|| ApiError(404, "Not found".into()))?;
                 // FLE Durable records every decision through its token as the owner's; the page cannot name someone else
-                let b = if m == "POST" {
+                let b = if m == "POST" || m == "PATCH" {
                     Some(Value::Object(body()?))
                 } else {
                     None
                 };
-                self.agent.call(m, &path, b.as_ref())
+                let query = if m == "GET" {
+                    crate::agent::safe_query(&r.query)
+                } else {
+                    String::new()
+                };
+                self.agent.call(m, &format!("{path}{query}"), b.as_ref())
             }
         }
     }
@@ -2123,12 +2267,18 @@ impl Studio {
     }
 
     fn hf_token(&self) -> String {
-        self.config
+        let saved = self
+            .config
             .lock()
             .unwrap()
             .get("hf_token")
             .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if saved.is_empty() {
+            self.accounts.hugging_face_token()
+        } else {
+            saved
+        }
     }
 
     /// `/api/hf/search?q=`: GGUF repos on Hugging Face, most downloaded first.
@@ -2614,6 +2764,54 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             let v = st.github.remove();
             *st.toolbox.extra.lock().unwrap() = crate::github::extra_mcp(&st.opts.home);
             Ok(v)
+        }
+        // accounts connected with a click (accounts.rs)
+        ("GET", "/api/accounts") => Ok(st.accounts.status(st.github.status())),
+        ("POST", "/api/accounts/github") => {
+            let api = std::env::var("FLE_GITHUB_API").unwrap_or_else(|_| "https://api.github.com".into());
+            let (st2, github) = (st.clone(), crate::github::GitHub::new(&st.opts.home));
+            let done = Box::new(move || {
+                *st2.toolbox.extra.lock().unwrap() = crate::github::extra_mcp(&st2.opts.home);
+            });
+            st.accounts
+                .github_begin(github, api, done)
+                .map(|_| st.accounts.status(st.github.status()))
+                .map_err(|e| ApiError(502, e))
+        }
+        ("DELETE", "/api/accounts/github") => {
+            st.accounts.github_cancel();
+            Ok(st.accounts.status(st.github.status()))
+        }
+        // iCloud has no OAuth for calendars: the Apple ID and an app-specific password, checked with iCloud first
+        ("POST", "/api/accounts/icloud") => r.json(MAX_JSON).and_then(|body| {
+            let user = body.get("user").map(py_str).unwrap_or_default();
+            let password = body.get("password").map(py_str).unwrap_or_default();
+            st.accounts
+                .icloud_connect(&user, &password)
+                .map(|_| st.accounts.status(st.github.status()))
+                // not 401: the page reads a 401 as "signed out of FLE Link"
+                .map_err(|e| ApiError(422, e))
+        }),
+        ("POST", _) if p.starts_with("/api/accounts/") => {
+            let port = st.port.load(std::sync::atomic::Ordering::SeqCst);
+            let redirect = format!("http://127.0.0.1:{port}/oauth/callback");
+            let lang = r
+                .json(MAX_JSON)
+                .ok()
+                .and_then(|b| b.get("lang").map(py_str))
+                .unwrap_or_default();
+            match st
+                .accounts
+                .begin(&p["/api/accounts/".len()..], &redirect, &lang)
+            {
+                None => Err(ApiError(404, "Not found".into())),
+                Some(Err(e)) => Err(ApiError(400, e)),
+                Some(Ok(v)) => Ok(v),
+            }
+        }
+        ("DELETE", _) if p.starts_with("/api/accounts/") => {
+            st.accounts.sign_out(&p["/api/accounts/".len()..]);
+            Ok(st.accounts.status(st.github.status()))
         }
         // the MCP hub (github.rs Hub): the chat's tools come through its few meta tools
         ("GET", "/api/hub") => Ok(crate::github::Hub::new(&st.opts.home).status()),
@@ -3290,6 +3488,26 @@ async fn handler(
     let (parts, body) = req.into_parts();
     let head = parts.method == Method::HEAD;
     let path = parts.uri.path().to_string();
+    // The agent's calls for computer use: from this computer, with its own token; desktop.rs decides whether they may act
+    if path.starts_with("/desktop/")
+        && peer.ip().is_loopback()
+        && bearer(&parts.headers).is_some_and(|t| ct_eq(&t, st.desktop.token()))
+    {
+        let Ok(bytes) = to_bytes(body, MAX_JSON).await else {
+            return error_json(413, "Too large", head);
+        };
+        let (st2, method, q) = (
+            st.clone(),
+            parts.method.clone(),
+            query_of(parts.uri.query()),
+        );
+        return tokio::task::spawn_blocking(move || {
+            let (code, v) = st2.desktop.answer(method.as_str(), &path, &q, &bytes);
+            send_json(code, &v, head)
+        })
+        .await
+        .unwrap_or_else(|_| error_json(500, "The desktop call failed", head));
+    }
     if let Some(r) = guard(&st, &parts.method, &path, &parts.headers, &peer, head) {
         return r;
     }
@@ -3313,6 +3531,9 @@ async fn handler(
     }
     if path.starts_with("/h/") {
         return forward(&st, parts, body, head).await;
+    }
+    if path == "/api/p/agent/stream" && parts.method == Method::GET {
+        return agent_stream(&st, head).await;
     }
     let declared: usize = parts
         .headers
@@ -3404,6 +3625,56 @@ fn app_frame(st: &Ctx, frame: &str, head: bool) -> Response<Body> {
 
 /// `/h/<host id>/api/…` and `/h/<host id>/v1/…` to a paired host, with the client token. Small answers are read whole (and
 /// mirrored); streams, downloads and other large answers are passed on as they arrive.
+/// The agent's live conversation for the chat page: the runner's event stream, passed through. A closed page ends it at the next
+/// event or at the runner's keep-alive comment (20 s).
+async fn agent_stream(st: &Ctx, head: bool) -> Response<Body> {
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(16);
+    let (meta_tx, meta_rx) = tokio::sync::oneshot::channel::<Result<(), ApiError>>();
+    let st2 = st.clone();
+    std::thread::spawn(move || {
+        let resp = match st2.agent.stream_open() {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = meta_tx.send(Err(e));
+                return;
+            }
+        };
+        let _ = meta_tx.send(Ok(()));
+        let mut reader = resp.into_reader();
+        let mut buf = vec![0u8; 65536];
+        loop {
+            match std::io::Read::read(&mut reader, &mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if tx
+                        .blocking_send(Ok(bytes::Bytes::copy_from_slice(&buf[..n])))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    match meta_rx.await {
+        Ok(Ok(())) => {
+            let mut r = Response::new(Body::from_stream(
+                tokio_stream::wrappers::ReceiverStream::new(rx),
+            ));
+            let hm = r.headers_mut();
+            hm.insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/event-stream"),
+            );
+            hm.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+            hm.insert("x-accel-buffering", HeaderValue::from_static("no"));
+            r
+        }
+        Ok(Err(ApiError(s, m))) => error_json(s, &m, head),
+        Err(_) => error_json(502, "FLE Durable's event stream did not open", head),
+    }
+}
+
 async fn forward(
     st: &Ctx,
     parts: axum::http::request::Parts,
@@ -3614,18 +3885,21 @@ fn html_escape(t: &str) -> String {
 /// The browser comes back from a sign-in: exchange the code, connect the server again, say how it went.
 fn oauth_callback(st: &Ctx, q: &Map<String, Value>, head: bool) -> Response<Body> {
     let g = |k: &str| q.get(k).and_then(Value::as_str).unwrap_or("");
-    let (title, text, status) =
-        match st
-            .toolbox
+    let finished = if st.accounts.knows(g("state")) {
+        st.accounts
+            .finish(g("state"), g("code"), g("error"), g("error_description"))
+    } else {
+        st.toolbox
             .finish_sign_in(g("state"), g("code"), g("error"), g("error_description"))
-        {
-            Ok(name) => (
-                "Signed in".to_string(),
-                format!("{name} is connected. You can close this tab and go back to FLE Link."),
-                200,
-            ),
-            Err(e) => ("Sign-in did not work".to_string(), e, 400),
-        };
+    };
+    let (title, text, status) = match finished {
+        Ok(name) => (
+            "Signed in".to_string(),
+            format!("{name} is connected. You can close this tab and go back to FLE Link."),
+            200,
+        ),
+        Err(e) => ("Sign-in did not work".to_string(), e, 400),
+    };
     let page = CALLBACK_PAGE
         .replace("__TITLE__", &html_escape(&title))
         .replace("__TEXT__", &html_escape(&text));
@@ -3720,6 +3994,7 @@ pub async fn serve_listener(
         st.port.store(a.port(), std::sync::atomic::Ordering::SeqCst);
     }
     st.agent_autostart();
+    st.calendar_mirror();
     axum::serve(
         l,
         router(st).into_make_service_with_connect_info::<SocketAddr>(),
@@ -3855,6 +4130,18 @@ async fn proxy(
             .and_then(|v| v.to_str().ok())
             .unwrap_or(""),
     );
+    // an answer in a loop is ended for programs on /v1; the chat page (it sends an Origin) has its own guard
+    let loop_format = if parts.headers.contains_key(header::ORIGIN)
+        || std::env::var_os("FLE_NO_LOOP_GUARD").is_some_and(|x| !x.is_empty())
+    {
+        None
+    } else if parts.uri.path().ends_with("/v1/chat/completions") {
+        Some(crate::loopguard::Format::OpenAi)
+    } else if parts.uri.path().ends_with("/v1/messages") {
+        Some(crate::loopguard::Format::Anthropic)
+    } else {
+        None
+    };
     let t0 = std::time::Instant::now();
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(16);
     let (meta_tx, meta_rx) = tokio::sync::oneshot::channel::<Upstream>();
@@ -3904,32 +4191,47 @@ async fn proxy(
         let mut reader = resp.into_reader();
         let mut all: Vec<u8> = vec![];
         let mut buf = vec![0u8; 65536];
+        let mut watch = loop_format
+            .filter(|_| stream)
+            .map(crate::loopguard::Watch::new);
+        let mut stopped_loop = false;
         loop {
             let n = match std::io::Read::read(&mut reader, &mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => n,
             };
             if stream {
+                let stop = watch.as_mut().and_then(|w| w.feed(&buf[..n]));
+                let keep = stop.as_ref().map_or(n, |s| s.keep);
                 if tx
-                    .blocking_send(Ok(bytes::Bytes::copy_from_slice(&buf[..n])))
+                    .blocking_send(Ok(bytes::Bytes::copy_from_slice(&buf[..keep])))
                     .is_err()
                 {
                     break; // the browser stopped reading (Stop button); closing our side cancels the generation
                 }
-                all.extend_from_slice(&buf[..n]);
+                all.extend_from_slice(&buf[..keep]);
                 if all.len() > 262144 {
                     all.drain(..all.len() - 262144);
+                }
+                if let Some(s) = stop {
+                    let _ = tx.blocking_send(Ok(bytes::Bytes::from(s.close)));
+                    stopped_loop = true;
+                    break; // closing our side cancels the generation
                 }
             } else {
                 all.extend_from_slice(&buf[..n]);
             }
         }
+        drop(reader);
         let extra = |status: u16| {
             let mut m = Map::new();
             m.insert("api".into(), json!(api));
             m.insert("client".into(), json!(client));
             m.insert("seconds".into(), json!(t0.elapsed().as_secs_f64()));
             m.insert("status".into(), json!(status));
+            if stopped_loop {
+                m.insert("stopped_loop".into(), json!(true));
+            }
             m
         };
         if api.is_some() && method == "POST" {

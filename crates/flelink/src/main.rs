@@ -1,3 +1,4 @@
+mod code;
 mod demo;
 mod mcp;
 mod tui;
@@ -65,13 +66,37 @@ enum Cmd {
         /// recipe id, a .toml file or an https:// URL
         recipe: String,
     },
-    /// Load a model (a recipe id, a .toml recipe or an https:// URL to one) and serve it (OpenAI-compatible API) until Ctrl+C
-    Run { model: String },
+    /// Load a model (a recipe id or a part of one, a .toml recipe or an https:// URL to one) and serve it (OpenAI-compatible API) until Ctrl+C; without a model: list the recipes
+    Run {
+        model: Option<String>,
+        /// start a recipe from a URL or a file without asking
+        #[arg(long)]
+        yes: bool,
+    },
     /// An MCP server on stdin/stdout: lets a coding agent list, download, load and stop models, read the log and change settings
     Mcp {
         /// the data folder of the Studio to drive (default: per-user app data)
         #[arg(long, value_name = "DIR")]
         home: Option<std::path::PathBuf>,
+    },
+    /// Work on the project in this folder with FLE Durable (it stays its own program; each folder keeps its conversation)
+    Code {
+        /// a recipe to load for the session; without one, the model already running
+        model: Option<String>,
+        /// the folder of FLE Durable, remembered from then on
+        #[arg(long, value_name = "DIR")]
+        durable: Option<std::path::PathBuf>,
+        /// fetch and set up FLE Durable, then stop
+        #[arg(long)]
+        setup: bool,
+        /// no questions: install FLE Durable and start a recipe from a URL or a file
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Always on: start FLE Link at login, with the last model and the agent
+    Service {
+        #[command(subcommand)]
+        what: ServiceCmd,
     },
     /// Set up Claude Code, Codex, OpenCode, pi or any other app for the model FLE Link serves (OpenAI and Anthropic API)
     Connect {
@@ -164,6 +189,7 @@ enum Cmd {
         all: bool,
     },
     /// Download the MTP head and vocabulary for a known model
+    #[command(hide = true)]
     FetchSidecars {
         #[command(flatten)]
         common: plancmd::Common,
@@ -193,12 +219,26 @@ enum Cmd {
         model: String,
         /// the question; without one it is read from stdin
         question: Vec<String>,
+        /// start a recipe from a URL or a file without asking
+        #[arg(long)]
+        yes: bool,
     },
     /// Drive a Studio started with --demo (chat, page, preview, wait) and record the screen, for videos
+    #[command(hide = true)]
     Demo {
         #[command(subcommand)]
         what: DemoCmd,
     },
+}
+
+#[derive(Subcommand)]
+enum ServiceCmd {
+    /// start at every login from now on
+    On,
+    /// no longer start at login
+    Off,
+    /// is it on?
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -690,6 +730,85 @@ fn run_config(config: Option<String>, json: bool, action: ConfigAction) -> Resul
 }
 
 /// Exit with `code` unless it is 0.
+fn print_recipes(home: &std::path::Path) {
+    let s = system::detect(home);
+    let (all, problems) = flelink_core::recipe::load_all(home);
+    let w = all.iter().map(|r| r.id.len()).max().unwrap_or(22).max(22);
+    for r in &all {
+        let fit = if r.model.size > 0 {
+            r.fit(&home.join("models"), &s).label()
+        } else {
+            "?"
+        };
+        let have = r
+            .fetches()
+            .iter()
+            .all(|x| home.join("models").join(&x.local).exists());
+        let from = if r.source == "builtin" {
+            String::new()
+        } else {
+            format!("  ({})", r.source)
+        };
+        println!(
+            "{:<w$} {:>9}  {:<8} {}{}{}",
+            r.id,
+            if r.model.size > 0 {
+                system::gib(r.model.size)
+            } else {
+                "-".into()
+            },
+            fit,
+            r.title,
+            if have { "  [downloaded]" } else { "" },
+            from,
+            w = w
+        );
+    }
+    for p in problems {
+        eprintln!("skipped: {p}");
+    }
+    println!(
+        "\nRun one: flelink run ID · your own: put a .toml into {}",
+        home.join("recipes").display()
+    );
+}
+
+/// The recipe to start. One from a URL or a file is someone else's until the person has seen what it sets; it is read
+/// once, so what was shown is what starts.
+fn recipe_to_start(
+    home: &std::path::Path,
+    what: &str,
+    yes: bool,
+) -> Result<flelink_core::recipe::Recipe> {
+    use std::io::{IsTerminal, Write};
+    let r = flelink_core::recipe::find_typed(home, what)?;
+    if yes || !flelink_core::recipe::is_foreign(what) {
+        return Ok(r);
+    }
+    eprintln!("This recipe comes from {what}. It would download and start:");
+    eprintln!("  model: {} ({})", r.model.repo, r.model.files.join(", "));
+    if let Some(d) = &r.draft {
+        eprintln!("  draft: {} ({})", d.repo, d.file);
+    }
+    eprintln!("  args:  {}", r.run.args.join(" "));
+    for (k, v) in &r.run.env {
+        eprintln!("  env:   {k}={v}");
+    }
+    if !std::io::stdin().is_terminal() {
+        anyhow::bail!(
+            "not started: a recipe from outside needs a yes (add --yes once you trust it)"
+        );
+    }
+    eprint!("Start it? [y/N] ");
+    std::io::stderr().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    if !matches!(answer.trim(), "y" | "Y" | "yes" | "j" | "J" | "ja") {
+        anyhow::bail!("not started");
+    }
+    Ok(r)
+}
+
 fn exit(code: i32) -> Result<()> {
     if code != 0 {
         std::process::exit(code);
@@ -812,46 +931,7 @@ fn run() -> Result<()> {
         }
         Some(Cmd::Bench(a)) => exit(run_bench(*a)?),
         Some(Cmd::Recipes) => {
-            let s = system::detect(&home);
-            let (all, problems) = flelink_core::recipe::load_all(&home);
-            let w = all.iter().map(|r| r.id.len()).max().unwrap_or(22).max(22);
-            for r in &all {
-                let fit = if r.model.size > 0 {
-                    r.fit(&home.join("models"), &s).label()
-                } else {
-                    "?"
-                };
-                let have = r
-                    .fetches()
-                    .iter()
-                    .all(|x| home.join("models").join(&x.local).exists());
-                let from = if r.source == "builtin" {
-                    String::new()
-                } else {
-                    format!("  ({})", r.source)
-                };
-                println!(
-                    "{:<w$} {:>9}  {:<8} {}{}{}",
-                    r.id,
-                    if r.model.size > 0 {
-                        system::gib(r.model.size)
-                    } else {
-                        "-".into()
-                    },
-                    fit,
-                    r.title,
-                    if have { "  [downloaded]" } else { "" },
-                    from,
-                    w = w
-                );
-            }
-            for p in problems {
-                eprintln!("skipped: {p}");
-            }
-            println!(
-                "\nRun one: flelink run ID · your own: put a .toml into {}",
-                home.join("recipes").display()
-            );
+            print_recipes(&home);
             Ok(())
         }
         Some(Cmd::Plugins) => {
@@ -893,7 +973,7 @@ fn run() -> Result<()> {
             Ok(())
         }
         Some(Cmd::Recipe { recipe }) => {
-            let r = flelink_core::recipe::find(&home, &recipe)?;
+            let r = flelink_core::recipe::find_typed(&home, &recipe)?;
             print!("{}", r.to_toml());
             Ok(())
         }
@@ -986,6 +1066,69 @@ fn run() -> Result<()> {
             let explicit = home.is_some();
             mcp::serve(home.unwrap_or_else(flelink_api::run::data_dir), explicit)
         }
+        Some(Cmd::Code {
+            model,
+            durable,
+            setup,
+            yes,
+        }) => {
+            if setup {
+                return code::setup(&home, durable, yes);
+            }
+            // before a large model loads: the agent has to be there
+            code::prepare(&home, durable, yes)?;
+            // a recipe named: loaded for this session and stopped with it; otherwise the model that runs already
+            let (server, base, name) = match model {
+                Some(m) => {
+                    let r = recipe_to_start(&home, &m, yes)?;
+                    let srv = flow::ensure_and_start_recipe(&home, &r, &mut |e| print_event(&e))?;
+                    let base = srv.base.clone();
+                    (Some(srv), base, r.id)
+                }
+                None => {
+                    let (base, name) = flelink_core::connect::find_running().ok_or_else(|| {
+                        flelink_core::FleError::new(
+                            "No model is serving.",
+                            "Name a recipe (flelink code katy) or start one first (flelink run <recipe> or the app).",
+                        )
+                    })?;
+                    (None, base, name)
+                }
+            };
+            let done = code::run(&home, &base, &name);
+            drop(server);
+            done
+        }
+        Some(Cmd::Service { what }) => {
+            let agent = flelink_api::agent::Agent::new(&home);
+            let mut config = flelink_api::settings::Config::load(&home.join("settings.json"));
+            match what {
+                ServiceCmd::Status => {
+                    let on = flelink_core::service::installed();
+                    println!(
+                        "{}",
+                        if on {
+                            "Always on: FLE Link starts at login."
+                        } else {
+                            "Off: FLE Link starts when you start it."
+                        }
+                    );
+                }
+                ServiceCmd::On => {
+                    // a Studio that runs already keeps running; the service takes over at the next login
+                    let now = !home.join("studio.json").exists();
+                    flelink_api::agent::set_always_on(&home, &mut config, &agent, true, now)
+                        .map_err(anyhow::Error::msg)?;
+                    println!("Always on: FLE Link starts at login with the last model and the agent, and comes back if it stops.");
+                }
+                ServiceCmd::Off => {
+                    flelink_api::agent::set_always_on(&home, &mut config, &agent, false, false)
+                        .map_err(anyhow::Error::msg)?;
+                    println!("Off: FLE Link no longer starts at login.");
+                }
+            }
+            Ok(())
+        }
         Some(Cmd::Connect { tool, url, model }) => {
             // an address given: ask that one for its model; otherwise look on this machine
             let found = match &url {
@@ -1031,15 +1174,28 @@ fn run() -> Result<()> {
             }
             Ok(())
         }
-        Some(Cmd::Run { model }) => {
-            let mut srv = flow::ensure_and_start(&home, &model, &mut |e| print_event(&e))?;
-            eprintln!("\nServing. Press Ctrl+C to stop.");
-            // Ctrl+C, SIGTERM, SIGHUP (or closing the console on Windows) stop the engine with the program; an engine that
-            // ends on its own ends the program
+        Some(Cmd::Run { model: None, .. }) => {
+            print_recipes(&home);
+            Ok(())
+        }
+        Some(Cmd::Run {
+            model: Some(model),
+            yes,
+        }) => {
+            let r = recipe_to_start(&home, &model, yes)?;
+            // Ctrl+C, SIGTERM, SIGHUP (or closing the console on Windows) stop the engine with the program, also while it
+            // loads; before there is an engine (a download, say) the program just ends; an engine that ends on its own ends
+            // the program
             let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let flag = stop.clone();
-            let _ =
-                ctrlc::set_handler(move || flag.store(true, std::sync::atomic::Ordering::SeqCst));
+            let _ = ctrlc::set_handler(move || {
+                if !flelink_core::server::request_stop() {
+                    std::process::exit(130);
+                }
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            });
+            let mut srv = flow::ensure_and_start_recipe(&home, &r, &mut |e| print_event(&e))?;
+            eprintln!("\nServing. Press Ctrl+C to stop.");
             while !stop.load(std::sync::atomic::Ordering::SeqCst) {
                 if let Ok(Some(status)) = srv.child.try_wait() {
                     anyhow::bail!(
@@ -1053,7 +1209,11 @@ fn run() -> Result<()> {
             drop(srv);
             Ok(())
         }
-        Some(Cmd::Ask { model, question }) => {
+        Some(Cmd::Ask {
+            model,
+            question,
+            yes,
+        }) => {
             // the question before the model loads: a missing one should not cost a minute of loading
             let q = if question.is_empty() {
                 use std::io::{IsTerminal, Read};
@@ -1072,11 +1232,12 @@ fn run() -> Result<()> {
             } else {
                 question.join(" ")
             };
-            let srv = flow::ensure_and_start(&home, &model, &mut |e| print_event(&e))?;
+            let r = recipe_to_start(&home, &model, yes)?;
+            let srv = flow::ensure_and_start_recipe(&home, &r, &mut |e| print_event(&e))?;
             eprintln!("\n> {q}\n");
             let st = chat::stream(
                 &srv.base,
-                &model,
+                &r.id,
                 &[("user".into(), q)],
                 &mut |reasoning, t| {
                     if reasoning {

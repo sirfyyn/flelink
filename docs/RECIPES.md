@@ -51,7 +51,8 @@ min_version = "v1.2.3" # the oldest engine release the settings work with; the S
 [run]
 context = 65536                            # tokens; default: sized from free memory
 args = ["--cache-reuse", "256"]            # appended after the automatic arguments; the last value of a flag wins
-                                           # {draft}: path of the draft model; {physical_cores}: cores without SMT
+                                           # {draft}: path of the draft model; {physical_cores}: cores without SMT;
+                                           # {physical_cores_up_to_8}: the same, at most 8
                                            # in args and env also {profile}: <models>/profiles/<id>.prof (a file the
                                            # engine keeps between starts), {hot_mlock_gb}: memory minus 60 GiB, at most 75
 env = { FLE_MOE_CACHE_BIAS = "0.002" }     # overrides the automatic environment
@@ -59,9 +60,10 @@ unset_env = ["FLE_MOE_ADMIT_FREQ"]        # automatic values FLE Link would set 
 profile = "/data/profiles/measured.prof"   # a usage profile to start from (copied to {profile} the first time)
 ready_log = "[fle-store] warm start"       # ready only once the engine log shows this line (after the health check)
 
-[requires]             # shown to people; the fit check uses model.size
+[requires]             # what it was measured with; the fit check compares the machine with it (up to a fifth less: tight)
 ram_gib = 100
 vram_gib = 24
+vram_is_minimum = true # optional: a card below vram_gib is too small, not tight
 
 [chat]                 # defaults for the chat in the Studio
 system = "You are a careful assistant."

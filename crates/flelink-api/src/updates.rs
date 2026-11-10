@@ -495,12 +495,11 @@ impl Updates {
                 .map_err(|e| format!("The download of {name} failed: {e}."))?;
             Ok(buf)
         };
+        let (sums, signature) = (fetch("SHA256SUMS")?, fetch("SHA256SUMS.minisig")?);
+        let want = flelink_core::signature::signed_sha(&sums, &signature, &asset).map_err(|e| {
+            format!("This update is not signed correctly ({e:#}); nothing was changed.")
+        })?;
         let archive = fetch(&asset)?;
-        let want = String::from_utf8_lossy(&fetch(&format!("{asset}.sha256"))?)
-            .split_whitespace()
-            .next()
-            .unwrap_or("")
-            .to_lowercase();
         let got = hex::encode(sha2::Sha256::digest(&archive));
         if want.len() != 64 || want != got {
             return Err(format!(

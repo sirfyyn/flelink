@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Privacy – FLE Link</title>
+<link rel="icon" href="favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="favicon-64.png?v=2" type="image/png" sizes="64x64">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in">
+  <a class="brand" href="./" aria-label="FLE Link home"><img src="logo-mark.svg" alt="" width="34" height="34"><span><b>FLE</b> Link</span></a>
+  <nav class="top-nav" aria-label="Main"><a class="btn ghost" href="./">Back to the page</a></nav>
+</div></header>
+<main class="wrap legal"><h1>Privacy</h1>
+<p>This page covers the website flelink.run and the program FLE Link. The German version with the details on hosting is <a href="datenschutz.html">Datenschutz</a>.</p>
+<p><b>Controller</b><br>Max Bitzer, Ebingerstr. 76, 72336 Balingen, Germany, <a href="mailto:imax.bitz@gmail.com">imax.bitz@gmail.com</a></p>
+
+<h2>This website</h2>
+<p>The site is static: no cookies, no analytics or advertising services, no external fonts, nothing loaded from third parties. It runs on my own server at Hetzner Online GmbH in Nuremberg, Germany. The web server logs each request (host name, IP address, time, request, status, size, user agent, referrer); the logs are rotated daily and deleted after 14 days. They serve safe operation and a daily count of page views, which keeps no IP addresses and no user agents. The install script comes from this server; the program itself is downloaded from GitHub Releases.</p>
+
+<h2>The program FLE Link</h2>
+<p>FLE Link runs on your own computer and sends nothing to me. It connects only to the services you use: GitHub (engine downloads and checksums), Hugging Face (model downloads), a search service if you switch on web search, and the accounts you connect yourself (below).</p>
+
+<h2 id="google">Google user data</h2>
+<p>When you connect your Google account under Settings &gt; Accounts, FLE Link asks Google for read access to your calendar events. This is what happens with that data:</p>
+<ul>
+  <li><b>What is accessed:</b> the events of your primary Google Calendar from one week back to 90 days ahead: title, description, location, start and end. Nothing else from your Google account.</li>
+  <li><b>How it is used:</b> only to show your calendar on the Agent page of FLE Link and to let the agent that runs on your computer take your appointments into account. FLE Link reads them again every five minutes.</li>
+  <li><b>Where it is stored:</b> on your computer only. The events are kept in the agent's local database file, the sign-in token in a file that only your user account can read. No copy goes to me or to any server of mine; FLE Link has none.</li>
+  <li><b>Sharing:</b> FLE Link does not share, sell or transfer Google user data. The events are given only to the language model you run with FLE Link. If you point FLE Link at a model or tool on another computer yourself, the agent's input, which can contain your appointments, goes there; FLE Link does not do that on its own.</li>
+  <li><b>No advertising, no training:</b> Google user data is not used for advertising, not used to train or improve AI models, and not read by any person.</li>
+  <li><b>Deletion:</b> Disconnect in Settings &gt; Accounts. FLE Link then revokes the token at Google, deletes it, and removes the mirrored events from the agent. You can also remove the access at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+</ul>
+<p>FLE Link's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2 id="icloud">iCloud calendars</h2>
+<p>If you connect iCloud under Settings &gt; Accounts with an app-specific password from Apple, the same holds for your iCloud calendars: FLE Link reads the events of all your calendars in the same window, keeps them on your computer for the Agent page and the agent, shares them with no one and removes them when you disconnect. The Apple ID and the app-specific password stay in a file only your user account can read and go only to Apple's calendar server. You can revoke the password at any time at <a href="https://account.apple.com">account.apple.com</a>.</p>
+
+<h2>Your rights</h2>
+<p>You have the right to access, rectification, erasure, restriction of processing, data portability and objection, and the right to lodge a complaint with a supervisory authority (in Baden-Württemberg: Der Landesbeauftragte für den Datenschutz und die Informationsfreiheit). Write to the e-mail address above.</p>
+</main>
+<footer class="foot"><div class="wrap foot-in">
+  <nav aria-label="Legal"><a href="impressum.html">Impressum</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="datenschutz.html">Datenschutz</a></nav>
+  <p class="fine">© 2026 Max Bitzer</p>
+</div></footer>
+</body>
+</html>

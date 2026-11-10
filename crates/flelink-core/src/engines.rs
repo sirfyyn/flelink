@@ -382,7 +382,23 @@ pub fn find_server(root: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Download and unpack an engine; returns the path of its llama-server. Checks the SHA-256 GitHub publishes.
+/// The signed SHA-256 of an asset of FLE release `tag` (see [`crate::signature::fle_sha`]).
+pub fn fle_signed_sha(tag: &str, asset: &str) -> Result<Option<String>> {
+    let c = client()?;
+    let get = |name: &str| -> Option<Vec<u8>> {
+        let url = format!(
+            "https://github.com/{}/releases/download/{tag}/{name}",
+            crate::adapter::FLE_REPO
+        );
+        let r = c.get(&url).send().ok()?;
+        r.status().is_success().then_some(())?;
+        r.bytes().ok().map(|b| b.to_vec())
+    };
+    crate::signature::fle_sha(tag, asset, &get)
+}
+
+/// Download and unpack an engine; returns the path of its llama-server. An FLE release is checked against its signed
+/// checksums, any other against the SHA-256 GitHub publishes.
 pub fn install(
     dir: &Path,
     v: &Variant,
@@ -406,10 +422,15 @@ pub fn install(
         return Ok(p);
     }
     let archive = dir.join("downloads").join(&asset.name);
-    let sha = asset
+    let signed = if repo == crate::adapter::FLE_REPO {
+        fle_signed_sha(&rel.tag_name, &asset.name)?
+    } else {
+        None
+    };
+    let sha = signed.as_deref().or(asset
         .digest
         .as_deref()
-        .and_then(|d| d.strip_prefix("sha256:"));
+        .and_then(|d| d.strip_prefix("sha256:")));
     let label = format!("engine {}", asset.name);
     fetch(&asset.browser_download_url, &archive, sha, &mut |d, t| {
         progress(&label, d, t)

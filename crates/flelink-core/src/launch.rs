@@ -254,6 +254,70 @@ pub fn nvidia_gpus() -> Vec<GpuInfo> {
         .collect()
 }
 
+/// After an engine ended, its GPU memory can stay taken for a few seconds, and a start in that moment plans with too little
+/// free memory. Waits until the used memory of all GPUs has stopped falling for three samples in a row, at most `limit`.
+/// Without an NVIDIA GPU it returns at once.
+pub fn wait_gpu_memory_settled(limit: Duration) {
+    settle(limit, Duration::from_millis(500), || {
+        let gpus = nvidia_gpus();
+        (!gpus.is_empty()).then(|| gpus.iter().map(|g| g.memory_used).sum())
+    });
+}
+
+fn settle(limit: Duration, step: Duration, mut used: impl FnMut() -> Option<u64>) {
+    let Some(mut last) = used() else { return };
+    let t = Instant::now();
+    let mut quiet = 0;
+    while quiet < 3 && t.elapsed() < limit {
+        std::thread::sleep(step);
+        let Some(now) = used() else { return };
+        quiet = if now < last { 0 } else { quiet + 1 };
+        last = now;
+    }
+}
+
+#[cfg(test)]
+mod settle_tests {
+    use super::settle;
+    use std::time::Duration;
+
+    fn run(samples: &[Option<u64>], limit: Duration) -> usize {
+        let mut i = 0;
+        settle(limit, Duration::ZERO, || {
+            let v = samples.get(i).copied().unwrap_or(Some(0));
+            i += 1;
+            v
+        });
+        i
+    }
+
+    #[test]
+    fn it_waits_until_the_memory_stops_falling() {
+        let s = [
+            Some(30),
+            Some(30),
+            Some(20),
+            Some(5),
+            Some(5),
+            Some(5),
+            Some(5),
+            Some(99),
+        ];
+        assert_eq!(run(&s, Duration::from_secs(5)), 7);
+    }
+
+    #[test]
+    fn no_gpu_means_no_waiting() {
+        assert_eq!(run(&[None], Duration::from_secs(5)), 1);
+    }
+
+    #[test]
+    fn it_gives_up_at_the_limit() {
+        let s = [Some(9), Some(8), Some(7)];
+        assert_eq!(run(&s, Duration::ZERO), 1);
+    }
+}
+
 pub fn port_free(host: &str, port: i64) -> bool {
     let Ok(port) = u16::try_from(port) else {
         return false;

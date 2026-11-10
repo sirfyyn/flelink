@@ -34,7 +34,7 @@ export function mount(main) {
     if (!force && page.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     const ui = { section, field, toggle, save, render: () => render(true) };
     const parts = [
-      [10, look(s)], [20, models(s)], [30, chat(s)], [40, toolsSection(s, ui)], [44, mcpHub()], [46, github()],
+      [10, look(s)], [20, models(s)], [30, chat(s)], [40, toolsSection(s, ui)], [44, mcpHub()], [45, accounts()], [46, github()],
       [60, hub(s)], [70, network(s)],
       [100, plugins()], [110, about()],
     ];
@@ -94,6 +94,78 @@ export function mount(main) {
     };
     get("/api/hub").then(draw).catch(() => clear(box));
     return section("grid", "MCP hub", "Tools for the chat and the agent through one hub: it shows the model a handful of meta tools instead of every tool, so adding many tools does not slow it down.", box);
+  }
+
+  // Accounts connected with a click (accounts.rs). While a sign-in is open elsewhere, the card asks every few seconds.
+  function accounts() {
+    const box = h("div", { class: "stack" }, h("span", { class: "small faint" }, "…"));
+    let watching = 0;
+    const load = () => get("/api/accounts").then(draw).catch(() => clear(box));
+    const watch = () => {
+      watching = 100; // five minutes
+      const tick = () => { if (box.isConnected && --watching > 0) load().then(() => setTimeout(tick, 3000)); };
+      setTimeout(tick, 3000);
+    };
+    const act = (fn) => async () => { try { await fn(); } catch (e) { toast(e.message, "bad", 10000); } };
+    const signIn = (id) => act(async () => {
+      // the provider's sign-in pages in the language of this page
+      const r = await post(`/api/accounts/${id}`, { lang: document.documentElement.lang || navigator.language || "" });
+      window.open(r.auth_url, "_blank", "noopener");
+      toast("A sign-in page opened in your browser. Come back here when you are done.", "info", 8000);
+      watch();
+    });
+    const row = (title, what, on, id) => h("div", { class: "row" },
+      h("div", { class: "grow" }, h("strong", null, title), h("div", { class: "small faint" }, what)),
+      on ? h("span", { class: "pill good" }, "Connected") : null,
+      on ? h("button", { class: "btn ghost danger", onclick: act(async () => draw(await del(`/api/accounts/${id}`))) }, "Disconnect")
+        : h("button", { class: "btn", onclick: signIn(id) }, "Connect"));
+    function githubRow(g) {
+      const on = !!g.account?.connected;
+      const waiting = g.user_code && !g.error && !on;
+      return [h("div", { class: "row" },
+        h("div", { class: "grow" }, h("strong", null, "GitHub"), h("div", { class: "small faint" }, on ? `Signed in as ${g.account.login}.` : "For the agent's git and gh. Grants access to all repos your account can reach; for chosen repos only, paste a token below.")),
+        on ? h("span", { class: "pill good" }, "Connected") : null,
+        on ? null : waiting
+          ? h("button", { class: "btn ghost", onclick: act(async () => draw(await del("/api/accounts/github"))) }, "Cancel")
+          : h("button", { class: "btn", onclick: act(async () => { draw(await post("/api/accounts/github", {})); watch(); }) }, "Connect")),
+        waiting ? h("div", { class: "callout info" }, icon("info", "sm"), h("div", { class: "small" },
+          "Enter this code at ", h("a", { href: g.uri, target: "_blank", rel: "noopener" }, g.uri, " ", icon("external", "sm")), ": ", h("strong", { class: "mono" }, g.user_code))) : null,
+        g.error && !on ? h("div", { class: "callout bad" }, icon("alert", "sm"), h("div", { class: "small" }, g.error)) : null];
+    }
+    function icloudRow(c) {
+      if (c?.signed_in) {
+        return [h("div", { class: "row" },
+          h("div", { class: "grow" }, h("strong", null, "iCloud"), h("div", { class: "small faint" }, `Your calendars appear on the Agent page and for the agent (${c.user}). FLE Link only reads them.`)),
+          h("span", { class: "pill good" }, "Connected"),
+          h("button", { class: "btn ghost danger", onclick: act(async () => draw(await del("/api/accounts/icloud"))) }, "Disconnect"))];
+      }
+      const user = h("input", { class: "input", type: "email", autocomplete: "username", placeholder: "Apple ID" });
+      const pw = h("input", { class: "input mono", type: "password", autocomplete: "off", placeholder: "App-specific password" });
+      return [h("div", { class: "row" },
+        h("div", { class: "grow" }, h("strong", null, "iCloud"), h("div", { class: "small faint" },
+          "Your calendars, read only. Apple needs an app-specific password for this, not your normal one: ",
+          h("a", { href: "https://account.apple.com", target: "_blank", rel: "noopener" }, "make one at account.apple.com ", icon("external", "sm")),
+          " (Sign-In and Security > App-Specific Passwords)."))),
+        h("div", { class: "row" }, user, pw,
+          h("button", { class: "btn", onclick: (e) => busy(e.currentTarget, async () => {
+            if (!user.value.trim() || !pw.value.trim()) return;
+            draw(await post("/api/accounts/icloud", { user: user.value.trim(), password: pw.value.trim() }));
+            toast("iCloud connected", "good", 2000);
+          }) }, "Connect"))];
+    }
+    async function busy(btn, fn) {
+      btn.disabled = true;
+      try { await fn(); } catch (e) { toast(e.message, "bad", 10000); } finally { btn.disabled = false; }
+    }
+    function draw(st) {
+      clear(box,
+        row("Hugging Face", "For gated and private models. Public models download without it.", st.huggingface.signed_in, "huggingface"),
+        ...githubRow(st.github),
+        ...icloudRow(st.icloud),
+        row("Google","Your main calendar appears on the Agent page and for the agent. FLE Link only reads it, and the events stay on this computer.", st.google.signed_in, "google"));
+    }
+    load();
+    return section("link", "Accounts", "Connect once, FLE Link keeps you signed in. Tokens stay on this computer in files only you can read.", box);
   }
 
   // The GitHub sign-in: a token for the agent's git and gh, and for the hub's GitHub plugin. Never shown again.

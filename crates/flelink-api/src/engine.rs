@@ -113,6 +113,8 @@ struct State {
     /// the running process: (generation, pid, handle)
     proc: Option<(u64, u32, Arc<Mutex<Child>>)>,
     next_gen: u64,
+    /// when this program last stopped an engine; a start soon after waits for the GPU memory
+    stopped_at: Option<Instant>,
 }
 
 enum Op {
@@ -166,6 +168,7 @@ impl Engine {
             log_file: None,
             proc: None,
             next_gen: 1,
+            stopped_at: None,
         }));
         let (tx, rx) = channel::<Op>();
         let e = Engine {
@@ -423,6 +426,19 @@ impl Engine {
         if let Some(note) = flelink_core::system::allow_memlock(&plan.env) {
             self.append(&note);
         }
+        let recent_stop = {
+            let mut s = self.st.lock().unwrap();
+            let recent = s
+                .stopped_at
+                .is_some_and(|t| t.elapsed() < Duration::from_secs(30));
+            if recent {
+                s.phase = "Waiting for the GPU memory".into();
+            }
+            recent
+        };
+        if recent_stop {
+            flelink_core::launch::wait_gpu_memory_settled(Duration::from_secs(15));
+        }
         let mut cmd = Command::new(&binary);
         cmd.args(&plan.args).current_dir(&dir).stdin(Stdio::null());
         for (k, v) in &plan.env {
@@ -543,6 +559,7 @@ impl Engine {
                 std::thread::sleep(Duration::from_millis(50));
             }
         }
+        self.st.lock().unwrap().stopped_at = Some(Instant::now());
     }
 
     fn read_output(&self, gen: u64, reader: std::io::PipeReader, child: Arc<Mutex<Child>>) {

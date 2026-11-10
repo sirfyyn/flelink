@@ -43,7 +43,7 @@ pub fn builtin() -> Vec<Model> {
         Model {
             id: "fle-iq3-m",
             title: "Qwen3.8-Flash-Next FLE-IQ3_M (125B MoE)",
-            note: "The FLE showcase: ~90 tok/s on one 32 GB GPU. Needs ~120 GB RAM.",
+            note: "The FLE showcase: ~90 tok/s on one 32 GB GPU with 120 GB RAM. Runs from a 16 GB GPU and 64 GB RAM, then about 15 tok/s.",
             repo: "sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF",
             file: "IQ3_M/Qwen3.8-Flash-Next-FLE-IQ3_M-00001-of-00002.gguf",
             files: &[
@@ -82,18 +82,36 @@ pub fn fit(m: &Model, s: &SysInfo) -> Fit {
 
 /// Will `size` bytes of model fit? `experts_in_ram`: the FLE engine keeps the experts in RAM, so RAM is what counts.
 pub fn fit_size(size: u64, experts_in_ram: bool, s: &SysInfo) -> Fit {
-    let need = (size as f64 * 1.25) as u64; // weights plus KV cache and compute buffers
-    let have = if experts_in_ram {
-        s.ram_bytes
-    } else {
-        s.gpu_usable_bytes.max(s.ram_bytes / 2)
-    };
     if size + 512 * 1024 * 1024 > s.disk_free_bytes && s.disk_free_bytes > 0 {
         return Fit::TooBig;
     }
+    if experts_in_ram {
+        return fit_fle(size, s);
+    }
+    let need = (size as f64 * 1.25) as u64; // weights plus KV cache and compute buffers
+    let have = s.gpu_usable_bytes.max(s.ram_bytes / 2);
     if need <= have * 8 / 10 {
         Fit::Fits
     } else if need <= have {
+        Fit::Tight
+    } else {
+        Fit::TooBig
+    }
+}
+
+/// An FLE model without a measured recipe. Measured with Qwen3.8-Flash-Next (88.9 GB) on a 16 GB GPU, 32k context
+/// (8 Nov 2026): FLE pins about 0.55 of the file in RAM for the experts and reads the rest from the mapped file, so it ran
+/// with 48 GiB for the process and not with 32. The GPU holds the dense part and the KV cache (about 8 GB) before any
+/// expert cache. Fits: room for the system next to it; tight: the process alone fits.
+fn fit_fle(size: u64, s: &SysInfo) -> Fit {
+    const GIB: u64 = 1 << 30;
+    let pinned = size / 100 * 55;
+    if s.gpu_usable_bytes > 0 && s.gpu_usable_bytes < 10 * GIB {
+        return Fit::TooBig;
+    }
+    if s.ram_bytes >= pinned + 16 * GIB && s.gpu_usable_bytes >= 16 * GIB {
+        Fit::Fits
+    } else if s.ram_bytes >= pinned + 6 * GIB {
         Fit::Tight
     } else {
         Fit::TooBig
@@ -150,9 +168,22 @@ mod tests {
     }
     #[test]
     fn fle_model_needs_the_ram_not_the_vram() {
-        assert_eq!(fit(&get("fle-iq3-m"), &workstation(64)), Fit::TooBig);
-        assert_eq!(fit(&get("fle-iq3-m"), &workstation(128)), Fit::Tight);
-        assert_eq!(fit(&get("fle-iq3-m"), &workstation(192)), Fit::Fits);
+        // measured 8 Nov 2026: runs with 48 GiB for the process, not with 32; a 48 GB machine leaves no room for the system
+        assert_eq!(fit(&get("fle-iq3-m"), &workstation(32)), Fit::TooBig);
+        assert_eq!(fit(&get("fle-iq3-m"), &workstation(48)), Fit::TooBig);
+        assert_eq!(fit(&get("fle-iq3-m"), &workstation(56)), Fit::Tight);
+        assert_eq!(fit(&get("fle-iq3-m"), &workstation(64)), Fit::Fits);
+        assert_eq!(fit(&get("fle-iq3-m"), &workstation(128)), Fit::Fits);
+    }
+    #[test]
+    fn fle_model_on_a_small_gpu() {
+        let mut s = workstation(64);
+        s.gpu_usable_bytes = 16 << 30;
+        assert_eq!(fit(&get("fle-iq3-m"), &s), Fit::Fits);
+        s.gpu_usable_bytes = 12 << 30;
+        assert_eq!(fit(&get("fle-iq3-m"), &s), Fit::Tight);
+        s.gpu_usable_bytes = 8 << 30;
+        assert_eq!(fit(&get("fle-iq3-m"), &s), Fit::TooBig);
     }
     #[test]
     fn a_full_disk_is_too_big_whatever_the_memory() {
