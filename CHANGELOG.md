@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.10 (2026-11-10)
+
+- **The desktop app starts once.** A second start brings the open window to the front; before, each start ran its own server and agent on the same data.
+- **No Sign in button for a tool server that needs none.** A web MCP server that answers without a sign-in (the FYOS hub in the home network) showed one, and pressing it ended in an error.
+
 ## 0.1.9 (2026-11-10)
 
 - **The desktop app opens sign-ins and links in your browser.** In 0.1.8 Connect for Google and Hugging Face, and every link to another site, did nothing in the app.
