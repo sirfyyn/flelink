@@ -40,10 +40,26 @@ fn main() {
         .setup(|app| {
             let server = flelink_api::run::start_embedded(None, None)?;
             let url = server.url.clone();
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse()?))
+            let home: tauri::Url = url.parse()?;
+            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(home.clone()))
                 .title("FLE Link")
                 .inner_size(1280.0, 840.0)
                 .min_inner_size(900.0, 600.0)
+                // pages of other sites (a sign-in, the docs, GitHub) belong in the user's browser: a link that asks for a
+                // new window does nothing in the web view otherwise, and a plain one would replace FLE Link in this window
+                .on_new_window(|to, _| {
+                    if matches!(to.scheme(), "http" | "https") {
+                        flelink_api::run::open_browser(to.as_str());
+                    }
+                    tauri::webview::NewWindowResponse::Deny
+                })
+                .on_navigation(move |to| {
+                    if to.origin() == home.origin() || !matches!(to.scheme(), "http" | "https") {
+                        return true;
+                    }
+                    flelink_api::run::open_browser(to.as_str());
+                    false
+                })
                 .build()?;
             app.manage(Server(Mutex::new(Some(server))));
             Ok(())

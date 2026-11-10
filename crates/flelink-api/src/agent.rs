@@ -89,9 +89,7 @@ pub fn find_node(configured: &str) -> Result<(PathBuf, String), String> {
         } else {
             &["node"]
         };
-        std::env::var_os("PATH")
-            .map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
-            .unwrap_or_default()
+        node_dirs()
             .into_iter()
             .flat_map(|d| names.iter().map(move |n| d.join(n)))
             .find(|p| p.is_file())
@@ -142,6 +140,62 @@ pub fn runner_problem(d: &Path, managed: bool) -> Option<String> {
         ));
     }
     None
+}
+
+/// Where Node may be: the PATH first, then where installers and version managers put it. An app started from the Finder or
+/// at login gets a short PATH without /opt/homebrew/bin and the like, and found no Node although the terminal has one.
+fn node_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    let home = dirs::home_dir().unwrap_or_default();
+    if cfg!(windows) {
+        for var in ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"] {
+            if let Some(base) = std::env::var_os(var) {
+                dirs.push(PathBuf::from(&base).join("nodejs"));
+                dirs.push(PathBuf::from(base).join("Programs").join("nodejs"));
+            }
+        }
+        dirs.push(home.join("AppData").join("Roaming").join("nvm"));
+    } else {
+        for d in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"] {
+            dirs.push(PathBuf::from(d));
+        }
+        for d in [
+            ".volta/bin",
+            ".local/bin",
+            ".asdf/shims",
+            ".local/share/fnm/aliases/default/bin",
+            ".fnm/aliases/default/bin",
+        ] {
+            dirs.push(home.join(d));
+        }
+        // nvm: the newest version it has
+        let mut nvm: Vec<PathBuf> = std::fs::read_dir(home.join(".nvm/versions/node"))
+            .map(|rd| rd.flatten().map(|e| e.path().join("bin")).collect())
+            .unwrap_or_default();
+        nvm.sort_by_key(|p| {
+            node_version(
+                &p.parent()
+                    .map(|v| {
+                        v.file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string()
+                    })
+                    .unwrap_or_default(),
+            )
+        });
+        dirs.extend(nvm.into_iter().rev());
+    }
+    dirs
+}
+
+/// The PATH for npm and the agent: the folder of this Node first, so `#!/usr/bin/env node` finds the same one.
+pub fn path_with_node(node: &Path) -> std::ffi::OsString {
+    let mut parts: Vec<PathBuf> = node.parent().map(Path::to_path_buf).into_iter().collect();
+    parts.extend(node_dirs());
+    std::env::join_paths(parts).unwrap_or_default()
 }
 
 /// npm next to `node` (as Node's installers put it), else from the PATH.
@@ -324,6 +378,7 @@ impl Agent {
             "npm ci --ignore-scripts",
             Command::new(npm_for(&node))
                 .args(["ci", "--ignore-scripts", "--no-audit", "--no-fund"])
+                .env("PATH", path_with_node(&node))
                 .current_dir(&tmp),
         )?;
         std::fs::write(tmp.join(".flelink-pin"), pin).map_err(|e| e.to_string())?;
@@ -599,6 +654,8 @@ impl Agent {
         let mut cmd = Command::new(&node);
         cmd.arg(runner.join("src").join("main.js"))
             .current_dir(&runner)
+            // its tools (git, npm, node scripts) need the same Node, also when FLE Link was started without the user's PATH
+            .env("PATH", path_with_node(&node))
             .env("FLE_DURABLE_CONFIG", &cfg_path)
             .env("FLE_DURABLE_HOME", &self.dir)
             .env("FLE_DURABLE_TOKEN", &tok)
@@ -886,6 +943,20 @@ pub fn merge_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn node_is_found_beyond_a_short_path() {
+        let dirs = node_dirs();
+        for d in ["/opt/homebrew/bin", "/usr/local/bin"] {
+            assert!(dirs.contains(&PathBuf::from(d)), "{d} {dirs:?}");
+        }
+        let p = path_with_node(Path::new("/x/node-22/bin/node"));
+        assert!(
+            std::env::split_paths(&p).next() == Some(PathBuf::from("/x/node-22/bin")),
+            "{p:?}"
+        );
+    }
 
     #[test]
     fn versions() {
