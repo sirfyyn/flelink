@@ -9,7 +9,7 @@ host="${VPS:-vps}"
 python3 -I site/pruefen.py
 stage="$(mktemp -d)"
 trap 'rm -rf -- "$stage"' EXIT
-rsync -a --exclude logo_gen.py --exclude pruefen.py --exclude og.svg --exclude CNAME --exclude ausrollen.sh --exclude .DS_Store site/ "$stage/"
+rsync -a --exclude logo_gen.py --exclude pruefen.py --exclude casts_einsetzen.py --exclude entwurf --exclude og.svg --exclude CNAME --exclude ausrollen.sh --exclude .DS_Store site/ "$stage/"
 cp install.sh install.ps1 "$stage/"
 if [ "${1:-}" != "--ja" ]; then
   rsync -a --delete --dry-run --itemize-changes --rsync-path="sudo rsync" "$stage/" "$host:/var/www/flelink/"
