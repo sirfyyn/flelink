@@ -257,6 +257,7 @@ fn the_engine_matches_the_python_studio() {
                 .replace(&f.to_string_lossy().to_string(), "FAKE")
                 .replace("-rs", "-X")
                 .replace("-py", "-X")
+                .replace("FLE Studio", "FLE Link")
         };
         let (x, y) = (
             serde_json::from_str::<Value>(&text(a, &hr, &fr)).unwrap_or(Value::Null),

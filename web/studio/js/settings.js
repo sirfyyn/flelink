@@ -307,7 +307,7 @@ export function mount(main) {
         h("span", { class: "small muted mono" }, p.bundled ? "comes with FLE Link" : [p.package, p.version].filter(Boolean).join(" ")),
         p.summary ? h("div", { class: "small muted" }, p.summary) : null),
       p.error ? h("span", { class: "pill bad", title: p.error }, "did not load") : p.loaded ? h("span", { class: "pill good" }, "on") : null))
-      : [h("span", { class: "small faint" }, "No plugins installed. A plugin is a Python package; see PLUGINS.md in the documentation.")];
+      : [h("span", { class: "small faint" }, "No plugins installed. A plugin is a folder in the data folder's plugins directory; see docs/PLUGINS.md.")];
     return section("grid", "Plugins", "Forge, updates, remote access, the recorder and the model switcher come with FLE Link as plugins and are on; turn off what you do not use. Plugins you install yourself run inside FLE Link with its rights and start off: turn on only those you trust. The page reloads after you turn one of those on or off. Plugins belong to this machine; a paired client does not see them.",
       ...rows);
   }
@@ -315,10 +315,12 @@ export function mount(main) {
   function about() {
     const st = store.state;
     const sys = st.system || {};
+    // the product version (FLE Link); state.version is the Studio API version the page was written against
+    const product = document.querySelector('meta[name="flelink-version"]')?.content;
     return section("info", "About", "",
       h("dl", { class: "kv" },
-        h("dt", null, "FLE Link"), h("dd", null, `${st.version} · ${st.platform}`),
-        h("dt", null, "Python"), h("dd", null, sys.python || "–"),
+        h("dt", null, "FLE Link"), h("dd", null, `${product && !product.startsWith("__") ? product : st.version} · ${st.platform}`),
+        sys.python ? h("dt", null, "Python") : null, sys.python ? h("dd", null, sys.python) : null,
         h("dt", null, "Data folder"), h("dd", { class: "mono" }, st.data_dir),
         h("dt", null, "Reference machine"), h("dd", null, st.reference?.machine || "–")),
       h("div", { class: "row wrap small" },

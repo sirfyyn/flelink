@@ -98,7 +98,7 @@ export function toolsSection(s, ui) {
     const input = h("input", { class: "input mono sm", placeholder: "client id, if the server has no automatic registration", "aria-label": `Client ID for ${name}` });
     return h("details", { class: "small" }, h("summary", { class: "muted" }, "Client ID"),
       h("div", { class: "row" }, input, h("button", { class: "btn sm", onclick: () => setClientId(name, input.value.trim()) }, "Save")),
-      h("span", { class: "faint" }, "Studio's redirect address is http://127.0.0.1:<this port>/oauth/callback; register that with the server."));
+      h("span", { class: "faint" }, "FLE Link's redirect address is http://127.0.0.1:<this port>/oauth/callback; register that with the server."));
   }
 
   async function setClientId(name, id) {

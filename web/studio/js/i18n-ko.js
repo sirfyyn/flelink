@@ -26,7 +26,7 @@ export const T = {
   "Previous 7 days": "최근 7일",
   "Older": "이전",
   "Your conversations stay on this computer.": "대화는 이 컴퓨터에만 남습니다.",
-  "Measuring, the expert cache, the agent and building your own quants": "측정, 전문가 캐시, 에이전트, 직접 만드는 양자화",
+  "Measuring, the expert cache and building your own quants": "측정, 전문가 캐시, 직접 만드는 양자화",
   "Not running": "실행 중 아님",
   "No model loaded": "불러온 모델 없음",
   "Open the engine page": "엔진 페이지 열기",

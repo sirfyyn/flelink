@@ -99,6 +99,36 @@ pub fn fit_size(size: u64, experts_in_ram: bool, s: &SysInfo) -> Fit {
     }
 }
 
+/// Why a catalog model does not simply fit (None when it fits).
+pub fn fit_reason(m: &Model, s: &SysInfo) -> Option<String> {
+    (fit(m, s) != Fit::Fits).then(|| size_reason(m.size, m.fle_only, s))
+}
+
+/// The sentence behind `fit_size` when the answer is not "fits".
+pub fn size_reason(size: u64, experts_in_ram: bool, s: &SysInfo) -> String {
+    use crate::system::gib;
+    if size + 512 * 1024 * 1024 > s.disk_free_bytes && s.disk_free_bytes > 0 {
+        return format!(
+            "Needs {} of disk for the download; {} are free.",
+            gib(size),
+            gib(s.disk_free_bytes)
+        );
+    }
+    if experts_in_ram {
+        return format!(
+            "An FLE model of this size wants about {} of memory and a GPU from 10 GiB; this machine has {} and {} for the GPU.",
+            gib(size / 100 * 55 + (6 << 30)),
+            gib(s.ram_bytes),
+            gib(s.gpu_usable_bytes)
+        );
+    }
+    format!(
+        "Needs about {} for the weights and the context; this machine can give {}.",
+        gib((size as f64 * 1.25) as u64),
+        gib(s.gpu_usable_bytes.max(s.ram_bytes / 2))
+    )
+}
+
 /// An FLE model without a measured recipe. Measured with Qwen3.8-Flash-Next (88.9 GB) on a 16 GB GPU, 32k context
 /// (8 Nov 2026): FLE pins about 0.55 of the file in RAM for the experts and reads the rest from the mapped file, so it ran
 /// with 48 GiB for the process and not with 32. The GPU holds the dense part and the KV cache (about 8 GB) before any
@@ -165,6 +195,18 @@ mod tests {
     fn small_model_fits_a_laptop_and_the_big_one_does_not() {
         assert_eq!(fit(&get("llama-3.2-1b"), &mac_m2()), Fit::Fits);
         assert_eq!(fit(&get("fle-iq3-m"), &mac_m2()), Fit::TooBig);
+    }
+    #[test]
+    fn a_model_that_does_not_fit_says_why_with_numbers() {
+        assert_eq!(fit_reason(&get("llama-3.2-1b"), &mac_m2()), None);
+        // the laptop has 18 GiB of disk: the download is the first thing that does not fit
+        let why = fit_reason(&get("fle-iq3-m"), &mac_m2()).unwrap();
+        assert!(why.contains("disk") && why.contains("18.0 GiB"), "{why}");
+        // enough disk, too little memory: the FLE rule, with what the machine has
+        let mut s = workstation(32);
+        s.disk_free_bytes = 500 << 30;
+        let why = fit_reason(&get("fle-iq3-m"), &s).unwrap();
+        assert!(why.contains("memory") && why.contains("32.0 GiB"), "{why}");
     }
     #[test]
     fn fle_model_needs_the_ram_not_the_vram() {

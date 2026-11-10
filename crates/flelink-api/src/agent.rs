@@ -40,6 +40,9 @@ struct Run {
     started: f64,
     error: String,
     exit: Option<i32>,
+    /// the model and context window it was started with (empty and 0: no model was loaded then)
+    model: String,
+    n_ctx: u64,
 }
 
 pub struct Agent {
@@ -727,8 +730,25 @@ impl Agent {
             started: now(),
             error: String::new(),
             exit: None,
+            model: model.to_string(),
+            n_ctx,
         };
         Ok(())
+    }
+
+    /// Whether the agent FLE Link started runs with another model or context window than the engine has now. It reads
+    /// both once at its start, so an agent that came up before the model (autostart) would keep the smallest window.
+    pub fn outdated(&self, model: &str, n_ctx: u64) -> bool {
+        if n_ctx == 0 || self.remote().is_some() {
+            return false;
+        }
+        let mut r = self.run.lock().unwrap();
+        Self::reap(&mut r);
+        r.child.is_some() && (r.model != model || r.n_ctx != n_ctx)
+    }
+
+    pub fn note_line(&self, line: &str) {
+        self.note(line.to_string());
     }
 
     /// Wait until the runner answers (a fresh start opens its SQLite file and the conversation first).

@@ -91,16 +91,7 @@ pub fn snippets(base: &str, model: &str) -> Vec<Snippet> {
 /// What is serving on this machine: the Studio (port 8642 and the next ones) with a loaded model, else an engine that
 /// `flelink run` started (port 8080 and the next ones). The base address and the model id the API reports.
 pub fn find_running() -> Option<(String, String)> {
-    // the Studio or the desktop app says where it is (also when 8642 was taken and it chose another port)
-    let said = std::fs::read_to_string(crate::data_dir().join("studio.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-        .and_then(|v| {
-            v["url"]
-                .as_str()
-                .map(|u| u.trim_end_matches('/').to_string())
-        });
-    if let Some(base) = said {
+    if let Some(base) = studio_said() {
         if let Some(m) = model_at(&base) {
             return Some((base, m));
         }
@@ -112,6 +103,30 @@ pub fn find_running() -> Option<(String, String)> {
         }
     }
     None
+}
+
+/// Where the Studio or the desktop app says it is (`<data>/studio.json`), also when 8642 was taken and it chose another
+/// port. Only an http(s) address on this machine counts.
+fn studio_said() -> Option<String> {
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(crate::data_dir().join("studio.json")).ok()?)
+            .ok()?;
+    let base = v["url"].as_str()?.trim_end_matches('/').to_string();
+    (base.starts_with("http://127.0.0.1:") || base.starts_with("https://127.0.0.1:"))
+        .then_some(base)
+}
+
+/// The address of a Studio or app that runs on this machine, with or without a model: what `flelink connect` prints
+/// when nothing serves yet, so the setting is right once a model is loaded.
+pub fn studio_running() -> Option<String> {
+    let base = studio_said()?;
+    let c = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(700))
+        .danger_accept_invalid_certs(true) // its own certificate, on this machine
+        .build()
+        .ok()?;
+    let v: serde_json::Value = c.get(format!("{base}/api/ping")).send().ok()?.json().ok()?;
+    (v["app"] == "fle-studio").then_some(base)
 }
 
 /// The model id an OpenAI-compatible server at `base` reports first (`GET /v1/models`).

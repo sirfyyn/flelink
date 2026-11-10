@@ -2,7 +2,7 @@
 // the switch next to the title goes to the direct chat with the model (chat.js).
 
 import { get, hostUrl, post } from "./api.js";
-import { topbar } from "./app.js";
+import { engineUp, on, store, topbar } from "./app.js";
 import { renderMarkdown } from "./md.js";
 import { clear, copyText, h, icon, mark, toast } from "./ui.js";
 
@@ -21,6 +21,7 @@ export function mountAgent(main, { seg }) {
   let ctrl = null;
   let approvals = [];
   let remote = true; // until the status says otherwise: no buttons that could not work
+  let ownAgent = false; // FLE Link started it, so it answers with the model of the Engine page
 
   const inner = h("div", { class: "messages-inner" });
   const messages = h("div", { class: "messages" }, inner);
@@ -32,10 +33,13 @@ export function mountAgent(main, { seg }) {
   const composer = h("div", { class: "composer" }, ta, h("div", { class: "bar-row" }, status, h("span", { class: "grow" }), stopBtn, sendBtn));
   const note = h("div", { class: "composer-note" }, "Your agent keeps one conversation. It also works from its agenda and from webhooks; those show up here.");
   const approvalBox = h("div", { style: { display: "grid", gap: "8px" } });
+  const modelNote = h("div", { class: "callout warn", hidden: true }, h("div", null,
+    "The agent answers with the model of the Engine page, and none is loaded. ",
+    h("a", { href: "/engine", "data-link": true }, "Load a model"), ", then write to it."));
 
   main.replaceChildren(
     topbar(h("h1", null, "FLE Durable"), seg),
-    h("div", { class: "chat" }, h("div", { class: "chat-col" }, messages, h("div", { class: "composer-wrap" }, approvalBox, composer, note))));
+    h("div", { class: "chat" }, h("div", { class: "chat-col" }, messages, h("div", { class: "composer-wrap" }, approvalBox, modelNote, composer, note))));
 
   const autosize = () => { ta.style.height = "auto"; ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`; };
   ta.addEventListener("input", autosize);
@@ -44,16 +48,44 @@ export function mountAgent(main, { seg }) {
   });
   sendBtn.addEventListener("click", send);
 
+  // FLE Link's own agent answers with the model of the Engine page: without one it takes the message and waits
+  const noModel = () => ownAgent && !engineUp();
+  const loadingModel = () => store.engine?.state === "starting";
+
   function setWorking(on) {
     working = on;
     stopBtn.hidden = !on;
-    clear(status, h("span", { class: "dot" }), on ? "Working" : "Ready");
-    status.className = on ? "pill info live" : "pill good";
+    if (!on && noModel()) {
+      clear(status, h("span", { class: "dot" }), loadingModel() ? "The model is loading" : "No model is loaded");
+      status.className = "pill warn";
+    } else {
+      clear(status, h("span", { class: "dot" }), on ? "Working" : "Ready");
+      status.className = on ? "pill info live" : "pill good";
+    }
+    modelNote.hidden = !noModel() || loadingModel();
+  }
+
+  // who decides approvals (the buttons work only for FLE Link's own agent) and whether the engine's model is ours
+  async function readStatus() {
+    try {
+      const s = await get(`${API}/status`);
+      if (!alive) return;
+      const was = remote;
+      remote = !!s.remote;
+      ownAgent = !s.remote;
+      setWorking(working);
+      if (was !== remote) refreshApprovals();
+    } catch { /* the next round asks again */ }
   }
 
   async function send() {
     const text = ta.value.trim();
     if (!text) return;
+    // without a model the agent tries three times and gives up: the message would get no answer, now or later
+    if (noModel()) {
+      toast(loadingModel() ? "The model is still loading; send it once it is ready." : "No model is loaded. Load one on the Engine page first.", "bad");
+      return;
+    }
     ta.value = "";
     autosize();
     pinned = true;
@@ -75,6 +107,17 @@ export function mountAgent(main, { seg }) {
 
   function noteEl(text) {
     return h("div", { class: "small faint", style: { textAlign: "center" } }, text);
+  }
+
+  // a turn the model server refused or broke off: the reason, short (its JSON error body is unwrapped)
+  function errorText(m) {
+    let msg = String(m.errorMessage || "");
+    const j = msg.match(/\{.*\}/s);
+    if (j) { try { const v = JSON.parse(j[0]); msg = v.message || v.error?.message || msg; } catch { /* as it came */ } }
+    return msg.slice(0, 300);
+  }
+  function errorEl(text) {
+    return h("div", { class: "callout bad small" }, h("b", null, "The model did not answer. "), h("span", { "data-no-i18n": true }, text));
   }
 
   function assistantEl(m, isLive) {
@@ -100,6 +143,7 @@ export function mountAgent(main, { seg }) {
 
   function render() {
     const out = [];
+    let lastError = null;
     for (const e of entries) {
       if (e.kind === "fle.event") {
         const d = e.data ?? {};
@@ -115,6 +159,14 @@ export function mountAgent(main, { seg }) {
       } else {
         for (const m of Array.isArray(e.model) ? e.model : e.model ? [e.model] : []) {
           if (m.role === "assistant" && blocks(m).length) out.push(assistantEl(m, false));
+          // the agent tries a failed request again; the same reason is shown once
+          else if (m.role === "assistant" && m.stopReason === "error" && m.errorMessage) {
+            const text = errorText(m);
+            if (lastError !== text) out.push(errorEl(text));
+            lastError = text;
+            continue;
+          }
+          lastError = null;
         }
       }
     }
@@ -209,15 +261,20 @@ export function mountAgent(main, { seg }) {
   setWorking(false);
   render();
   reload();
+  readStatus();
   refreshApprovals();
   stream();
   const poll = setInterval(refreshApprovals, 3000);
+  const statusPoll = setInterval(readStatus, 15000);
+  const offEngine = on("engine", () => setWorking(working));
   ta.focus();
 
   return {
     unmount() {
       alive = false;
       clearInterval(poll);
+      clearInterval(statusPoll);
+      offEngine();
       ctrl?.abort();
     },
   };
