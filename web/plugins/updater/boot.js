@@ -322,6 +322,13 @@ export function updatesSection({ section, toggle, save }) {
     clear(info,
       h("label", { class: "row" }, toggle(v.enabled, (on) => flip({ check: on }, false)),
         h("span", null, "Check for updates (about once a day)")),
+      h("label", { class: "row" }, toggle(v.auto, async (on) => {
+        try { view = await post("/api/update/auto", { on }); } catch (e) { toast(e.message, "bad", 6000); }
+        changed();
+      }),
+        h("span", null, "Install new versions by themselves")),
+      v.auto ? h("span", { class: "small faint" }, "Only while nothing is being answered: no model is loaded, or it has been quiet for 15 minutes and "
+        + "“Load this model when FLE Link starts” (Engine page) brings it back. Otherwise FLE Link waits.") : null,
       h("label", { class: "row" }, toggle(v.prereleases, (on) => flip({ prereleases: on }, true)),
         h("span", null, "Include pre-releases")),
       h("div", { class: "row wrap" },

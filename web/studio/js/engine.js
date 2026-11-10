@@ -6,6 +6,7 @@ import { emit, on, refreshState, store, topbar, withEngine } from "./app.js";
 import { explainBlock, flagTitle, loadFlagTable } from "./flags.js";
 import { loadStyle, mountBest } from "./tuner.js";
 import { clear, confirmDialog, copyButton, copyText, debounce, fmt, h, icon, patch, stateBadge, toast } from "./ui.js";
+import { tr } from "./i18n.js";
 
 const PLACEHOLDERS = [
   ["{engine}", "The llama-server of the engine picked for this profile"],
@@ -768,8 +769,14 @@ export function mount(main) {
     follow = logView.scrollTop + logView.clientHeight >= logView.scrollHeight - 30;
   });
 
+  // Lines that read like errors and are none: before loading, the engine measures how much memory a model needs, and a
+  // draft model that only works together with the main model (DFlash, DSpark) cannot be measured on its own.
+  const EXPECTED_NOTE = "Normal with a draft model that needs the main model (DFlash, DSpark): it cannot be measured on its own, so the engine fits the main model without it.";
+  const expected = (t) => /normal during memory fitting|failed to measure the memory of the extra model/i.test(t);
+
   function lineClass(t) {
     if (t.startsWith("$ ")) return "ln cmdline";
+    if (expected(t)) return "ln";
     if (t.startsWith("FLE Link:") || t.startsWith("FLE Studio:")) return "ln ok";
     if (/\b(error|failed|fatal|abort|exception|out of memory)\b/i.test(t)) return "ln err";
     if (/\bwarn(ing)?\b/i.test(t)) return "ln warn";
@@ -778,7 +785,7 @@ export function mount(main) {
   }
 
   function lineEl(l) {
-    return h("div", { class: lineClass(l.text) }, l.text);
+    return h("div", { class: lineClass(l.text), title: expected(l.text) ? tr(EXPECTED_NOTE) : null }, l.text);
   }
 
   let placeholderShown = false;

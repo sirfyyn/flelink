@@ -1034,6 +1034,9 @@ export const T = {
   " This is a pre-release.": "这是预发布版本。",
   "Add": "添加",
   ", then write to it.": "，然后再给它写。",
+  "Install new versions by themselves": "自动安装新版本",
+  "Only while nothing is being answered: no model is loaded, or it has been quiet for 15 minutes and “Load this model when FLE Link starts” (Engine page) brings it back. Otherwise FLE Link waits.": "仅在没有任何回答进行时：未加载模型，或已空闲 15 分钟且“FLE Link 启动时加载此模型”（引擎页面）会把模型重新加载。否则 FLE Link 会等待。",
+  "Normal with a draft model that needs the main model (DFlash, DSpark): it cannot be measured on its own, so the engine fits the main model without it.": "对于依赖主模型的草稿模型（DFlash、DSpark）这是正常的：它无法单独测量，因此引擎在不计入它的情况下安排主模型。",
 };
 
 export const P = [

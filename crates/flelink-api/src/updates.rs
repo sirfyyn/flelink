@@ -407,6 +407,8 @@ pub fn advice(install: &Value, tag: &str) -> Value {
 pub struct Updates {
     file: PathBuf,
     result_file: PathBuf,
+    /// present: new versions are installed without a click (not in settings.json, which mirrors the Python Studio's)
+    auto_file: PathBuf,
     api: String,
     state: Mutex<Value>,
     checking: Mutex<bool>,
@@ -429,6 +431,7 @@ impl Updates {
         Updates {
             file,
             result_file: data_dir.join("flelink-update-result.json"),
+            auto_file: data_dir.join("flelink-update-auto"),
             api: github_api.trim_end_matches('/').to_string(),
             state: Mutex::new(state),
             checking: Mutex::new(false),
@@ -583,11 +586,28 @@ impl Updates {
             }
             app = a;
         }
-        json!({"enabled": Self::enabled(config), "prereleases": config["updates"]["prereleases"] == true,
+        json!({"enabled": Self::enabled(config), "auto": self.auto(),
+            "prereleases": config["updates"]["prereleases"] == true,
             "current": current, "checked": s["checked"], "checking": *self.checking.lock().unwrap(),
             "error": s["error"].as_str().unwrap_or(""), "app": app, "engines": engines,
             "install": {"kind": install["kind"], "source": install["source"], "service": install["service"]},
             "run": self.run.lock().unwrap().clone(), "result": self.result()})
+    }
+
+    /// Whether new versions are installed by themselves (off unless the person turned it on in Settings).
+    pub fn auto(&self) -> bool {
+        self.auto_file.exists()
+    }
+
+    pub fn set_auto(&self, on: bool) -> Result<(), String> {
+        if on {
+            std::fs::write(&self.auto_file, b"on\n").map_err(|e| e.to_string())
+        } else {
+            match std::fs::remove_file(&self.auto_file) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+                _ => Ok(()),
+            }
+        }
     }
 
     pub fn dismiss_patch(&self, version: &str, engines: bool) -> Map<String, Value> {

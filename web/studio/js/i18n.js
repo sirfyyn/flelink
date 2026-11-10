@@ -41,6 +41,11 @@ function translate(text) {
   return null;
 }
 
+// One text in the chosen language, for places the page walk leaves alone on purpose (a tooltip inside the engine log).
+export function tr(text) {
+  return DICT[text] ?? text;
+}
+
 const done = new WeakMap(); // node -> the German text we put there (so our own change is not translated again)
 
 function onText(n) {

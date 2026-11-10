@@ -1033,6 +1033,9 @@ export const T = {
   " This is a pre-release.": " Ceci est une préversion.",
   "Add": "Ajouter",
   ", then write to it.": ", puis écrivez-lui.",
+  "Install new versions by themselves": "Installer les nouvelles versions automatiquement",
+  "Only while nothing is being answered: no model is loaded, or it has been quiet for 15 minutes and “Load this model when FLE Link starts” (Engine page) brings it back. Otherwise FLE Link waits.": "Seulement quand rien n'est en cours de réponse : aucun modèle n'est chargé, ou tout est calme depuis 15 minutes et « Charger ce modèle au démarrage de FLE Link » (page Moteur) le ramène. Sinon FLE Link attend.",
+  "Normal with a draft model that needs the main model (DFlash, DSpark): it cannot be measured on its own, so the engine fits the main model without it.": "Normal avec un modèle d'ébauche qui a besoin du modèle principal (DFlash, DSpark) : il ne peut pas être mesuré seul, le moteur ajuste donc le modèle principal sans lui.",
 };
 
 export const P = [

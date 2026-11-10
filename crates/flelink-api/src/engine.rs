@@ -305,7 +305,9 @@ impl Engine {
         }
         {
             let mut s = self.st.lock().unwrap();
-            if s.proc.is_some() {
+            // also while a start is under way and the process is not there yet (it waits for the GPU memory of the
+            // engine before it to come free): attaching in that moment took the start's place without a word
+            if s.proc.is_some() || s.state == "starting" {
                 return Err(EngineErr::Busy(
                     "Stop the engine FLE Link started before attaching to another server.".into(),
                 ));
