@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.9 (2026-11-10)
+
+- **The desktop app opens sign-ins and links in your browser.** In 0.1.8 Connect for Google and Hugging Face, and every link to another site, did nothing in the app.
+- **The app finds Node when started from the Finder or at login.** macOS gives such an app a short PATH; FLE Link now also looks in /opt/homebrew/bin, /usr/local/bin, nvm, Volta, fnm and asdf, and hands that Node to npm and the agent, so installing FLE Durable works.
+
 ## 0.1.8 (2026-11-10)
 
 - **The agent is FLE Durable 0.2.0,** the full runner instead of the small core: browser and web tools, sub-agents, tickets, calendar and events of its own, computer use through FLE Link, and calendars mirrored from your accounts. FLE Link offers the update on the Agent page.
