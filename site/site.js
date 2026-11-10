@@ -3,11 +3,12 @@
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // install command: macOS/Linux or Windows; Windows visitors start on their tab
-  const cmd = document.getElementById("cmd-text");
+  // every copy of the command on the page follows the tab (hero and the closing call)
+  const cmds = [...document.querySelectorAll("code[data-unix]")];
   const tabs = [...document.querySelectorAll("[data-os]")];
   const pick = (os) => {
     tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.os === os)));
-    cmd.textContent = cmd.dataset[os];
+    cmds.forEach((c) => (c.textContent = c.dataset[os]));
   };
   tabs.forEach((t) => t.addEventListener("click", () => pick(t.dataset.os)));
   if (/Windows/.test(navigator.userAgent)) pick("win");

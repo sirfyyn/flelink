@@ -5,9 +5,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 host="${VPS:-vps}"
+# Erst prüfen: Version der Seite gegen Cargo.toml, Platzhalter, Sitemap, lokale Links. Bei einer Abweichung wird nichts ausgerollt.
+python3 -I site/pruefen.py
 stage="$(mktemp -d)"
 trap 'rm -rf -- "$stage"' EXIT
-rsync -a --exclude logo_gen.py --exclude og.svg --exclude CNAME --exclude ausrollen.sh --exclude .DS_Store site/ "$stage/"
+rsync -a --exclude logo_gen.py --exclude pruefen.py --exclude og.svg --exclude CNAME --exclude ausrollen.sh --exclude .DS_Store site/ "$stage/"
 cp install.sh install.ps1 "$stage/"
 if [ "${1:-}" != "--ja" ]; then
   rsync -a --delete --dry-run --itemize-changes --rsync-path="sudo rsync" "$stage/" "$host:/var/www/flelink/"
@@ -17,6 +19,6 @@ fi
 ssh "$host" 'sudo cp -a /var/www/flelink /var/www/flelink.vor-$(date +%F-%H%M)'
 rsync -a --delete --rsync-path="sudo rsync" "$stage/" "$host:/var/www/flelink/"
 ssh "$host" 'sudo chown -R root:root /var/www/flelink'
-for u in / /impressum.html /datenschutz.html /install.sh; do
+for u in / /impressum.html /datenschutz.html /privacy.html /terms.html /sitemap.xml /install.sh; do
   curl -s -o /dev/null -w "%{http_code} $u\n" "https://flelink.run$u"
 done
