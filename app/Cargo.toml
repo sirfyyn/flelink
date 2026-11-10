@@ -4,7 +4,7 @@
 
 [package]
 name = "flelink-app"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2021"
 license = "MIT"
 description = "FLE Link, the desktop app"
@@ -16,6 +16,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 # the system's own folder picker for "Add folder" (only the open dialog is allowed, see capabilities/default.json)
 tauri-plugin-dialog = "2"
+# a second start brings the open window to the front instead of a second server and agent on the same data
+tauri-plugin-single-instance = "2"
 flelink-api = { path = "../crates/flelink-api" }
 
 [profile.release]

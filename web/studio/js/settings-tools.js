@@ -80,6 +80,8 @@ export function toolsSection(s, ui) {
   // Sign in / out of a web server (OAuth). The page never sees a token: Studio keeps it in its data folder.
   function authRow(sv) {
     const signedIn = !!sv.auth.signed_in;
+    // a server that answers without a sign-in (the FYOS hub in the LAN) gets no Sign in button: it would only fail
+    if (!signedIn && sv.status !== "auth_required" && !sv.auth.required) return null;
     const out = h("div", { class: "mcp-auth", "data-auth": sv.name });
     if (sv.status === "auth_required" || !signedIn) {
       out.append(h("button", { class: "btn primary sm", "data-act": "signin", onclick: () => signIn(sv.name) }, icon("link", "sm"), "Sign in"),

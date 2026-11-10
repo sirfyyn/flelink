@@ -36,6 +36,14 @@ fn kill_children_with_me() {}
 fn main() {
     kill_children_with_me();
     let app = tauri::Builder::default()
+        // first, so a second start ends before it starts its own server (two agents on one database)
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let server = flelink_api::run::start_embedded(None, None)?;
