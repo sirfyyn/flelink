@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>FLE Link · three first screens (prototype)</title>
+<!-- Prototypes for the first screen of flelink.run (10 Nov 2026), after Max: "ist schon cool, aber hab mehr erwartet".
+     Three ideas that move, each one full screen. Sizes and speeds are the measured ones (site/fit.js, README); what is
+     illustration is said on the screen. Not linked, not rolled out (ausrollen.sh leaves this folder out). -->
+<style>
+@font-face{font-family:"DM Sans";font-weight:400 700;font-display:swap;src:url("../fonts/dm-sans-latin-1.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:400 500;font-display:swap;src:url("../fonts/jetbrains-mono-latin-5.woff2") format("woff2")}
+:root{--bg:#0b0e14;--card:#10141c;--line:#1f2633;--line2:#2b3446;--text:#e9edf3;--muted:#94a0b2;--faint:#5d6878;--pink:#ff2d95;--font:"DM Sans",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:17px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+.nav{position:fixed;top:0;left:0;right:0;z-index:9;display:flex;gap:8px;align-items:center;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--line);font:500 .78rem var(--mono)}
+.nav b{margin-right:auto;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.nav a{color:var(--text);text-decoration:none;border:1px solid var(--line2);padding:5px 11px}
+.nav a:hover{border-color:var(--pink)}
+.held{min-height:100vh;padding:86px max(20px,calc((100vw - 1160px)/2)) 40px;border-bottom:1px solid var(--line2);display:flex;flex-direction:column}
+.eti{font:500 .74rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--pink);margin-bottom:8px}
+.eti span{color:var(--faint);margin-left:10px;letter-spacing:.04em;text-transform:none}
+h1{font-size:clamp(2.2rem,5.6vw,4.6rem);line-height:1.02;letter-spacing:-.035em;font-weight:700;text-wrap:balance}
+h1 i{font-style:normal;color:var(--pink)}
+.sub{color:var(--muted);font-size:1.12rem;max-width:58ch;margin-top:16px}
+.cmd{display:inline-flex;align-items:center;gap:12px;margin-top:22px;border:1px solid var(--pink);background:#090c12;padding:11px 14px;font:.86rem var(--mono)}
+.cmd::before{content:"$";color:var(--pink)}
+.cmd b{background:var(--pink);color:#0b0e14;padding:5px 11px;font:600 .78rem var(--font)}
+.hint{font:.74rem var(--mono);color:var(--faint);margin-top:10px}
+.mono{font-family:var(--mono)}
+
+/* 1 scale */
+#m-wrap{flex:1;min-height:300px;margin-top:26px;position:relative}
+#m{position:absolute;inset:0;width:100%;height:100%;display:block}
+.m-fuss{display:grid;grid-template-columns:auto minmax(0,1fr);gap:22px;align-items:center;border-top:1px solid var(--line);padding-top:14px;margin-top:10px}
+.m-fuss b{font:700 clamp(2.4rem,6vw,4.2rem)/.9 var(--mono);letter-spacing:-.05em;color:var(--pink)}
+.m-fuss b small{font-size:.9rem;color:var(--muted);letter-spacing:0;font-weight:500;margin-left:6px}
+#m-text{font:.84rem/1.6 var(--mono);color:#cfd6e2;height:4.8em;overflow:hidden}
+
+/* 2 race */
+.bahnen{flex:1;display:grid;gap:12px;margin-top:28px;align-content:center}
+.bahn{border:1px solid var(--line);background:var(--card);padding:14px 18px 12px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:8px 22px;align-items:start}
+.bahn.fle{border-color:var(--pink)}
+.bahn h2{font:600 1rem var(--font)}
+.bahn h2 small{display:block;font:500 .72rem var(--mono);color:var(--faint);letter-spacing:.04em;margin-top:2px}
+.bahn .z{font:700 2.6rem/1 var(--mono);letter-spacing:-.05em;margin-top:8px}
+.bahn.fle .z{color:var(--pink)}
+.bahn .z small{font-size:.8rem;color:var(--muted);letter-spacing:0;font-weight:500;margin-left:4px}
+.bahn .zeit{font:500 .74rem var(--mono);color:var(--muted);margin-top:6px;min-height:1.2em}
+.bahn pre{font:.78rem/1.55 var(--mono);color:#cfd6e2;white-space:pre-wrap;height:6.2em;overflow:hidden;margin:0}
+.bahn .spur{grid-column:1/-1;height:6px;background:#161c27;position:relative}
+.bahn .spur i{position:absolute;left:0;top:0;bottom:0;background:var(--muted);width:0}
+.bahn.fle .spur i{background:var(--pink)}
+.nochmal{align-self:flex-start;margin-top:14px;font:600 .78rem var(--mono);background:none;color:var(--text);border:1px solid var(--line2);padding:7px 13px;cursor:pointer}
+.nochmal:hover{border-color:var(--pink)}
+
+/* 3 your card */
+.satz{font-size:clamp(1.7rem,4.2vw,3.2rem);line-height:1.25;letter-spacing:-.03em;font-weight:700;margin-top:6px}
+.satz select{font:inherit;color:var(--pink);background:none;border:0;border-bottom:3px solid var(--pink);padding:0 4px 2px;cursor:pointer;appearance:none;-webkit-appearance:none;letter-spacing:inherit}
+.satz select option{color:#111;font-size:1rem}
+.antwort{flex:1;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 34px;align-items:center;margin-top:24px;border-top:1px solid var(--line);padding-top:24px}
+.antwort .gross{font:700 clamp(5rem,17vw,13rem)/.82 var(--mono);letter-spacing:-.07em;color:var(--pink)}
+.antwort h2{font-size:clamp(1.3rem,2.6vw,2rem);letter-spacing:-.02em}
+.antwort p{color:var(--muted);margin-top:8px;max-width:50ch}
+.antwort .tempo{font:700 clamp(1.6rem,3.4vw,2.6rem)/1 var(--mono);letter-spacing:-.04em;margin-top:16px}
+.antwort .tempo small{font-size:.86rem;color:var(--muted);font-weight:500;letter-spacing:0;margin-left:6px}
+.rest{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.rest span{font:500 .74rem var(--mono);border:1px solid var(--line2);padding:5px 10px;color:var(--muted)}
+.rest span.geht{color:var(--text);border-color:var(--text)}
+.rest span.nein{border-style:dashed;color:var(--faint)}
+@media (max-width:760px){.bahn{grid-template-columns:minmax(0,1fr)}.antwort{grid-template-columns:minmax(0,1fr)}.m-fuss{grid-template-columns:minmax(0,1fr);gap:8px}.nav b{display:none}}
+</style>
+<body>
+<div class="nav"><b>flelink.run · first screen, three ideas</b><a href="#eins">1 · Scale</a><a href="#zwei">2 · The race</a><a href="#drei">3 · Your card</a></div>
+
+<!-- 1 · SCALE: one square is one GiB. The model, the card, and what happens for every token. -->
+<section class="held" id="eins">
+  <p class="eti">1 · Scale<span>the page shows the size of the problem, then solves it in front of you</span></p>
+  <h1>232 GiB of model.<br><i>32 GB of card.</i></h1>
+  <p class="sub">DeepSeek V4.1 Flash has 763 billion parameters. One square below is one gibibyte. FLE Link runs it on the pink ones, at the speed you see.</p>
+  <div id="m-wrap"><canvas id="m" aria-label="232 squares, one per GiB of the model: 32 on the graphics card, 90 in a RAM store, the rest on NVMe. Squares light up as tokens are generated."></canvas></div>
+  <div class="m-fuss"><b class="mono">50.6<small>tok/s</small></b><div id="m-text"></div></div>
+  <p class="hint">Sizes and speed are measured (RTX PRO 4500, 120 GB RAM, Linux). Which squares light up is an illustration of the idea, not a trace.</p>
+</section>
+
+<!-- 2 · THE RACE: the same answer, typed at the three measured speeds, at the same time. -->
+<section class="held" id="zwei">
+  <p class="eti">2 · The race<span>you feel 2.5× instead of reading it</span></p>
+  <h1>Same model. Same card.<br><i>Same file.</i></h1>
+  <p class="sub">Qwen3.8-Flash-Next, 125B parameters, on one 32 GB card. Three engines write the same answer at the speed each was measured at. Watch who is done first.</p>
+  <div class="bahnen" id="bahnen">
+    <div class="bahn fle" data-tok="91"><div><h2>FLE<small>through FLE Link</small></h2><p class="z">91<small>tok/s</small></p><p class="zeit"></p></div><pre></pre><div class="spur"><i></i></div></div>
+    <div class="bahn" data-tok="74"><div><h2>Strata<small>same machine</small></h2><p class="z">74<small>tok/s</small></p><p class="zeit"></p></div><pre></pre><div class="spur"><i></i></div></div>
+    <div class="bahn" data-tok="36"><div><h2>llama.cpp<small>same file, same card</small></h2><p class="z">36<small>tok/s</small></p><p class="zeit"></p></div><pre></pre><div class="spur"><i></i></div></div>
+  </div>
+  <button class="nochmal" id="nochmal" type="button">Run it again</button>
+  <p class="hint">Decode speed, median over six tasks, one RTX PRO 4500 with 120 GB RAM, Linux, 6 Oct 2026. The text is written for this page; the three speeds are the measured ones.</p>
+</section>
+
+<!-- 3 · YOUR CARD: the visitor's hardware is the headline. The rule is the program's own (../fit.js). -->
+<section class="held" id="drei">
+  <p class="eti">3 · Your card<span>the headline is about the visitor's machine, not ours</span></p>
+  <p class="satz">I have <select id="k-gpu" aria-label="Graphics">
+      <option value="none:0">no GPU</option><option value="apple:0">an Apple Silicon Mac</option>
+      <option value="nvidia:8">an 8 GB NVIDIA card</option><option value="nvidia:12">a 12 GB NVIDIA card</option>
+      <option value="nvidia:16" selected>a 16 GB NVIDIA card</option><option value="nvidia:24">a 24 GB NVIDIA card</option>
+      <option value="nvidia:32">a 32 GB NVIDIA card</option><option value="nvidia:48">a 48 GB NVIDIA card</option>
+    </select> and <select id="k-ram" aria-label="Memory">
+      <option>8</option><option>16</option><option>32</option><option selected>64</option><option>128</option>
+    </select> GB of RAM.<br>What is the biggest model I can run?</p>
+  <div class="antwort" aria-live="polite">
+    <div class="gross" id="k-b">125B</div>
+    <div>
+      <h2 id="k-name">Qwen3.8-Flash-Next</h2>
+      <p id="k-was"></p>
+      <p class="tempo" id="k-tempo"></p>
+      <div class="cmd" id="k-cmd">flelink run fle-iq3-m <b>Copy</b></div>
+      <div class="rest" id="k-rest"></div>
+    </div>
+  </div>
+  <p class="hint">The verdict is the rule FLE Link applies before it downloads anything. A speed appears only where it was measured on that hardware; otherwise the page says so.</p>
+</section>
+
+<script src="../fit.js"></script>
+<script>
+(() => {
+  const TEXT = "A mixture-of-experts model does not use all of itself for every word. Each layer holds hundreds of experts, and a router picks a few of them per token. The ones that are picked most often stay on the graphics card. The rest wait in memory, and the rarest on disk. When a token needs an expert that is not on the card, the CPU computes it while the GPU keeps going. A small draft model guesses the next few words ahead; the big model checks every guess, keeps the right ones and throws the others away. The answer is the same as without the draft. It just arrives sooner. That is how 232 gibibytes of model answer on a card with 32. Nothing here is a trick of the demo: the sizes are the sizes of the files, the speed is the speed that was measured, three runs, the same text each time. ";
+  const toks = (TEXT + TEXT).match(/\s*[^\s]{1,4}|\s+/g);
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- 1 · scale ---------- */
+  (() => {
+    const cv = document.getElementById("m"), ctx = cv.getContext("2d"), out = document.getElementById("m-text");
+    const N = 232, GPU = 32, RAM = 90;             // GiB: the card, the RAM expert store (recipe: FLE_MOE_STORE_GB=90), the rest on NVMe
+    const heat = new Float32Array(N);
+    let W = 0, H = 0, cols = 0, size = 0, gap = 0, x0 = 0, y0 = 0, dpr = 1;
+    function layout() {
+      dpr = Math.min(2, devicePixelRatio || 1);
+      const r = cv.parentElement.getBoundingClientRect();
+      W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // the widest grid whose rows still fit the height (labels need room above)
+      let best = null;
+      for (let c = 8; c <= 58; c++) {
+        const rows = Math.ceil(N / c), s = Math.min((W - (c - 1) * 3) / c, (H - 34 - (rows - 1) * 3) / rows);
+        if (s > 4 && (!best || s > best.s)) best = { c, s, rows };
+      }
+      cols = best.c; size = Math.floor(best.s); gap = 3;
+      x0 = Math.floor((W - (cols * size + (cols - 1) * gap)) / 2); y0 = 30;
+    }
+    const pos = (i) => [x0 + (i % cols) * (size + gap), y0 + Math.floor(i / cols) * (size + gap)];
+    const zone = (i) => (i < GPU ? 0 : i < GPU + RAM ? 1 : 2);
+    let t0 = performance.now(), n = 0, shown = 0;
+    function pick() {                               // illustration: most tokens are served from the card, some from RAM, few from NVMe
+      const r = Math.random();
+      if (r < 0.68) return Math.floor(Math.random() * GPU);
+      if (r < 0.93) return GPU + Math.floor(Math.random() * RAM);
+      return GPU + RAM + Math.floor(Math.random() * (N - GPU - RAM));
+    }
+    function frame(now) {
+      const t = (now - t0) / 1000;
+      ctx.clearRect(0, 0, W, H);
+      // tokens at the measured rate, after the squares have appeared
+      const due = t > 2.2 ? Math.floor((t - 2.2) * 50.6) : 0;
+      while (n < due) { heat[pick()] = 1; if (n % 2) heat[pick()] = 1; n++; }
+      if (n !== shown) { shown = n; const from = Math.max(0, n - 62); out.textContent = toks.slice(from % toks.length, (from % toks.length) + Math.min(62, n)).join("") ; }
+      ctx.font = '500 11px "JetBrains Mono", monospace'; ctx.textBaseline = "alphabetic";
+      for (let i = 0; i < N; i++) {
+        const [x, y] = pos(i), z = zone(i), born = Math.min(1, Math.max(0, (t - i * 0.006) / 0.4)), h = heat[i];
+        ctx.globalAlpha = born;
+        ctx.fillStyle = z === 0 ? "#3a1027" : z === 1 ? "#273042" : "#131822"; ctx.fillRect(x, y, size, size);
+        if (z === 0) { ctx.strokeStyle = "#ff2d95"; ctx.lineWidth = 1.5; ctx.strokeRect(x + .75, y + .75, size - 1.5, size - 1.5); }
+        if (h > 0.02) { ctx.globalAlpha = born * h; ctx.fillStyle = z === 0 ? "#ff2d95" : "#e9edf3"; ctx.fillRect(x, y, size, size); heat[i] = h * 0.86; }
+      }
+      // legend above the grid: the three places the model lives, to scale
+      ctx.globalAlpha = Math.min(1, t / 1.2);
+      let lx = x0;
+      for (const [text, fill, col] of [["32 ON THE CARD", "#ff2d95", "#ff2d95"], ["90 IN RAM", "#273042", "#94a0b2"], ["110 ON NVME", "#131822", "#5d6878"]]) {
+        ctx.fillStyle = fill; ctx.fillRect(lx, 10, 10, 10); ctx.strokeStyle = "#2b3446"; ctx.lineWidth = 1; ctx.strokeRect(lx + .5, 10.5, 9, 9);
+        ctx.fillStyle = col; ctx.fillText(text, lx + 16, 19); lx += 16 + ctx.measureText(text).width + 22;
+      }
+      ctx.globalAlpha = 1;
+      if (!still) requestAnimationFrame(frame);
+    }
+    addEventListener("resize", layout); layout();
+    if (still) { t0 = performance.now() - 9000; for (let i = 0; i < 40; i++) heat[pick()] = Math.random(); out.textContent = toks.slice(0, 62).join(""); }
+    requestAnimationFrame(frame);
+  })();
+
+  /* ---------- 2 · the race ---------- */
+  (() => {
+    const lanes = [...document.querySelectorAll("#bahnen .bahn")].map((el) => ({ el, tok: +el.dataset.tok, pre: el.querySelector("pre"), bar: el.querySelector(".spur i"), zeit: el.querySelector(".zeit"), done: 0 }));
+    const total = 520; let t0 = 0, raf = 0;
+    const text = (k) => toks.slice(0, k).join("");
+    function frame(now) {
+      const t = (now - t0) / 1000; let open = false;
+      for (const l of lanes) {
+        const k = Math.min(total, Math.floor(t * l.tok));
+        l.pre.textContent = text(k); l.pre.scrollTop = l.pre.scrollHeight;
+        l.bar.style.width = (k / total) * 100 + "%";
+        if (k >= total) { if (!l.done) { l.done = t; l.zeit.textContent = "done after " + (total / l.tok).toFixed(1) + " s"; } }
+        else { open = true; l.zeit.textContent = lanes[0].done ? "at " + Math.round((lanes[0].done * l.tok / total) * 100) + " % when FLE was done" : ""; }
+      }
+      if (open) raf = requestAnimationFrame(frame);
+    }
+    function start() { cancelAnimationFrame(raf); lanes.forEach((l) => { l.done = 0; l.zeit.textContent = ""; }); t0 = performance.now(); raf = requestAnimationFrame(frame); }
+    document.getElementById("nochmal").addEventListener("click", start);
+    if (still) { lanes.forEach((l) => { l.pre.textContent = text(total); l.bar.style.width = "100%"; l.zeit.textContent = "done after " + (total / l.tok).toFixed(1) + " s"; }); return; }
+    new IntersectionObserver((e, io) => { if (e[0].isIntersecting) { io.disconnect(); start(); } }, { threshold: 0.4 }).observe(document.getElementById("bahnen"));
+  })();
+
+  /* ---------- 3 · your card ---------- */
+  (() => {
+    const F = window.FLEFit, g = document.getElementById("k-gpu"), r = document.getElementById("k-ram");
+    const B = { "llama-3.2-1b": 1, "katy-27b-dflash": 27, "fle-iq3-m": 125, "deepseek-v41-ista-dspark": 763, "rin-deepseek-v41-dspark": 763 };
+    const $ = (id) => document.getElementById(id);
+    function render() {
+      const [vendor, gpu] = g.value.split(":"), m = F.machine(vendor, +gpu, +r.value);
+      let best = null; const chips = [];
+      for (const model of F.MODELS) {
+        const v = F.verdict(model, m), ok = v.fit === "fits" || v.fit === "tight";
+        chips.push(`<span class="${ok ? "geht" : "nein"}">${model.title}: ${v.fit === "no engine" ? "needs NVIDIA" : v.fit}</span>`);
+        if (ok && (!best || B[model.id] > B[best.model.id])) best = { model, v };
+      }
+      $("k-rest").innerHTML = chips.join("");
+      if (!best) { $("k-b").textContent = "–"; $("k-name").textContent = "None of the catalog"; $("k-was").textContent = "A smaller GGUF may fit: FLE Link checks any file before it downloads it."; $("k-tempo").textContent = ""; $("k-cmd").firstChild.textContent = "flelink models "; return; }
+      const s = F.speed(best.model.id, m);
+      $("k-b").textContent = B[best.model.id] + "B";
+      $("k-name").textContent = best.model.title;
+      $("k-was").textContent = best.model.what + (best.v.fit === "tight" ? ". Tight: it runs, slower." : ".") + (s ? " " + s.note + "." : "");
+      $("k-tempo").innerHTML = s ? `${s.about ? "~" : ""}${s.tok}<small>tok/s, measured on this hardware</small>` : `<small style="margin:0">nobody has measured this size yet · flelink bench --share</small>`;
+      $("k-cmd").firstChild.textContent = "flelink run " + best.model.id + " ";
+    }
+    g.addEventListener("change", render); r.addEventListener("change", render); render();
+  })();
+})();
+</script>
+</body>
+</html>
