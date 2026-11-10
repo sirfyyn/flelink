@@ -588,6 +588,41 @@ impl Recipe {
             })
     }
 
+    /// Why it does not simply fit, in one sentence with the numbers (None when it fits): the list only says "tight" or
+    /// "too big", and a person wants to know whether it is the disk, the memory or the GPU.
+    pub fn fit_reason(&self, models: &Path, sys: &crate::system::SysInfo) -> Option<String> {
+        use crate::catalog::Fit;
+        use crate::system::gib;
+        if self.fit(models, sys) == Fit::Fits {
+            return None;
+        }
+        let missing = self.missing_bytes(models);
+        if missing > 0 && sys.disk_free_bytes > 0 && missing + (512 << 20) > sys.disk_free_bytes {
+            return Some(format!(
+                "Needs {} of disk for the download; {} are free.",
+                gib(missing),
+                gib(sys.disk_free_bytes)
+            ));
+        }
+        if self.requires.ram_gib.is_some() || self.requires.vram_gib.is_some() {
+            let mut with = vec![];
+            if let Some(r) = self.requires.ram_gib {
+                with.push(format!("{r} GB of memory"));
+            }
+            if let Some(v) = self.requires.vram_gib {
+                with.push(format!("a {v} GB GPU"));
+            }
+            return Some(format!(
+                "Measured with {}; this machine has {} of memory and {} for the GPU.",
+                with.join(" and "),
+                gib(sys.ram_bytes),
+                gib(sys.gpu_usable_bytes)
+            ));
+        }
+        let size = self.model.size + self.draft.as_ref().map_or(0, |d| d.size);
+        Some(crate::catalog::size_reason(size, self.needs_fle(), sys))
+    }
+
     /// Put the recipe's start values over an automatic plan; `models` is the models folder (for `{draft}`).
     pub fn apply(&self, plan: &mut crate::plan::Plan, models: &Path) {
         if let Some(c) = self.run.context {

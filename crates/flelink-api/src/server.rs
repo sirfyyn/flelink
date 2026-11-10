@@ -481,7 +481,7 @@ fn guard(
     if !host_ok(st, headers) {
         return Some(send(
             403,
-            b"FLE Studio: this host name is not allowed.".to_vec(),
+            b"FLE Link: this host name is not allowed.".to_vec(),
             "text/plain; charset=utf-8",
             &[],
             head,
@@ -1218,6 +1218,43 @@ impl Studio {
         self.agent
             .start(&s, port, &model, n_ctx, self.desktop.token())?;
         self.agent.wait_ready(std::time::Duration::from_secs(30))
+    }
+
+    /// The agent follows the engine: when a model is ready that is not the one the agent was started with (most often:
+    /// the agent came up first, with no model at all), it starts again with that model's name and context window. A turn
+    /// that ran against the old model ended with it; FLE Durable picks its work up from the last checkpoint.
+    pub fn agent_follow(self: &Arc<Self>) {
+        let weak = Arc::downgrade(self);
+        let _ = std::thread::Builder::new()
+            .name("agent-follow".into())
+            .spawn(move || {
+                let mut last: Option<std::time::Instant> = None;
+                loop {
+                std::thread::sleep(std::time::Duration::from_secs(4));
+                let Some(st) = weak.upgrade() else { return };
+                // at most once a minute, whatever the engine reports
+                if last.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(60)) {
+                    continue;
+                }
+                let eng = st.engine.status();
+                if !matches!(eng["state"].as_str(), Some("ready" | "attached")) {
+                    continue;
+                }
+                let model = eng["model"]["name"].as_str().unwrap_or("").to_string();
+                let n_ctx = eng["n_ctx"].as_u64().unwrap_or(0);
+                if !st.agent.outdated(&model, n_ctx) {
+                    continue;
+                }
+                last = Some(std::time::Instant::now());
+                st.agent.note_line(&format!(
+                    "[flelink] the engine now serves {model} ({n_ctx} tokens): starting FLE Durable again with it"
+                ));
+                st.agent.stop();
+                if let Err(e) = st.agent_start() {
+                    eprintln!("[agent] restart for the new model: {e}");
+                }
+                }
+            });
     }
 
     /// `agent.autostart`: start the agent once the server listens (in the background; a failure shows on the Agent page).
@@ -2983,6 +3020,8 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                     std::thread::sleep(std::time::Duration::from_millis(1500));
                     st2.engine.shutdown();
                     st2.toolbox.mcp.close_all();
+                    // the agent too: the new version starts its own, and two agents on one queue would be one too many
+                    st2.agent.stop();
                     crate::updates::restart();
                 }
             });
@@ -3086,7 +3125,7 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
         }),
         ("POST", _) if engine_service_action(p).is_some() => Err(ApiError(
             400,
-            "FLE Studio is not connected to a service.".into(),
+            "FLE Link is not connected to a service.".into(),
         )),
         ("GET", "/api/catalog") => {
             Ok(json!({"catalog": st.catalog_view(), "extras": st.extras_view()}))
@@ -3919,13 +3958,13 @@ fn oauth_callback(st: &Ctx, q: &Map<String, Value>, head: bool) -> Response<Body
 }
 
 const LOGIN_PAGE: &str = r#"<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>FLE Studio · sign in</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>FLE Link · sign in</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0e14;color:#e9edf3;
 font:15px/1.5 system-ui,sans-serif}form{background:#10141c;border:1px solid #1f2633;border-radius:14px;padding:28px;
 width:min(360px,90vw);display:grid;gap:12px}input{background:#151a24;border:1px solid #1f2633;border-radius:8px;
 color:inherit;padding:10px 12px;font:inherit}button{background:#7aa7ff;color:#0b0e14;border:0;border-radius:8px;
 padding:10px;font-weight:600;cursor:pointer}p{margin:0;color:#94a0b2;font-size:13px}.err{color:#ff8a8a}</style></head>
-<body><form method="post" action="/login"><strong>FLE Studio</strong><p>This FLE Studio is open to the local network.
+<body><form method="post" action="/login"><strong>FLE Link</strong><p>This FLE Link is open to the local network.
 Enter its access key (Settings → Network on the machine that runs it).</p>__ERR__
 <input type="password" name="key" autocomplete="current-password" autofocus placeholder="Access key">
 <button type="submit">Sign in</button></form></body></html>"#;
@@ -3994,6 +4033,7 @@ pub async fn serve_listener(
         st.port.store(a.port(), std::sync::atomic::Ordering::SeqCst);
     }
     st.agent_autostart();
+    st.agent_follow();
     st.calendar_mirror();
     axum::serve(
         l,
@@ -4075,7 +4115,7 @@ async fn proxy(
     if !(state == "ready" || state == "attached") || base.is_empty() {
         return send_json(
             503,
-            &json!({"error": {"message": "No model is loaded. Load one in FLE Studio first.", "type": "unavailable_error", "code": 503}}),
+            &json!({"error": {"message": "No model is loaded. Load one in FLE Link first.", "type": "unavailable_error", "code": 503}}),
             head,
         );
     }

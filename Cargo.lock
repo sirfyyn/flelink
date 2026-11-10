@@ -589,7 +589,7 @@ dependencies = [
 
 [[package]]
 name = "flelink"
-version = "0.1.10"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "clap",
@@ -605,7 +605,7 @@ dependencies = [
 
 [[package]]
 name = "flelink-api"
-version = "0.1.10"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "axum",
@@ -645,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "flelink-core"
-version = "0.1.10"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "dirs",

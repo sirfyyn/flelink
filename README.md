@@ -16,8 +16,6 @@ The layer between an inference engine and everything that talks to it.</p>
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-<!-- demo: a first run from nothing to an answer (recording goes here) -->
-
 FLE Link reads your machine, installs the engine that fits, downloads a model that fits, picks the start settings and serves an
 OpenAI- and Anthropic-compatible API, a browser Studio and a desktop app. The engine underneath can be swapped:
 [FLE (Fast Local Experts)](https://github.com/sirfyyn/FastLocalExperts) for big mixture-of-experts models on small GPUs, the
@@ -50,7 +48,7 @@ irm https://flelink.run/install.ps1 | iex          # Windows
 One file. No Python, no git, no sudo. The program is checked against its SHA-256 and lands in your user folder.
 On a machine with a screen the installer asks whether to add the desktop app (macOS: `~/Applications/FLE Link.app`, Linux:
 an AppImage with a menu entry, Windows: its setup), checked against the release's `SHA256SUMS`; `--app` / `--no-app`
-(Windows: `$env:FLE_APP = 'yes'`) answer without asking. The app is also on the [releases page](https://github.com/sirfyyn/flelink/releases). The builds are unsigned: on macOS,
+(Windows: `$env:FLE_APP = 'yes'`) answer without asking. The app is also on the [releases page](https://github.com/sirfyyn/flelink/releases). The apps carry no Apple or Microsoft developer signature (the release files themselves are signed with minisign): on macOS,
 right-click the app and choose Open once; on Windows, choose More info, then Run anyway.
 
 ```bash
@@ -62,6 +60,10 @@ flelink system           # what this machine can do, and which engine fits
 flelink models           # known models and whether each fits
 flelink doctor MODEL     # check model, engine, memory, disk
 flelink recipes          # every recipe (built in, yours, from plugins) and whether it fits
+flelink code             # work on the project in this folder with the agent (FLE Durable)
+flelink service on       # start FLE Link at login, with the last model and the agent
+flelink connect          # the settings for Claude Code, Codex, OpenCode, pi
+flelink update           # install the newest FLE Link (checked against the signed release list)
 flelink pair-code        # let another FLE Link use this machine (see Remote access)
 fle                      # short name, same program
 ```
@@ -209,9 +211,16 @@ A recipe sets only the engine's own switches, but it does choose the files and t
   preview), quantization with an importance matrix, expert pruning, KL-divergence check, a recipe file others can rebuild.
 - **Agent**: [FLE Durable](https://github.com/sirfyyn/fle-durable) next to your model, an always-on local agent that works from events. You plan things on its
   agenda (once, daily, on certain days, every few minutes), it plans its own follow-ups, any tool can hand it an event by
-  webhook; destructive steps wait for your approval. Needs Node 22.19+ and FLE Durable: [docs/AGENT.md](docs/AGENT.md).
+  webhook; destructive steps wait for your approval. It keeps tickets, a calendar and a list of events with you, and
+  while a model is loaded the chat talks to it. FLE Link installs it with one click; it needs git and Node 22.19+:
+  [docs/AGENT.md](docs/AGENT.md).
+- **Accounts** (Settings): sign in to Hugging Face (gated models), GitHub (the agent's `git` and `gh`), Google and iCloud
+  (your calendars, read only, mirrored to the agent). Tokens stay on this computer in files only you can read.
+- **Computer use**: off at every start. On the Agent page you allow the agent to see the screen and use mouse and
+  keyboard for 30 minutes (macOS, Linux with X11 or Wayland).
 - **Tools**: MCP servers (stdio and Streamable HTTP, OAuth sign-in, MCP Apps) as chat tools, asked before each call unless trusted.
-- **Updates** in one click, checked against the release's SHA-256.
+- **Updates** in one click or with `flelink update`: the release's checksum list is signed (minisign), and an update
+  without a valid signature is refused. The desktop app replaces itself the same way (macOS, Linux AppImage).
 
 ## Remote access
 
@@ -273,5 +282,6 @@ with `--arg=--lora`.
 
 ## Licence
 
-MIT. Nothing leaves your computer except the downloads you start (engine from GitHub, models from Hugging Face); no account,
-no telemetry.
+MIT. No telemetry and no account of ours. FLE Link talks to the internet when you download (engine from GitHub, models
+from Hugging Face), once a day for the update check (api.github.com; switchable in Settings), and for what you connect
+yourself: an account under Settings, web search or a web MCP server. [Privacy](https://flelink.run/privacy.html).

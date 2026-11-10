@@ -43,7 +43,9 @@ from the IANA zone, Python from the C library). Same zone, same offset; the test
 
 Hints, error texts and the saved config header say `flelink ...` where the Python helper says `fle ...`. The comparison tests
 apply one rule to Python's output (`common::brand`) and compare everything else word for word. The same for the notes FLE Link writes into the
-engine log: `FLE Link: …` where the Python Studio writes `FLE Studio: …` (the engine test swaps the name before comparing).
+engine log: `FLE Link: …` where the Python Studio writes `FLE Studio: …` (the engine test swaps the name before comparing). And for
+messages a person reads (the sign-in page of host mode, "No model is loaded. Load one in FLE Link first.", the refused
+host name): they say FLE Link, and the comparison swaps the name in Python's answer.
 
 ## D12: installed engines before the PATH
 

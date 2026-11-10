@@ -307,7 +307,7 @@ impl Engine {
             let mut s = self.st.lock().unwrap();
             if s.proc.is_some() {
                 return Err(EngineErr::Busy(
-                    "Stop the engine FLE Studio started before attaching to another server.".into(),
+                    "Stop the engine FLE Link started before attaching to another server.".into(),
                 ));
             }
             s.state = "attached".into();

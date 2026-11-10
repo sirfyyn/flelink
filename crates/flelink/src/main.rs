@@ -55,6 +55,15 @@ enum Cmd {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Install the newest FLE Link (checked against the signed release list); `--check` only says whether there is one
+    Update {
+        /// only say whether a newer version is out
+        #[arg(long)]
+        check: bool,
+        /// also take pre-releases
+        #[arg(long)]
+        pre: bool,
+    },
     /// The models FLE Link knows, and whether each fits this machine
     Models,
     /// Plugins in <data>/plugins: the engines and recipes each one brings
@@ -903,6 +912,15 @@ fn run() -> Result<()> {
                         .join(", ")
                 }
             );
+            // a llama-server from somewhere else (PATH, FLE_ENGINE, Homebrew): `flelink doctor` and `plan` use it, so say so here
+            let own: Vec<String> = inst.iter().map(|(_, p)| p.display().to_string()).collect();
+            let other: Vec<String> = flelink_core::launch::engine_candidates(&[])
+                .into_iter()
+                .filter(|c| std::path::Path::new(c).is_file() && !own.contains(c))
+                .collect();
+            if !other.is_empty() {
+                println!("Also on this machine: {}", other.join(", "));
+            }
             Ok(())
         }
         Some(Cmd::Doctor { common, strict }) => exit(plancmd::run_doctor(common, strict, &home)?),
@@ -930,6 +948,19 @@ fn run() -> Result<()> {
             exit(plancmd::run_report(common, out, zip, &home)?)
         }
         Some(Cmd::Bench(a)) => exit(run_bench(*a)?),
+        Some(Cmd::Update { check, pre }) => {
+            let api = std::env::var("FLE_GITHUB_API")
+                .ok()
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| flelink_api::engines::GITHUB_API.into());
+            match flelink_api::updates::cli(&home, &api, check, pre) {
+                Ok(text) => {
+                    println!("{text}");
+                    Ok(())
+                }
+                Err(e) => anyhow::bail!("{e}"),
+            }
+        }
         Some(Cmd::Recipes) => {
             print_recipes(&home);
             Ok(())
@@ -1135,8 +1166,10 @@ fn run() -> Result<()> {
                 Some(u) => flelink_core::connect::model_at(u).map(|m| (u.clone(), m)),
                 None => flelink_core::connect::find_running(),
             };
+            // nothing serves yet: a Studio or app that runs without a model still has its own address (not always 8642)
             let base = url
                 .or_else(|| found.as_ref().map(|f| f.0.clone()))
+                .or_else(flelink_core::connect::studio_running)
                 .unwrap_or_else(|| "http://127.0.0.1:8642".into());
             let name = model
                 .or_else(|| found.as_ref().map(|f| f.1.clone()))
@@ -1146,7 +1179,7 @@ fn run() -> Result<()> {
                     "{}",
                     paint(
                         "33",
-                        "No model is serving there yet: start one (`flelink run <recipe>` or the app), then run this again for the exact model name."
+                        &format!("No model is serving at {base} yet: start one (`flelink run <recipe>` or the app), then run this again for the exact model name.")
                     )
                 );
             } else {

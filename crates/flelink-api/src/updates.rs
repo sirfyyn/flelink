@@ -132,10 +132,188 @@ pub fn asset_name() -> Option<String> {
     })
 }
 
+/// Where a desktop app lives that can replace itself: the bundle on macOS, the AppImage file on Linux. An app from a
+/// package (deb, rpm, the Windows setup) belongs to the system's installer and is not one of these.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AppPlace {
+    MacBundle(PathBuf),
+    AppImage(PathBuf),
+}
+
+impl AppPlace {
+    fn path(&self) -> &Path {
+        match self {
+            AppPlace::MacBundle(p) | AppPlace::AppImage(p) => p,
+        }
+    }
+}
+
+/// `exe` is the running program, `appimage` what the AppImage runtime says in `APPIMAGE` (the file the user started).
+pub fn app_place_of(os: &str, exe: &Path, appimage: Option<&str>) -> Option<AppPlace> {
+    match os {
+        "macos" => {
+            // …/FLE Link.app/Contents/MacOS/flelink-app
+            let macos = exe.parent()?;
+            let contents = macos.parent()?;
+            let bundle = contents.parent()?;
+            (macos.file_name()? == "MacOS"
+                && contents.file_name()? == "Contents"
+                && bundle.extension()? == "app")
+                .then(|| AppPlace::MacBundle(bundle.to_path_buf()))
+        }
+        "linux" => {
+            // a full path as the AppImage runtime gives it (not `is_absolute`: the tests ask this on Windows too)
+            let f = appimage.filter(|a| a.starts_with('/'))?;
+            Some(AppPlace::AppImage(PathBuf::from(f)))
+        }
+        _ => None,
+    }
+}
+
+fn app_place(exe: &Path) -> Option<AppPlace> {
+    app_place_of(
+        std::env::consts::OS,
+        exe,
+        std::env::var("APPIMAGE").ok().as_deref(),
+    )
+}
+
+/// The release file of the desktop app for this machine (the names `install.sh` takes too).
+pub fn app_asset(os: &str, arch: &str, tag: &str) -> Option<String> {
+    match (os, arch) {
+        ("macos", "aarch64") => Some("FLE.Link_aarch64.app.tar.gz".into()),
+        ("macos", "x86_64") => Some("FLE.Link_x64.app.tar.gz".into()),
+        ("linux", "x86_64") => Some(format!(
+            "FLE.Link_{}_amd64.AppImage",
+            tag.trim_start_matches('v')
+        )),
+        _ => None,
+    }
+}
+
+/// `FLE_UPDATE_FORCE=1` offers the newest release again although it is the running version: the way to try the whole
+/// update (download, signature, replacement, restart) without waiting for the next release.
+fn worth_installing(candidate: &str) -> bool {
+    let current = env!("CARGO_PKG_VERSION");
+    is_newer(candidate, current)
+        || (std::env::var("FLE_UPDATE_FORCE").as_deref() == Ok("1")
+            && version_key(candidate).is_some()
+            && version_key(candidate) == version_key(current))
+}
+
+/// One file of a release, at most 200 MB.
+fn fetch(base: &str, name: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut buf = vec![];
+    ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(600))
+        .build()
+        .get(&format!("{base}/{name}"))
+        .call()
+        .map_err(|e| format!("The download of {name} failed: {e}."))?
+        .into_reader()
+        .take(200_000_000)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("The download of {name} failed: {e}."))?;
+    Ok(buf)
+}
+
+/// A release file that matches the signed checksum list, or the reason it does not.
+fn fetch_checked(base: &str, asset: &str) -> Result<Vec<u8>, String> {
+    use sha2::Digest;
+    let (sums, signature) = (
+        fetch(base, "SHA256SUMS")?,
+        fetch(base, "SHA256SUMS.minisig")?,
+    );
+    let want = flelink_core::signature::signed_sha(&sums, &signature, asset).map_err(|e| {
+        format!("This update is not signed correctly ({e:#}); nothing was changed.")
+    })?;
+    let data = fetch(base, asset)?;
+    let got = hex::encode(sha2::Sha256::digest(&data));
+    if want.len() != 64 || want != got {
+        return Err(format!(
+            "The download does not match its checksum (wanted {want}, got {got}); nothing was changed."
+        ));
+    }
+    Ok(data)
+}
+
+/// Put the app of `archive` (the release's .app.tar.gz) where `bundle` is. The new one is unpacked beside it first; the
+/// old one comes back if the last step fails.
+pub fn swap_bundle(bundle: &Path, archive: &[u8]) -> Result<(), String> {
+    let parent = bundle.parent().ok_or("The app has no folder.")?;
+    let name = bundle
+        .file_name()
+        .ok_or("The app has no name.")?
+        .to_string_lossy()
+        .to_string();
+    let stage = parent.join(format!(".flelink-update-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&stage);
+    std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
+    let clean = |r: Result<(), String>| {
+        let _ = std::fs::remove_dir_all(&stage);
+        r
+    };
+    let mut t = tar::Archive::new(flate2::read::GzDecoder::new(std::io::Cursor::new(archive)));
+    t.set_preserve_permissions(true);
+    if let Err(e) = t.unpack(&stage) {
+        return clean(Err(format!("The app archive could not be unpacked: {e}.")));
+    }
+    let fresh = std::fs::read_dir(&stage)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.extension().is_some_and(|x| x == "app") && p.join("Contents/MacOS").is_dir());
+    let Some(fresh) = fresh else {
+        return clean(Err("The archive has no app in it.".into()));
+    };
+    let old = parent.join(format!(".{name}.old-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&old);
+    if let Err(e) = std::fs::rename(bundle, &old) {
+        return clean(Err(format!(
+            "The running app could not be moved aside: {e}."
+        )));
+    }
+    if let Err(e) = std::fs::rename(&fresh, bundle) {
+        let _ = std::fs::rename(&old, bundle);
+        return clean(Err(format!("The new app could not be put in place: {e}.")));
+    }
+    let _ = std::fs::remove_dir_all(&old);
+    clean(Ok(()))
+}
+
+/// Replace one program file (the AppImage): written beside it, then renamed over it.
+pub fn swap_file(file: &Path, data: &[u8]) -> Result<(), String> {
+    let dir = file.parent().ok_or("The program has no folder.")?;
+    let name = file
+        .file_name()
+        .ok_or("The program has no name.")?
+        .to_string_lossy()
+        .to_string();
+    let new = dir.join(format!(".{name}.new"));
+    std::fs::write(&new, data).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&new, file).map_err(|e| {
+        let _ = std::fs::remove_file(&new);
+        e.to_string()
+    })
+}
+
+/// Started by a service manager. systemd's variables alone do not say so: a shell in a desktop terminal inherits them
+/// from the terminal's own unit, so a Studio started by hand there counted as a service and lost its update button.
 fn in_service() -> bool {
+    use std::io::IsTerminal;
     std::env::var_os("FLE_STUDIO_SERVICE").is_some()
-        || std::env::var_os("INVOCATION_ID").is_some()
-        || std::env::var_os("JOURNAL_STREAM").is_some()
+        || ((std::env::var_os("INVOCATION_ID").is_some()
+            || std::env::var_os("JOURNAL_STREAM").is_some())
+            && !std::io::stdout().is_terminal())
 }
 
 fn writable(dir: &Path) -> bool {
@@ -175,10 +353,28 @@ pub fn advice(install: &Value, tag: &str) -> Value {
         "curl -fsSL https://flelink.run/install.sh | sh"
     };
     let (reason, command): (String, String) = match kind {
-        "app" => (
-            format!("The desktop app updates by installing the new version from https://github.com/{REPO}/releases/tag/{tag}."),
-            String::new(),
-        ),
+        // the bundle (macOS) or the AppImage replaces itself; an app from a package or the Windows setup does not
+        "app" => {
+            let by_hand = format!("The desktop app updates by installing the new version from https://github.com/{REPO}/releases/tag/{tag}.");
+            match app_place(&exe) {
+                Some(place)
+                    if app_asset(std::env::consts::OS, std::env::consts::ARCH, tag).is_some() =>
+                {
+                    if place.path().parent().is_some_and(writable) {
+                        (String::new(), String::new())
+                    } else {
+                        (
+                            format!(
+                                "FLE Link cannot write to {}, so the app cannot replace itself. Install the new version from https://github.com/{REPO}/releases/tag/{tag}.",
+                                place.path().parent().map_or(String::new(), |p| p.display().to_string())
+                            ),
+                            String::new(),
+                        )
+                    }
+                }
+                _ => (by_hand, String::new()),
+            }
+        }
         "source" => (
             "This copy was built from source. Update the checkout with git and build again.".into(),
             "git pull && cargo build --release -p flelink".into(),
@@ -187,7 +383,9 @@ pub fn advice(install: &Value, tag: &str) -> Value {
             "This copy was installed with cargo, so cargo updates it.".into(),
             format!("cargo install --git https://github.com/{REPO} --tag {tag} flelink"),
         ),
-        _ if install["service"] == true => (
+        // Unix replaces the process in place (same pid), which a service manager does not notice; Windows starts a new
+        // process, which the task that started the old one does not own
+        _ if install["service"] == true && cfg!(windows) => (
             "FLE Link runs as a service here. Update it with the installer, then restart the service.".into(),
             shell.into(),
         ),
@@ -373,7 +571,7 @@ impl Updates {
         let mut app = Value::Null;
         if let Some(a) = s["app"]
             .as_object()
-            .filter(|a| is_newer(a["version"].as_str().unwrap_or(""), current))
+            .filter(|a| worth_installing(a["version"].as_str().unwrap_or("")))
         {
             let mut a = Value::Object(a.clone());
             a["dismissed"] = json!(a["version"] == dismissed);
@@ -422,10 +620,7 @@ impl Updates {
         let app = self.state.lock().unwrap()["app"].clone();
         if !Self::enabled(config)
             || app["tag"] != tag
-            || !is_newer(
-                app["version"].as_str().unwrap_or(""),
-                env!("CARGO_PKG_VERSION"),
-            )
+            || !worth_installing(app["version"].as_str().unwrap_or(""))
         {
             return Err(
                 "That version is not the one the last check found. Check again first.".into(),
@@ -471,41 +666,37 @@ impl Updates {
         r
     }
 
+    /// The desktop app replaces its bundle (macOS) or its AppImage file (Linux) with the release's, checked like the program.
+    fn install_app(&self, base: &str, tag: &str, exe: &Path) -> Result<(), String> {
+        let place = app_place(exe).ok_or("This copy of the app cannot replace itself.")?;
+        let asset = app_asset(std::env::consts::OS, std::env::consts::ARCH, tag)
+            .ok_or("There is no app build for this machine.")?;
+        let data = fetch_checked(base, &asset)?;
+        *self.run.lock().unwrap() = json!({"state": "running", "tag": tag, "message": "Installing the new version …", "tail": []});
+        match &place {
+            AppPlace::MacBundle(bundle) => swap_bundle(bundle, &data)?,
+            AppPlace::AppImage(file) => swap_file(file, &data)?,
+        }
+        let _ = std::fs::write(
+            &self.result_file,
+            json!({"status": "done", "tag": tag, "from": env!("CARGO_PKG_VERSION"), "at": now()})
+                .to_string(),
+        );
+        *self.run.lock().unwrap() = json!({"state": "restarting", "tag": tag, "message": "FLE Link starts again with the new version …", "tail": []});
+        Ok(())
+    }
+
     fn install_inner(&self, base: &str, tag: &str) -> Result<(), String> {
-        use sha2::Digest;
-        let asset = asset_name().ok_or("There is no release build for this machine.")?;
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        if detect_install()["kind"] == "app" {
+            return self.install_app(base, tag, &exe);
+        }
+        let asset = asset_name().ok_or("There is no release build for this machine.")?;
         let dir = exe
             .parent()
             .ok_or("The program has no folder.")?
             .to_path_buf();
-        let agent = ureq::AgentBuilder::new()
-            .timeout(Duration::from_secs(600))
-            .build();
-        let fetch = |name: &str| -> Result<Vec<u8>, String> {
-            let mut buf = vec![];
-            use std::io::Read;
-            agent
-                .get(&format!("{base}/{name}"))
-                .call()
-                .map_err(|e| format!("The download of {name} failed: {e}."))?
-                .into_reader()
-                .take(200_000_000)
-                .read_to_end(&mut buf)
-                .map_err(|e| format!("The download of {name} failed: {e}."))?;
-            Ok(buf)
-        };
-        let (sums, signature) = (fetch("SHA256SUMS")?, fetch("SHA256SUMS.minisig")?);
-        let want = flelink_core::signature::signed_sha(&sums, &signature, &asset).map_err(|e| {
-            format!("This update is not signed correctly ({e:#}); nothing was changed.")
-        })?;
-        let archive = fetch(&asset)?;
-        let got = hex::encode(sha2::Sha256::digest(&archive));
-        if want.len() != 64 || want != got {
-            return Err(format!(
-                "The download does not match its checksum (wanted {want}, got {got}); nothing was changed."
-            ));
-        }
+        let archive = fetch_checked(base, &asset)?;
         *self.run.lock().unwrap() = json!({"state": "running", "tag": tag, "message": "Installing the new version …", "tail": []});
         let names: Vec<String> = ["flelink", "fle"]
             .iter()
@@ -582,6 +773,70 @@ impl Updates {
     }
 }
 
+/// `flelink update`: the Studio's check and its signed replacement, from the terminal. `check_only` only says what there
+/// is. The text to print; Err when the check or the installation failed (nothing was changed then).
+pub fn cli(
+    data_dir: &Path,
+    github_api: &str,
+    check_only: bool,
+    pre: bool,
+) -> Result<String, String> {
+    let u = Updates::new(data_dir, github_api);
+    let path = if pre {
+        format!("{REPO}/releases?per_page=15")
+    } else {
+        format!("{REPO}/releases/latest")
+    };
+    let found = u
+        .get(&path)
+        .map_err(|(_, e)| format!("The check failed: {e}."))?;
+    let app = pick_release(&found, pre).ok_or("GitHub lists no release of FLE Link.")?;
+    let (version, tag) = (
+        app["version"].as_str().unwrap_or(""),
+        app["tag"].as_str().unwrap_or(""),
+    );
+    let current = env!("CARGO_PKG_VERSION");
+    if !is_newer(version, current) {
+        return Ok(format!("FLE Link {current} is the newest version."));
+    }
+    if check_only {
+        return Ok(format!(
+            "FLE Link {version} is out (this is {current}): {}\nInstall it with: flelink update",
+            app["url"].as_str().unwrap_or("")
+        ));
+    }
+    // from the terminal the program replaces its own file; whether a service runs it does not matter here
+    let mut install = detect_install();
+    install["service"] = json!(false);
+    let adv = advice(&install, tag);
+    if adv["can_auto"] != true {
+        let cmd = adv["command"].as_str().unwrap_or("");
+        return Err(format!(
+            "{}{}",
+            adv["reason"]
+                .as_str()
+                .unwrap_or("This install cannot update itself."),
+            if cmd.is_empty() {
+                String::new()
+            } else {
+                format!("\n  {cmd}")
+            }
+        ));
+    }
+    let base = match std::env::var("FLE_RELEASE_BASE")
+        .ok()
+        .filter(|v| !v.is_empty())
+    {
+        Some(b) => format!("{}/{tag}", b.trim_end_matches('/')),
+        None => format!("https://github.com/{REPO}/releases/download/{tag}"),
+    };
+    u.install_inner(&base, tag)?;
+    Ok(format!(
+        "FLE Link {version} is installed (was {current}), checked against the signed list of the release.\n\
+         A Studio, app or service that is running keeps the old version until it starts again."
+    ))
+}
+
 /// FLE engines that have a newer build in `release`, one entry per installed variant.
 fn engine_updates(installed: &[&Value], release: &Value) -> Vec<Value> {
     let latest = release["tag_name"].as_str().unwrap_or("");
@@ -625,6 +880,12 @@ fn engine_updates(installed: &[&Value], release: &Value) -> Vec<Value> {
 /// new one a moment after this one has ended.
 pub fn restart() -> ! {
     let exe = std::env::current_exe().unwrap_or_default();
+    #[cfg(unix)]
+    if detect_install()["kind"] == "app" {
+        if let Some(place) = app_place(&exe) {
+            relaunch_app(&place);
+        }
+    }
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|a| a == "studio") && !args.iter().any(|a| a == "--no-browser") {
         args.push("--no-browser".into());
@@ -654,9 +915,146 @@ pub fn restart() -> ! {
     }
 }
 
+/// Start the replaced app and end this one. The app allows one instance, so the new one starts a moment after this one
+/// is gone; the shell that waits is in its own process group and outlives it.
+#[cfg(unix)]
+fn relaunch_app(place: &AppPlace) -> ! {
+    use std::os::unix::process::CommandExt;
+    let script = match place {
+        AppPlace::MacBundle(_) => "sleep 2; /usr/bin/open \"$0\"",
+        AppPlace::AppImage(_) => "sleep 2; \"$0\" >/dev/null 2>&1 &",
+    };
+    let started = std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(script)
+        .arg(place.path())
+        .env_remove("FLE_UPDATE_FORCE")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn();
+    if let Err(e) = started {
+        eprintln!("flelink: could not start the new app: {e}; open it again by hand");
+    }
+    std::process::exit(0);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_app_knows_where_it_lives_and_which_file_replaces_it() {
+        let exe = Path::new("/Applications/FLE Link.app/Contents/MacOS/flelink-app");
+        assert_eq!(
+            app_place_of("macos", exe, None),
+            Some(AppPlace::MacBundle("/Applications/FLE Link.app".into()))
+        );
+        // a build run from the source tree is not a bundle, and a Linux app from a package has no AppImage file
+        assert_eq!(
+            app_place_of("macos", Path::new("/x/target/release/flelink-app"), None),
+            None
+        );
+        assert_eq!(
+            app_place_of("linux", Path::new("/usr/bin/flelink-app"), None),
+            None
+        );
+        assert_eq!(
+            app_place_of(
+                "linux",
+                Path::new("/tmp/.mount_x/usr/bin/flelink-app"),
+                Some("/home/u/.local/bin/flelink-app")
+            ),
+            Some(AppPlace::AppImage("/home/u/.local/bin/flelink-app".into()))
+        );
+        assert_eq!(app_place_of("windows", exe, None), None);
+        assert_eq!(
+            app_asset("macos", "aarch64", "v0.1.11").as_deref(),
+            Some("FLE.Link_aarch64.app.tar.gz")
+        );
+        assert_eq!(
+            app_asset("linux", "x86_64", "v0.1.11").as_deref(),
+            Some("FLE.Link_0.1.11_amd64.AppImage")
+        );
+        assert_eq!(app_asset("windows", "x86_64", "v0.1.11"), None);
+    }
+
+    /// A .app.tar.gz like the release's, with one program file that says `text`.
+    #[cfg(unix)]
+    fn app_archive(text: &str) -> Vec<u8> {
+        let mut b = tar::Builder::new(flate2::write::GzEncoder::new(
+            vec![],
+            flate2::Compression::fast(),
+        ));
+        let mut put = |path: &str, data: &[u8], mode: u32| {
+            let mut h = tar::Header::new_gnu();
+            h.set_size(data.len() as u64);
+            h.set_mode(mode);
+            h.set_cksum();
+            b.append_data(&mut h, path, data).unwrap();
+        };
+        put(
+            "FLE Link.app/Contents/MacOS/flelink-app",
+            text.as_bytes(),
+            0o755,
+        );
+        put("FLE Link.app/Contents/Info.plist", b"<plist/>", 0o644);
+        b.into_inner().unwrap().finish().unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_bundle_is_swapped_whole_and_a_bad_archive_changes_nothing() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = std::env::temp_dir().join(format!("flelink-swap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let bundle = d.join("FLE Link.app");
+        std::fs::create_dir_all(bundle.join("Contents/MacOS")).unwrap();
+        std::fs::write(bundle.join("Contents/MacOS/flelink-app"), "old").unwrap();
+        std::fs::write(bundle.join("Contents/left-over"), "from the old version").unwrap();
+        // not an archive, and an archive without an app: the old app stays as it is
+        assert!(swap_bundle(&bundle, b"not a tar").is_err());
+        let mut empty = tar::Builder::new(flate2::write::GzEncoder::new(
+            vec![],
+            flate2::Compression::fast(),
+        ));
+        let mut h = tar::Header::new_gnu();
+        h.set_size(1);
+        h.set_cksum();
+        empty.append_data(&mut h, "readme.txt", &b"x"[..]).unwrap();
+        let empty = empty.into_inner().unwrap().finish().unwrap();
+        assert!(swap_bundle(&bundle, &empty).is_err());
+        assert_eq!(
+            std::fs::read_to_string(bundle.join("Contents/MacOS/flelink-app")).unwrap(),
+            "old"
+        );
+        // the real thing: the new program, executable, and nothing of the old bundle left in it or beside it
+        swap_bundle(&bundle, &app_archive("new")).unwrap();
+        let exe = bundle.join("Contents/MacOS/flelink-app");
+        assert_eq!(std::fs::read_to_string(&exe).unwrap(), "new");
+        assert_eq!(
+            std::fs::metadata(&exe).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+        assert!(!bundle.join("Contents/left-over").exists());
+        let beside: Vec<String> = std::fs::read_dir(&d)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(beside, vec!["FLE Link.app"], "{beside:?}");
+        // one file (the AppImage)
+        let file = d.join("flelink-app");
+        std::fs::write(&file, "old").unwrap();
+        swap_file(&file, b"new").unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "new");
+        assert_eq!(
+            std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     #[test]
     fn releases_are_picked_and_compared() {
