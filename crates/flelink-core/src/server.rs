@@ -2,6 +2,7 @@ use crate::plan::Plan;
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 pub struct Server {
@@ -11,6 +12,20 @@ pub struct Server {
     home: std::path::PathBuf,
     /// The address that answers once the model is loaded (`/health` for llama-server; an engine may name another).
     pub health: String,
+    counted: bool,
+}
+
+static STOP: AtomicBool = AtomicBool::new(false);
+static ENGINES: AtomicUsize = AtomicUsize::new(0);
+
+/// A stop signal arrived. True when an engine of this program must be ended first; false when the program can simply go.
+pub fn request_stop() -> bool {
+    STOP.store(true, Ordering::SeqCst);
+    ENGINES.load(Ordering::SeqCst) > 0
+}
+
+pub fn stop_requested() -> bool {
+    STOP.load(Ordering::SeqCst)
 }
 
 impl Server {
@@ -43,9 +58,18 @@ impl Server {
         // the data folder: an engine left behind by a program that died is stopped before a second one loads
         let home = log_dir.parent().unwrap_or(log_dir).to_path_buf();
         crate::orphans::reap(&home);
-        let child = cmd
-            .spawn()
-            .with_context(|| format!("could not start {}", server.display()))?;
+        // a start right after the last one: the store recipes plan with nearly all GPU memory
+        if plan.env.iter().any(|(k, _)| k == "FLE_MOE_STORE_GB") {
+            crate::launch::wait_gpu_memory_settled(Duration::from_secs(15));
+        }
+        ENGINES.fetch_add(1, Ordering::SeqCst);
+        let child = match cmd.spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                ENGINES.fetch_sub(1, Ordering::SeqCst);
+                return Err(e).with_context(|| format!("could not start {}", server.display()));
+            }
+        };
         crate::orphans::record(&home, child.id());
         Ok(Server {
             child,
@@ -53,6 +77,7 @@ impl Server {
             log,
             home,
             health: "/health".into(),
+            counted: true,
         })
     }
 
@@ -63,6 +88,9 @@ impl Server {
             .build()?;
         let start = Instant::now();
         loop {
+            if STOP.load(Ordering::SeqCst) {
+                bail!("stopped while the model was loading"); // dropping the Server ends the engine
+            }
             if let Some(st) = self.child.try_wait()? {
                 bail!(
                     "the engine stopped ({st}); see {}\n{}",
@@ -136,6 +164,9 @@ impl Server {
         let _ = self.child.kill();
         let _ = self.child.wait();
         crate::orphans::forget(&self.home, self.child.id());
+        if std::mem::take(&mut self.counted) {
+            ENGINES.fetch_sub(1, Ordering::SeqCst);
+        }
     }
 }
 

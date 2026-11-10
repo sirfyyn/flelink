@@ -164,6 +164,9 @@ pub struct Requires {
     pub ram_gib: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vram_gib: Option<u32>,
+    /// `vram_gib` is a floor: a smaller card is too small, not tight.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub vram_is_minimum: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -349,8 +352,11 @@ impl Recipe {
             );
         }
         for k in self.run.env.keys() {
-            if k.is_empty() || !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-                bail!("recipe {}: environment name '{k}' is not allowed", self.id);
+            if !env_allowed(k) {
+                bail!(
+                    "recipe {}: environment name '{k}' is not allowed (only the engine's own: FLE_, GGML_, LLAMA_, CUDA_VISIBLE_DEVICES, CUDA_DEVICE_ORDER)",
+                    self.id
+                );
             }
         }
         if let Some(c) = self.run.context {
@@ -436,7 +442,7 @@ impl Recipe {
     }
 
     /// Fill the placeholders of `run.args` and `run.env`: `{draft}` (the draft model's path), `{physical_cores}`,
-    /// `{profile}` (profile_path; its folder is created) and `{hot_mlock_gb}` (memory minus 60 GiB, at most 75, at least 0:
+    /// `{physical_cores_up_to_8}`, `{profile}` (profile_path; its folder is created) and `{hot_mlock_gb}` (memory minus 60 GiB, at most 75, at least 0:
     /// how much of the hot experts may be locked in RAM).
     pub fn fill(&self, text: &str, models: &Path) -> String {
         let mut t = text.to_string();
@@ -451,6 +457,12 @@ impl Recipe {
             t = t.replace(
                 "{physical_cores}",
                 &crate::system::physical_cores().to_string(),
+            );
+        }
+        if t.contains("{physical_cores_up_to_8}") {
+            t = t.replace(
+                "{physical_cores_up_to_8}",
+                &crate::system::physical_cores().min(8).to_string(),
             );
         }
         if t.contains("{profile}") {
@@ -549,7 +561,13 @@ impl Recipe {
             })
         };
         let ram = measured(self.requires.ram_gib, sys.ram_bytes);
-        let vram = measured(self.requires.vram_gib, sys.gpu_usable_bytes);
+        let vram = measured(self.requires.vram_gib, sys.gpu_usable_bytes).map(|f| {
+            if self.requires.vram_is_minimum && f == Fit::Tight {
+                Fit::TooBig
+            } else {
+                f
+            }
+        });
         if ram.is_none() && vram.is_none() {
             let size = self.model.size + self.draft.as_ref().map_or(0, |d| d.size);
             if size == 0 {
@@ -597,11 +615,12 @@ impl Recipe {
 }
 
 /// Recipes that ship as TOML because the catalog's fields do not cover them (a draft model, engine flags).
-const BUILTIN_TOML: [&str; 4] = [
+const BUILTIN_TOML: [&str; 5] = [
     include_str!("../recipes/deepseek-v41-ista.toml"),
     include_str!("../recipes/deepseek-v41-ista-dspark.toml"),
     include_str!("../recipes/deepseek-v41-ista-iq1m.toml"),
     include_str!("../recipes/rin-deepseek-v41-dspark.toml"),
+    include_str!("../recipes/katy-27b-dflash.toml"),
 ];
 
 /// The built-in catalog as recipes, then the built-in TOML recipes.
@@ -719,8 +738,35 @@ pub fn load_all(home: &Path) -> (Vec<Recipe>, Vec<String>) {
     (out, problems)
 }
 
-/// A recipe by id, or from a `.toml` file or an `https://` URL.
+/// What a recipe may set in the engine's environment: the engine's own switches. Not `LD_PRELOAD` and its kin
+/// (`GGML_BACKEND_PATH`, `CUDA_INJECTION64_PATH`), which would load code from a file the recipe brought.
+fn env_allowed(k: &str) -> bool {
+    !k.is_empty()
+        && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && k != "GGML_BACKEND_PATH"
+        && (k.starts_with("FLE_")
+            || k.starts_with("GGML_")
+            || k.starts_with("LLAMA_")
+            || k == "CUDA_VISIBLE_DEVICES"
+            || k == "CUDA_DEVICE_ORDER")
+}
+
+/// A recipe this machine already has, by id.
 pub fn find(home: &Path, what: &str) -> Result<Recipe> {
+    let (all, _) = load_all(home);
+    all.into_iter()
+        .find(|r| r.id == what)
+        .with_context(|| format!("no recipe '{what}' (try: flelink recipes)"))
+}
+
+/// Does this name a recipe from outside: a URL or a file someone may have sent?
+pub fn is_foreign(what: &str) -> bool {
+    what.starts_with("https://") || what.ends_with(".toml")
+}
+
+/// A recipe as a person types it: the full id, a part of an id only one recipe has (`flelink run katy`), a `.toml` file
+/// or an `https://` URL.
+pub fn find_typed(home: &Path, what: &str) -> Result<Recipe> {
     if what.starts_with("https://") {
         let text = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
@@ -737,15 +783,83 @@ pub fn find(home: &Path, what: &str) -> Result<Recipe> {
             std::fs::read_to_string(what).with_context(|| format!("could not read {what}"))?;
         return Recipe::parse(&text, what);
     }
-    let (all, _) = load_all(home);
-    all.into_iter()
-        .find(|r| r.id == what)
-        .with_context(|| format!("no recipe '{what}' (try: flelink recipes)"))
+    pick_typed(load_all(home).0, what)
+}
+
+fn pick_typed(all: Vec<Recipe>, what: &str) -> Result<Recipe> {
+    if let Some(r) = all.iter().find(|r| r.id == what) {
+        return Ok(r.clone());
+    }
+    let part = what.to_lowercase();
+    let mut hits: Vec<Recipe> = all
+        .into_iter()
+        .filter(|r| r.id.to_lowercase().contains(&part))
+        .collect();
+    match hits.len() {
+        0 => bail!("no recipe '{what}' (try: flelink recipes)"),
+        1 => Ok(hits.remove(0)),
+        _ => {
+            let ids: Vec<&str> = hits.iter().map(|r| r.id.as_str()).collect();
+            bail!("'{what}' fits several recipes: {}", ids.join(", "))
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_recipe_cannot_set_what_loads_code() {
+        let base = builtin()
+            .into_iter()
+            .find(|r| r.id == "katy-27b-dflash")
+            .unwrap();
+        let with = |k: &str| {
+            let mut r = base.clone();
+            r.run.env.insert(k.to_string(), "1".into());
+            Recipe::parse(&r.to_toml(), "test")
+        };
+        for bad in [
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "DYLD_INSERT_LIBRARIES",
+            "CUDA_INJECTION64_PATH",
+            "GGML_BACKEND_PATH",
+            "PATH",
+        ] {
+            assert!(with(bad).is_err(), "{bad}");
+        }
+        for ok in [
+            "FLE_MOE_POOL",
+            "GGML_CUDA_GRAPH_OPT",
+            "LLAMA_ARG_THREADS",
+            "CUDA_VISIBLE_DEVICES",
+        ] {
+            assert!(with(ok).is_ok(), "{ok}");
+        }
+    }
+
+    #[test]
+    fn only_a_url_or_a_file_counts_as_foreign() {
+        assert!(is_foreign("https://example.com/r.toml"));
+        assert!(is_foreign("shared.toml"));
+        assert!(!is_foreign("katy"));
+    }
+
+    #[test]
+    fn a_part_of_an_id_is_enough_when_only_one_recipe_has_it() {
+        assert_eq!(pick_typed(builtin(), "KATY").unwrap().id, "katy-27b-dflash");
+        assert_eq!(
+            pick_typed(builtin(), "deepseek-v41-ista").unwrap().id,
+            "deepseek-v41-ista",
+            "the full id wins over longer ids that contain it"
+        );
+        let many = pick_typed(builtin(), "deepseek").unwrap_err().to_string();
+        assert!(many.contains("deepseek-v41-ista-dspark"), "{many}");
+        let none = pick_typed(builtin(), "nothing").unwrap_err().to_string();
+        assert!(none.contains("flelink recipes"), "{none}");
+    }
 
     const EXAMPLE: &str = r#"
 id = "qwen-coder-long"
@@ -1033,6 +1147,40 @@ temperature = 0.2
         };
         assert_eq!(r.fit(&models, &mac), Fit::TooBig);
         let _ = std::fs::remove_dir_all(&models);
+    }
+
+    #[test]
+    fn the_katy_recipe_leaves_room_for_the_draft_on_a_small_gpu() {
+        let r = builtin()
+            .into_iter()
+            .find(|r| r.id == "katy-27b-dflash")
+            .unwrap();
+        assert!(r.draft.is_some());
+        assert_eq!(r.requires.vram_gib, Some(12));
+        assert_eq!(r.requires.ram_gib, Some(24));
+        let mut sys = crate::system::SysInfo {
+            os: "linux".into(),
+            arch: "x64".into(),
+            cpu: String::new(),
+            cores: 8,
+            ram_bytes: 64 << 30,
+            disk_free_bytes: 500 << 30,
+            avx2: true,
+            gpus: vec![],
+            gpu_usable_bytes: 12 << 30,
+        };
+        let models = std::env::temp_dir();
+        assert_eq!(r.fit(&models, &sys), crate::catalog::Fit::Fits);
+        sys.gpu_usable_bytes = 10 << 30;
+        assert_eq!(r.fit(&models, &sys), crate::catalog::Fit::TooBig);
+        assert_eq!(Recipe::parse(&r.to_toml(), "builtin").unwrap(), r);
+        let args = r.run_args(&std::env::temp_dir());
+        // comes after the plan's "-ngl 99", and the last value counts
+        assert!(args.windows(2).any(|w| w == ["-ngl", "auto"]));
+        assert!(args.windows(2).any(|w| w == ["--fit-target", "3100"]));
+        let t = args.iter().position(|a| a == "-t").unwrap();
+        let cores = crate::system::physical_cores().min(8);
+        assert_eq!(args[t + 1], cores.to_string());
     }
 
     #[test]

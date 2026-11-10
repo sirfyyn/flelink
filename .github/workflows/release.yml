@@ -21,7 +21,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: "${{ matrix.target }}" }
+      # the Google sign-in needs the client secret of FLE Link's desktop app (accounts.rs); it is built in, never in the repo
       - run: cargo build --release -p flelink --target ${{ matrix.target }}
+        env: { FLE_GOOGLE_CLIENT_SECRET: "${{ secrets.FLE_GOOGLE_CLIENT_SECRET }}" }
       - name: Package (unix)
         if: runner.os != 'Windows'
         run: |
@@ -63,7 +65,7 @@ jobs:
           releaseName: "FLE Link ${{ github.ref_name }}"
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
-        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}", FLE_GOOGLE_CLIENT_SECRET: "${{ secrets.FLE_GOOGLE_CLIENT_SECRET }}" }
   publish:
     # after the app jobs too: SHA256SUMS below covers their installers, which install.sh and install.ps1 check
     needs: [build, app]

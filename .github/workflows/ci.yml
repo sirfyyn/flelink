@@ -40,3 +40,4 @@ jobs:
           FLE_STUDIO_SRC: ${{ github.workspace }}/spec-studio/src
           FLE_ENGINE_SRC: ${{ github.workspace }}/spec-engine
           FLE_STUDIO_PYTHON: python
+      - run: node --test tests/loop-guard.test.mjs

@@ -24,8 +24,10 @@ pub mod recipe;
 pub mod report;
 pub mod serve;
 pub mod server;
+pub mod service;
 pub mod share;
 pub mod sidecars;
+pub mod signature;
 pub mod system;
 
 use std::path::PathBuf;

@@ -5,6 +5,10 @@
 //! or by the agent itself), from webhooks (`POST /api/p/agent/events`) and from your chat with it. The page talks to the runner
 //! only through the routes here; the runner's token never leaves this server.
 //!
+//! FLE Durable is its own application. FLE Link either starts it from a folder (`runner_dir`) or talks to one that already runs (`url`, `token`
+//! in the settings). Either way it only uses the runner's HTTP interface: /api/message, /api/stream, /api/conversation, /api/approvals, /api/abort,
+//! /api/agenda, /api/queue.
+//!
 //! Settings in `<data>/agent/settings.json` (the plugin's own file; FLE Link's settings stay as the Studio's):
 //! `runner_dir` (a checkout of github.com/sirfyyn/fle-durable, with `src/main.js` and its `node_modules`), `node` (empty: from
 //! the PATH), `autostart`, `workspace` (empty: `<data>/agent/work`).
@@ -22,6 +26,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 /// FLE Durable needs what pi needs.
 pub const NODE_MIN: (u64, u64) = (22, 19);
 const LOG_LINES: usize = 300;
+/// The FLE Durable FLE Link installs itself (`<data>/agent/app`) when no own folder is set, like ENGINE_PIN and STUDIO_PIN.
+pub const DURABLE_REPO: &str = "https://github.com/sirfyyn/fle-durable.git";
+pub fn durable_pin() -> &'static str {
+    include_str!("../../../DURABLE_PIN").trim()
+}
 
 #[derive(Default)]
 struct Run {
@@ -37,6 +46,7 @@ pub struct Agent {
     dir: PathBuf,
     run: Mutex<Run>,
     log: Arc<Mutex<VecDeque<String>>>,
+    installing: std::sync::atomic::AtomicBool,
 }
 
 /// What the settings say, read once per call.
@@ -45,6 +55,8 @@ pub struct AgentSettings {
     pub runner_dir: String,
     pub node: String,
     pub workspace: String,
+    /// a FLE Durable that already runs (empty: FLE Link starts it from `runner_dir`)
+    pub url: String,
 }
 
 fn now() -> f64 {
@@ -54,7 +66,7 @@ fn now() -> f64 {
         .unwrap_or(0.0)
 }
 
-fn expand(p: &str) -> PathBuf {
+pub fn expand(p: &str) -> PathBuf {
     match p.strip_prefix("~/") {
         Some(r) => dirs::home_dir().unwrap_or_default().join(r),
         None => PathBuf::from(p),
@@ -104,14 +116,19 @@ pub fn find_node(configured: &str) -> Result<(PathBuf, String), String> {
     }
 }
 
-/// Is FLE Durable in `dir`, with its packages installed?
-pub fn runner_problem(dir: &str) -> Option<String> {
-    if dir.trim().is_empty() {
-        return Some("Enter the folder of FLE Durable (the one with src/main.js; git clone https://github.com/sirfyyn/fle-durable).".into());
+/// Is FLE Durable in `d`, with its packages installed? `managed`: the copy FLE Link installs itself.
+pub fn runner_problem(d: &Path, managed: bool) -> Option<String> {
+    if managed && !d.join("src").join("main.js").is_file() {
+        return Some(
+            "FLE Durable is not installed yet: Install fetches it (needs git and Node 22.19+)."
+                .into(),
+        );
     }
-    let d = expand(dir.trim());
     if !d.join("src").join("main.js").is_file() {
         return Some(format!("{} has no src/main.js.", d.display()));
+    }
+    if managed && !d.join("node_modules").is_dir() {
+        return Some("The install did not finish: press Install again.".into());
     }
     if !d
         .join("node_modules")
@@ -127,17 +144,69 @@ pub fn runner_problem(dir: &str) -> Option<String> {
     None
 }
 
-fn free_port() -> Result<u16, String> {
+/// npm next to `node` (as Node's installers put it), else from the PATH.
+fn npm_for(node: &Path) -> PathBuf {
+    let name = if cfg!(windows) { "npm.cmd" } else { "npm" };
+    node.parent()
+        .map(|p| p.join(name))
+        .filter(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from(name))
+}
+
+/// Run one install step; its output goes to the agent log, a failure names the step.
+fn step(log: &dyn Fn(String), what: &str, cmd: &mut Command) -> Result<(), String> {
+    log(format!("[install] {what}"));
+    let out = cmd
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("{what}: {e}"))?;
+    for l in String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .chain(String::from_utf8_lossy(&out.stderr).lines())
+    {
+        log(format!("[install] {l}"));
+    }
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(format!("{what} failed ({}); the log says why.", out.status))
+    }
+}
+
+pub fn free_port() -> Result<u16, String> {
     std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .map(|a| a.port())
         .map_err(|e| format!("no free port: {e}"))
 }
 
-fn token() -> String {
+pub fn token() -> String {
     let mut b = [0u8; 32];
     getrandom::getrandom(&mut b).expect("random bytes");
     hex::encode(b)
+}
+
+/// Always on: FLE Link starts at login and brings the last model and the agent with it. Turning it off only stops the starting
+/// at login; `now` starts the service at once (not from inside a running Studio).
+pub fn set_always_on(
+    home: &Path,
+    config: &mut crate::settings::Config,
+    agent: &Agent,
+    on: bool,
+    now: bool,
+) -> Result<(), String> {
+    use flelink_core::service;
+    if !on {
+        return service::remove().map_err(|e| format!("{e:#}"));
+    }
+    let program = service::program().map_err(|e| format!("{e:#}"))?;
+    let logs = home.join("logs");
+    std::fs::create_dir_all(&logs).map_err(|e| e.to_string())?;
+    config.update(json!({"launch": {"autostart": true}}).as_object().unwrap())?;
+    agent.update_settings(json!({"autostart": true}).as_object().unwrap())?;
+    let own_home = (home != flelink_core::data_dir()).then_some(home);
+    service::install(&program, own_home, &logs.join("service.log"), now)
+        .map_err(|e| format!("{e:#}"))
 }
 
 /// The runner's config: the file as it is, with the keys FLE Link owns set again (model name, window, answer limit, zone).
@@ -173,7 +242,103 @@ impl Agent {
             dir: home.join("agent"),
             run: Mutex::new(Run::default()),
             log: Arc::new(Mutex::new(VecDeque::new())),
+            installing: Default::default(),
         }
+    }
+
+    /// The copy FLE Link installs itself.
+    fn app_dir(&self) -> PathBuf {
+        self.dir.join("app")
+    }
+
+    /// Where FLE Durable is: your own folder if the settings name one, else FLE Link's copy.
+    pub fn runner_path(&self, s: &AgentSettings) -> (PathBuf, bool) {
+        if s.runner_dir.trim().is_empty() {
+            (self.app_dir(), true)
+        } else {
+            (expand(s.runner_dir.trim()), false)
+        }
+    }
+
+    /// The pin FLE Link's copy was installed from (empty: none yet).
+    fn installed_pin(&self) -> String {
+        std::fs::read_to_string(self.app_dir().join(".flelink-pin"))
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default()
+    }
+
+    /// Fetch FLE Durable at DURABLE_PIN into `<data>/agent/app` and install its packages: into a fresh folder first, which
+    /// replaces the old copy only once everything worked, so a failed update leaves the agent as it was.
+    pub fn install(&self, s: &AgentSettings) -> Result<(), String> {
+        use std::sync::atomic::Ordering;
+        if self.running() {
+            return Err("Stop the agent first; it is updated while it is off.".into());
+        }
+        if self.installing.swap(true, Ordering::SeqCst) {
+            return Err("An install is already running.".into());
+        }
+        let r = self.install_now(s);
+        self.installing.store(false, Ordering::SeqCst);
+        if let Err(e) = &r {
+            self.note(format!("[install] {e}"));
+        }
+        r
+    }
+
+    fn install_now(&self, s: &AgentSettings) -> Result<(), String> {
+        let (node, _) = find_node(&s.node)?;
+        let pin = durable_pin();
+        let log = |l: String| self.note(l);
+        let tmp = self.dir.join("app.new");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
+        step(
+            &log,
+            &format!("git clone {DURABLE_REPO}"),
+            Command::new("git")
+                .args(["clone", "--quiet", DURABLE_REPO])
+                .arg(&tmp),
+        )
+        .map_err(|e| {
+            if e.contains("No such file") || e.contains("not found") {
+                "git is missing: install git, then press Install again.".into()
+            } else {
+                e
+            }
+        })?;
+        step(
+            &log,
+            &format!("git checkout {pin}"),
+            Command::new("git")
+                .args([
+                    "-c",
+                    "advice.detachedHead=false",
+                    "checkout",
+                    "--quiet",
+                    pin,
+                ])
+                .current_dir(&tmp),
+        )?;
+        step(
+            &log,
+            "npm ci --ignore-scripts",
+            Command::new(npm_for(&node))
+                .args(["ci", "--ignore-scripts", "--no-audit", "--no-fund"])
+                .current_dir(&tmp),
+        )?;
+        std::fs::write(tmp.join(".flelink-pin"), pin).map_err(|e| e.to_string())?;
+        let app = self.app_dir();
+        if app.exists() {
+            std::fs::remove_dir_all(&app)
+                .map_err(|e| format!("could not replace {}: {e}", app.display()))?;
+        }
+        std::fs::rename(&tmp, &app).map_err(|e| e.to_string())?;
+        self.note(format!(
+            "[install] FLE Durable {} is installed in {}.",
+            &pin[..pin.len().min(12)],
+            app.display()
+        ));
+        Ok(())
     }
 
     fn settings_file(&self) -> PathBuf {
@@ -197,11 +362,62 @@ impl Agent {
                 runner_dir: s("runner_dir"),
                 node: s("node"),
                 workspace: s("workspace"),
+                url: s("url"),
             },
             raw.get("autostart")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
         )
+    }
+
+    /// A FLE Durable that runs on its own: address and token from the settings.
+    fn remote(&self) -> Option<(String, String)> {
+        let raw = self.settings_raw();
+        let url = raw
+            .get("url")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim_end_matches('/')
+            .to_string();
+        // a token file (for example one only this user may read) wins over a saved token and is read at every use
+        let token = raw
+            .get("token_file")
+            .and_then(Value::as_str)
+            .filter(|f| !f.is_empty())
+            .and_then(|f| std::fs::read_to_string(f).ok())
+            .map(|t| t.trim().to_string())
+            .or_else(|| raw.get("token").and_then(Value::as_str).map(str::to_string))
+            .unwrap_or_default();
+        (!url.is_empty()).then_some((url, token))
+    }
+
+    /// Does the connected FLE Durable answer?
+    fn remote_up(url: &str, token: &str) -> Result<(), String> {
+        ureq::get(&format!("{url}/api/health"))
+            .set("Authorization", &format!("Bearer {token}"))
+            .timeout(Duration::from_secs(3))
+            .call()
+            .map(|_| ())
+            .map_err(|e| match e {
+                ureq::Error::Status(401, _) => format!("{url} refuses the token."),
+                e => format!("FLE Durable at {url} does not answer: {e}"),
+            })
+    }
+
+    /// Where the runner's interface is: base address and token. 409 while nothing runs.
+    fn target(&self) -> Result<(String, String), ApiError> {
+        if let Some(r) = self.remote() {
+            return Ok(r);
+        }
+        let mut r = self.run.lock().unwrap();
+        Self::reap(&mut r);
+        if r.child.is_none() {
+            return Err(ApiError(
+                409,
+                "The agent is not running. Start it on the Agent page.".into(),
+            ));
+        }
+        Ok((format!("http://127.0.0.1:{}", r.port), r.token.clone()))
     }
 
     /// The key webhooks show in `X-Agent-Key` (made on first use, kept in settings.json).
@@ -241,6 +457,16 @@ impl Agent {
     }
 
     pub fn update_settings(&self, body: &Map<String, Value>) -> Result<(), String> {
+        if let Some(u) = body
+            .get("url")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+        {
+            if !(u.starts_with("http://") || u.starts_with("https://")) {
+                return Err("The address starts with http:// or https://.".into());
+            }
+        }
         let merged = merge_settings(self.settings_raw(), body);
         std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
         let tmp = self.settings_file().with_extension("tmp");
@@ -250,6 +476,12 @@ impl Agent {
         )
         .map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, self.settings_file()).map_err(|e| e.to_string())
+    }
+
+    /// The newest lines of the agent's log, for a terminal that has no Agent page.
+    pub fn recent_log(&self) -> Vec<String> {
+        let l = self.log.lock().unwrap();
+        l.iter().rev().take(20).rev().cloned().collect()
     }
 
     fn note(&self, line: String) {
@@ -274,12 +506,24 @@ impl Agent {
     }
 
     pub fn running(&self) -> bool {
+        if let Some((url, token)) = self.remote() {
+            return Self::remote_up(&url, &token).is_ok();
+        }
         let mut r = self.run.lock().unwrap();
         Self::reap(&mut r);
         r.child.is_some()
     }
 
     pub fn status(&self, s: &AgentSettings, autostart: bool) -> Value {
+        if let Some((url, token)) = self.remote() {
+            let up = Self::remote_up(&url, &token);
+            return json!({
+                "remote": true, "url": url, "token_set": !token.is_empty(), "installed": true, "problem": "", "runner_dir": s.runner_dir,
+                "node": {"ok": true, "path": "", "version": "", "error": ""}, "running": up.is_ok(), "pid": Value::Null, "port": 0,
+                "started": Value::Null, "error": up.err().unwrap_or_default(), "exit": Value::Null, "autostart": false, "workspace": s.workspace,
+                "data_dir": self.dir.to_string_lossy(), "log": [], "webhook_key": self.webhook_key(),
+            });
+        }
         let mut r = self.run.lock().unwrap();
         Self::reap(&mut r);
         let node = match find_node(&s.node) {
@@ -288,7 +532,9 @@ impl Agent {
             }
             Err(e) => json!({"ok": false, "path": "", "version": "", "error": e}),
         };
-        let problem = runner_problem(&s.runner_dir);
+        let (path, managed) = self.runner_path(s);
+        let problem = runner_problem(&path, managed);
+        let have = self.installed_pin();
         let log: Vec<String> = self
             .log
             .lock()
@@ -300,7 +546,10 @@ impl Agent {
             .cloned()
             .collect();
         json!({
-            "installed": problem.is_none(), "problem": problem.unwrap_or_default(), "runner_dir": s.runner_dir, "node": node,
+            "remote": false, "url": "", "token_set": false, "installed": problem.is_none(), "problem": problem.unwrap_or_default(), "runner_dir": s.runner_dir, "node": node,
+            "managed": managed, "path": path.to_string_lossy(), "pin": durable_pin(), "installed_pin": have,
+            "update": managed && !have.is_empty() && have != durable_pin(),
+            "installing": self.installing.load(std::sync::atomic::Ordering::SeqCst),
             "running": r.child.is_some(), "pid": r.child.as_ref().map(Child::id), "port": if r.child.is_some() { r.port } else { 0 },
             "started": if r.child.is_some() { json!(r.started) } else { Value::Null }, "error": r.error, "exit": r.exit,
             "autostart": autostart, "workspace": s.workspace,
@@ -315,20 +564,21 @@ impl Agent {
         studio_port: u16,
         model: &str,
         n_ctx: u64,
+        desktop_token: &str,
     ) -> Result<(), String> {
         let mut r = self.run.lock().unwrap();
         Self::reap(&mut r);
         if r.child.is_some() {
             return Ok(());
         }
-        if let Some(p) = runner_problem(&s.runner_dir) {
+        let (runner, managed) = self.runner_path(s);
+        if let Some(p) = runner_problem(&runner, managed) {
             return Err(p);
         }
         if studio_port == 0 {
             return Err("FLE Link is not serving yet.".into());
         }
         let (node, _) = find_node(&s.node)?;
-        let runner = expand(s.runner_dir.trim());
         std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
         let cfg_path = self.dir.join("config.json");
         let existing = std::fs::read(&cfg_path)
@@ -370,6 +620,14 @@ impl Agent {
                 if model.is_empty() { "local" } else { model },
             )
             .env("FLE_DURABLE_CONTEXT", n_ctx.max(4096).to_string())
+            // computer use (desktop.rs): the tools answer "locked" until the person at the Agent page allows it
+            .env("FLE_DURABLE_DESKTOP", "1")
+            .env(
+                "FLE_DURABLE_DESKTOP_URL",
+                format!("http://127.0.0.1:{studio_port}/desktop"),
+            )
+            .env("FLE_DURABLE_DESKTOP_TOKEN", desktop_token)
+            .env("FLE_DURABLE_DESKTOP_TARGET", "mensch")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -455,19 +713,18 @@ impl Agent {
     }
 
     /// One call to the runner's API, with its token. Its error text (`fehler`) comes back as the error.
+    /// The runner's live event stream for the chat (`/api/p/agent/stream`); it stays open, so no timeout.
+    pub fn stream_open(&self) -> Result<ureq::Response, ApiError> {
+        let (base, tok) = self.target()?;
+        ureq::get(&format!("{base}/api/stream"))
+            .set("Authorization", &format!("Bearer {tok}"))
+            .call()
+            .map_err(|e| ApiError(502, format!("FLE Durable's event stream: {e}")))
+    }
+
     pub fn call(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value, ApiError> {
-        let (port, tok) = {
-            let mut r = self.run.lock().unwrap();
-            Self::reap(&mut r);
-            if r.child.is_none() {
-                return Err(ApiError(
-                    409,
-                    "The agent is not running. Start it on the Agent page.".into(),
-                ));
-            }
-            (r.port, r.token.clone())
-        };
-        let req = ureq::request(method, &format!("http://127.0.0.1:{port}{path}"))
+        let (base, tok) = self.target()?;
+        let req = ureq::request(method, &format!("{base}{path}"))
             .set("Authorization", &format!("Bearer {tok}"))
             .timeout(Duration::from_secs(20));
         let res = match body {
@@ -528,9 +785,26 @@ pub fn proxied(method: &str, rest: &str) -> Option<(&'static str, String)> {
         ("GET", "approvals") => Some(("GET", "/api/approvals".into())),
         ("GET", "conversation") => Some(("GET", "/api/conversation".into())),
         ("POST", "message") => Some(("POST", "/api/message".into())),
+        ("POST", "abort") => Some(("POST", "/api/abort".into())),
+        ("GET", "tickets") => Some(("GET", "/api/tickets".into())),
+        ("POST", "tickets") => Some(("POST", "/api/tickets".into())),
+        ("GET", "calendar") => Some(("GET", "/api/calendar".into())),
+        ("POST", "calendar") => Some(("POST", "/api/calendar".into())),
+        ("GET", "bus") => Some(("GET", "/api/bus".into())),
+        ("GET", "bus/state") => Some(("GET", "/api/bus/state".into())),
         _ => {
             let (kind, tail) = rest.split_once('/')?;
             match (method, kind, tail.split_once('/')) {
+                // a change to a ticket is a PATCH there; the page's kit has POST
+                ("POST", "tickets", None) if id_ok(tail) => {
+                    Some(("PATCH", format!("/api/tickets/{tail}")))
+                }
+                ("POST", "tickets", Some((id, "comments"))) if id_ok(id) => {
+                    Some(("POST", format!("/api/tickets/{id}/comments")))
+                }
+                ("DELETE", "calendar", None) if id_ok(tail) => {
+                    Some(("DELETE", format!("/api/calendar/{tail}")))
+                }
                 ("DELETE", "agenda", None) if id_ok(tail) => {
                     Some(("DELETE", format!("/api/agenda/{tail}")))
                 }
@@ -546,6 +820,30 @@ pub fn proxied(method: &str, rest: &str) -> Option<(&'static str, String)> {
     }
 }
 
+/// The query a listing passes on: only these keys, and only values that need no escaping.
+pub fn safe_query(query: &Map<String, Value>) -> String {
+    let mut parts = vec![];
+    for k in ["from", "to", "after", "limit", "topic", "status"] {
+        let Some(v) = query.get(k).map(|v| match v {
+            Value::String(s) => s.clone(),
+            other => other.to_string(),
+        }) else {
+            continue;
+        };
+        if !v.is_empty()
+            && v.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b":.-_".contains(&b))
+        {
+            parts.push(format!("{k}={v}"));
+        }
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", parts.join("&"))
+    }
+}
+
 /// The plugin's settings, merged with a patch from the page's setup form: only these keys, strings or a bool.
 pub fn merge_settings(
     mut cur: Map<String, Value>,
@@ -555,6 +853,29 @@ pub fn merge_settings(
         if let Some(v) = body.get(k).and_then(Value::as_str) {
             cur.insert(k.into(), json!(v.trim()));
         }
+    }
+    if let Some(u) = body.get("url").and_then(Value::as_str) {
+        cur.insert("url".into(), json!(u.trim().trim_end_matches('/')));
+    }
+    if let Some(f) = body.get("token_file").and_then(Value::as_str) {
+        cur.insert("token_file".into(), json!(f.trim()));
+    }
+    // an empty field leaves a saved token alone; without an address there is nothing to keep it for
+    if let Some(t) = body
+        .get("token")
+        .and_then(Value::as_str)
+        .filter(|t| !t.trim().is_empty())
+    {
+        cur.insert("token".into(), json!(t.trim()));
+    }
+    if cur
+        .get("url")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .is_empty()
+    {
+        cur.remove("token");
+        cur.remove("token_file");
     }
     if let Some(b) = body.get("autostart").and_then(Value::as_bool) {
         cur.insert("autostart".into(), json!(b));
@@ -655,9 +976,148 @@ mod tests {
 
     #[test]
     fn missing_runner_is_explained() {
-        assert!(runner_problem("").unwrap().contains("folder"));
-        assert!(runner_problem("/nonexistent/fle-durable")
+        assert!(runner_problem(Path::new("/nonexistent/app"), true)
+            .unwrap()
+            .contains("Install"));
+        assert!(runner_problem(Path::new("/nonexistent/fle-durable"), false)
             .unwrap()
             .contains("src/main.js"));
+    }
+
+    #[test]
+    fn a_connected_durable_is_used_with_its_token() {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://127.0.0.1:{}", l.local_addr().unwrap().port());
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let log = seen.clone();
+        std::thread::spawn(move || {
+            for c in l.incoming() {
+                let mut c = c.unwrap();
+                let mut b = [0u8; 4096];
+                let n = c.read(&mut b).unwrap_or(0);
+                log.lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&b[..n]).to_string());
+                let _ = c.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 9\r\nConnection: close\r\n\r\n{\"ok\":12}");
+            }
+        });
+        let home =
+            std::env::temp_dir().join(format!("flelink-agent-remote-{}", std::process::id()));
+        let a = Agent::new(&home);
+        a.update_settings(
+            json!({"url": format!("{url}/"), "token": "tok-123"})
+                .as_object()
+                .unwrap(),
+        )
+        .unwrap();
+        let (s, _) = a.settings();
+        assert_eq!(s.url, url, "the slash goes");
+        assert!(a.running());
+        let st = a.status(&s, false);
+        assert_eq!(st["remote"], true);
+        assert_eq!(st["running"], true);
+        assert!(
+            !st.to_string().contains("tok-123"),
+            "the page never sees the token"
+        );
+        assert_eq!(
+            a.call("GET", "/api/conversation", None).ok().unwrap()["ok"],
+            12
+        );
+        let log = seen.lock().unwrap().join("\n");
+        assert!(
+            log.contains("GET /api/conversation") && log.contains("Bearer tok-123"),
+            "{log}"
+        );
+        assert!(a
+            .update_settings(json!({"url": "ftp://x"}).as_object().unwrap())
+            .is_err());
+        std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn no_address_no_token_and_the_abort_route() {
+        let mut cur = Map::new();
+        cur = merge_settings(
+            cur,
+            json!({"url": "http://x", "token": "a"})
+                .as_object()
+                .unwrap(),
+        );
+        cur = merge_settings(
+            cur,
+            json!({"url": "http://x", "token": ""}).as_object().unwrap(),
+        );
+        assert_eq!(cur["token"], "a", "an empty field keeps the saved token");
+        cur = merge_settings(cur, json!({"url": ""}).as_object().unwrap());
+        assert!(!cur.contains_key("token"));
+        assert_eq!(proxied("POST", "abort").unwrap().1, "/api/abort");
+    }
+
+    #[test]
+    fn a_token_file_wins_and_is_read_at_each_use() {
+        let home =
+            std::env::temp_dir().join(format!("flelink-agent-tokfile-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        let f = home.join("t");
+        std::fs::write(&f, "aus-datei\n").unwrap();
+        let a = Agent::new(&home);
+        a.update_settings(
+            json!({"url": "http://x", "token": "gespeichert", "token_file": f.to_string_lossy()})
+                .as_object()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(a.remote().unwrap().1, "aus-datei");
+        std::fs::remove_file(&f).unwrap();
+        assert_eq!(
+            a.remote().unwrap().1,
+            "gespeichert",
+            "file gone: the saved token"
+        );
+        std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn tickets_calendar_and_events_reach_the_agent_and_nothing_else() {
+        assert_eq!(
+            proxied("POST", "tickets/INC-P1").unwrap(),
+            ("PATCH", "/api/tickets/INC-P1".to_string())
+        );
+        assert_eq!(
+            proxied("DELETE", "calendar/c1").unwrap(),
+            ("DELETE", "/api/calendar/c1".to_string())
+        );
+        assert_eq!(proxied("GET", "bus/state").unwrap().1, "/api/bus/state");
+        assert_eq!(proxied("POST", "tickets/../x"), None);
+        assert_eq!(proxied("DELETE", "tickets/INC-P1"), None);
+        assert_eq!(proxied("POST", "bus"), None);
+        let q =
+            json!({"from": "2026-11-09T10:00:00.000Z", "after": 3, "evil": "x", "to": "a b&c=d"});
+        assert_eq!(
+            safe_query(q.as_object().unwrap()),
+            "?from=2026-11-09T10:00:00.000Z&after=3"
+        );
+        assert_eq!(safe_query(&Map::new()), "");
+    }
+
+    #[test]
+    fn durable_is_pinned_to_a_commit() {
+        let p = durable_pin();
+        assert_eq!(p.len(), 40);
+        assert!(p.bytes().all(|b| b.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn own_folder_wins_over_the_installed_copy() {
+        let a = Agent::new(Path::new("/data"));
+        let mut s = AgentSettings::default();
+        assert_eq!(a.runner_path(&s), (PathBuf::from("/data/agent/app"), true));
+        s.runner_dir = "/src/fle-durable".into();
+        assert_eq!(
+            a.runner_path(&s),
+            (PathBuf::from("/src/fle-durable"), false)
+        );
     }
 }

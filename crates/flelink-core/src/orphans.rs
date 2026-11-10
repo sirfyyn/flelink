@@ -59,6 +59,31 @@ pub fn reap(home: &Path) -> Vec<u32> {
     stopped
 }
 
+fn engine_running(home: &Path) -> bool {
+    std::fs::read_dir(dir(home)).is_ok_and(|rd| {
+        rd.flatten().any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .strip_prefix("engine-")
+                .and_then(|p| p.parse::<u32>().ok())
+                .is_some_and(alive)
+        })
+    })
+}
+
+/// A start right after a stop finds the port still held by the engine on its way out. Wait for it, but only while an
+/// engine of this data folder runs: a port some other program holds is not going to come free.
+pub fn wait_for_port(home: &Path, port: u16, max: std::time::Duration) {
+    reap(home);
+    let start = std::time::Instant::now();
+    while start.elapsed() < max
+        && engine_running(home)
+        && std::net::TcpListener::bind(("127.0.0.1", port)).is_err()
+    {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 #[cfg(unix)]
 fn alive(pid: u32) -> bool {
     std::process::Command::new("kill")
@@ -99,6 +124,35 @@ fn terminate(pid: u32) {
 #[cfg(not(unix))]
 fn alive(_pid: u32) -> bool {
     false // Windows: the app's job object ends the engine with the app; the files are only cleared up
+}
+
+#[cfg(all(test, unix))]
+mod port_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn it_waits_only_for_an_engine_of_this_data_folder() {
+        let home = std::env::temp_dir().join(format!("flelink-port-{}", std::process::id()));
+        let held = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = held.local_addr().unwrap().port();
+
+        let t = Instant::now();
+        wait_for_port(&home, port, Duration::from_secs(5));
+        assert!(t.elapsed() < Duration::from_secs(2), "no engine, no wait");
+
+        let me = std::process::id();
+        record(&home, me);
+        let t = Instant::now();
+        wait_for_port(&home, port, Duration::from_millis(400));
+        assert!(t.elapsed() >= Duration::from_millis(400), "waited for it");
+
+        drop(held);
+        let t = Instant::now();
+        wait_for_port(&home, port, Duration::from_secs(5));
+        assert!(t.elapsed() < Duration::from_secs(2), "free port, no wait");
+        let _ = std::fs::remove_dir_all(home);
+    }
 }
 
 #[cfg(not(unix))]

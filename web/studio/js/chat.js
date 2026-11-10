@@ -45,7 +45,59 @@ async function loadImages(nodes) {
   return imageCache;
 }
 
+const MODE_KEY = "flelink.chat.mode"; // "agent" (the default while FLE Durable runs) or "direct"
+const readMode = () => { try { return localStorage.getItem(MODE_KEY) || "agent"; } catch { return "agent"; } };
+const saveMode = (m) => { try { localStorage.setItem(MODE_KEY, m); } catch { /* the choice just is not remembered */ } };
+
+// While FLE Durable runs, the chat is the agent unless a saved chat was opened or "Direct" was chosen; the switch sits in the title bar.
 export function mount(main, chatId) {
+  let current = null;
+  let shown = null;
+  let running = false;
+  let gone = false;
+  const seg = h("span", { hidden: true });
+  const paintSeg = () => {
+    seg.hidden = !running;
+    clear(seg, running ? h("div", { class: "seg", role: "group", "aria-label": "Who you talk to" },
+      h("button", { class: shown === "agent" ? "on" : "", onclick: () => pick("agent") }, "Agent"),
+      h("button", { class: shown === "direct" ? "on" : "", onclick: () => pick("direct") }, "Direct to model")) : null);
+  };
+  const show = (mode) => {
+    current?.unmount?.();
+    shown = mode;
+    current = null;
+    paintSeg();
+    if (mode === "agent") {
+      import("./agent-chat.js").then(({ mountAgent }) => {
+        if (!gone && shown === "agent") current = mountAgent(main, { seg });
+      });
+    } else {
+      current = mountDirect(main, chatId, { seg });
+    }
+  };
+  const pick = (mode) => { saveMode(mode); if (mode !== shown) { if (mode === "direct") chatId = undefined; show(mode); } };
+  const want = () => (running && !chatId && readMode() === "agent" ? "agent" : "direct");
+  const check = async () => {
+    let on = false;
+    try { on = !!(await get("/api/p/agent/status")).running; } catch { /* no agent here: the direct chat */ }
+    if (gone) return;
+    const changed = on !== running;
+    running = on;
+    if (shown === null) show(want());
+    else if (changed) { if (!on && shown === "agent") show("direct"); else paintSeg(); }
+  };
+  check();
+  const timer = setInterval(check, 5000);
+  return {
+    unmount() {
+      gone = true;
+      clearInterval(timer);
+      current?.unmount?.();
+    },
+  };
+}
+
+function mountDirect(main, chatId, { seg }) {
   let chat = newChat();
   let streaming = null; // the message that is being written right now
   let turn = null; // the whole answer: streaming, running tools, streaming again. {ctrl}
@@ -94,7 +146,7 @@ export function mount(main, chatId) {
   const live = h("aside", { class: "live-panel", "aria-label": "Live data" });
 
   main.replaceChildren(
-    topbar(title, modelChip, liveBtn, moreBtn),
+    topbar(title, seg, modelChip, liveBtn, moreBtn),
     h("div", { class: "chat" },
       h("div", { class: "chat-col" }, messages, h("div", { class: "composer-wrap" }, ctxWarn, composer, note)),
       live),

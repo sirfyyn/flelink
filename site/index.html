@@ -282,6 +282,7 @@ Claude Code  run in the terminal
       <h2>An agent that keeps running next to your model</h2>
       <p>The Agent page starts <a href="https://github.com/sirfyyn/fle-durable">FLE Durable</a> with the model you run: a local agent that is always on and works from events instead of waiting for you to type. You plan things on its agenda (once, daily, on certain days, every few minutes), it plans its own follow-ups, and any tool can hand it an event by webhook.</p>
       <p>Every event lands in one durable queue before the agent sees it, so a crash or a reboot neither loses one nor runs one twice. Only destructive steps wait for your approval; everything else it simply does. Open source, Apache-2.0, built on pi-durable.</p>
+      <p>Connect your Google account under Settings &gt; Accounts and your Google Calendar shows up on the Agent page and for the agent, so it knows your day. FLE Link reads the events on your computer and keeps them there; nothing goes to us. How it handles your Google data: <a href="privacy.html#google">Privacy</a>.</p>
     </div>
 <pre class="out"><span class="p">$</span> git clone https://github.com/sirfyyn/fle-durable
 <span class="p">$</span> cd fle-durable && npm ci --ignore-scripts
@@ -371,6 +372,8 @@ Certificate fingerprint (SHA-256): 9f3c…</pre>
     </nav>
     <nav aria-label="Legal">
       <a href="impressum.html">Impressum</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
       <a href="datenschutz.html">Datenschutz</a>
     </nav>
     <p class="fine">MIT licence · no cookies, no third-party trackers · © 2026 Max Bitzer</p>

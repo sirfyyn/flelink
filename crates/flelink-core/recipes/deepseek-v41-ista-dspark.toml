@@ -1,6 +1,6 @@
 id = "deepseek-v41-ista-dspark"
 title = "DeepSeek-V4.1-Flash ISTA IQ2_XXS + DSpark (FLE, lossless draft)"
-note = "The exact recipe with FLE's DSpark draft model (lossless: the model checks every drafted token). On one 32 GB GPU with 120 GB RAM: 41.9 tok/s decode on a three.js scene (n=1), 32.3 to 32.5 on short prompts (n=6), 83 on counting (3 Nov 2026, FLE 1.2.4 before the prefill windows; with the windows not measured yet). A 15 GB GPU expert cache leaves room for the draft. Needs FLE v1.2.4 or newer and about 260 GB on a fast NVMe."
+note = "The exact recipe with FLE's DSpark draft model (lossless: the model checks every drafted token). On one 32 GB GPU with 120 GB RAM: 49.8 / 50.8 / 50.6 tok/s decode by hand, 49.9 median through FLE Link (FLE v1.2.5, 5 Nov 2026). A 15.5 GB GPU expert cache leaves room for the draft. Needs FLE v1.2.5 or newer and about 260 GB on a fast NVMe."
 
 [model]
 repo = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"

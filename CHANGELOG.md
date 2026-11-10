@@ -2,7 +2,29 @@
 
 ## Unreleased
 
+## 0.1.8 (2026-11-10)
+
+- **The agent is FLE Durable 0.2.0,** the full runner instead of the small core: browser and web tools, sub-agents, tickets, calendar and events of its own, computer use through FLE Link, and calendars mirrored from your accounts. FLE Link offers the update on the Agent page.
+- **No engine left behind.** Stopping `flelink run` (Ctrl+C, SIGTERM) while the model loads or warms up now ends the engine too; a start right after a stop waits for port 8080 instead of moving to another one.
+- **Accounts with a click.** Settings has Connect buttons for Hugging Face, GitHub and Google; pasting a token still works. With Google connected, your main calendar appears on the Agent page and for the agent, and a calendar that cannot be read says so. iCloud calendars come in the same way, with an app-specific password from Apple.
+- **Computer use, when you allow it.** The agent can see your screen and use your mouse and keyboard while you allow it on the Agent page, for 30 minutes at a time. Off at every start of FLE Link; not on Windows yet.
+- **Tickets, calendar and events on the Agent page.** What you and the agent keep track of, in one card: add and change tickets, plan and remove calendar entries, read what came in. An agent without them, or one reached with a limited token, simply does not show the card.
+- **Always on.** `flelink service on`, or the switch on the Agent page: FLE Link starts at login with the last model and the agent, and comes back if it stops. No administrator rights; launchd on macOS, systemd for the user on Linux, a logon task on Windows.
 - **`flelink bench --task` points to `--share`.** A run without it now ends with a one-line hint, and the README explains the option.
+- **A start right after a stop waits for the GPU memory.** The Studio does so within 30 s of stopping an engine, `flelink run` for recipes with the RAM expert store: until the used memory stops falling, at most 15 s.
+- **DeepSeek recipe notes** give the FLE v1.2.5 numbers and name the version the recipes need.
+- **New recipe `katy-27b-dflash`** for a 12 to 32 GB GPU: a dense 27B model with the DFlash2 draft, partly on the CPU below 20 GB.
+- **`flelink run` is easier to call.** A part of a recipe id is enough when only one recipe has it (`flelink run katy`), several matches are named, and without a model it lists the recipes.
+- **A recipe that does not fit says why:** the error names the GPU memory too and what the recipe was measured with.
+- **`flelink doctor` on an Apple Silicon Mac** names the Metal GPU instead of failing the NVIDIA check.
+- **`flelink --help` is shorter:** `demo` and `fetch-sidecars` still work but are no longer listed.
+- **Recipes from outside can no longer load code.** `run.env` takes only the engine's own switches (`FLE_`, `GGML_`, `LLAMA_`, two `CUDA_` names), and a recipe from a URL or a file shows what it sets and asks before it starts (`--yes` skips that).
+- **The engine no longer changes under a recipe.** `flelink run` and `ask` stay on the installed FLE unless the recipe needs a newer one and say when a newer release is there.
+- **Updates and FLE engines are checked against a signature.** Releases carry a signature made with a key that is not on GitHub; FLE Link refuses an update without one and an FLE engine newer than v1.2.6 (docs/RELEASING.md).
+- **A coding agent no longer pays for a model stuck in a loop.** Through the Studio's `/v1` (OpenAI chat and Anthropic format), an answer that repeats itself is ended with the normal "cut short" reason, by the same rules as the chat page. Tool calls are not read. `FLE_NO_LOOP_GUARD=1` turns it off.
+- **`flelink code`: a coding agent for the folder you are in.** It starts FLE Durable for this folder, with the running model or a recipe you name, and works in the terminal: the answer as it comes, the tools it uses, questions before steps that cannot be undone. `AGENTS.md` or `CLAUDE.md` become its instructions, each folder keeps its conversation, and `/direct` talks to the model itself. FLE Durable is fetched and set up when it is missing (or `flelink code --setup`); it needs git and Node 22.19+.
+- **The agent is one click away.** The Agent page explains FLE Durable, installs it and starts it. While it answers, the chat is your agent, with a switch to talk to the model directly. It can also be a FLE Durable that runs elsewhere, by address and token.
+- **Automatic settings no longer shift the expert choice:** `FLE_MOE_CACHE_BIAS` is gone from what `flelink run` sets by itself.
 
 ## 0.1.7 (2026-11-06)
 

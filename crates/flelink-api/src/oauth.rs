@@ -526,6 +526,37 @@ fn token_record(doc: &Value, old: Option<&Value>) -> R<Map<String, Value>> {
 
 // ------------------------------------------------------------------------------------------------ the flows
 
+/// A provider FLE Link has registered an app at (accounts.rs).
+pub struct KnownProvider {
+    pub name: &'static str,
+    pub url: &'static str,
+    pub auth_endpoint: &'static str,
+    pub token_endpoint: &'static str,
+    pub revocation_endpoint: &'static str,
+    pub client_id: &'static str,
+    /// Google wants the secret of a desktop app although it cannot stay one: taken from this variable at run time, or
+    /// built in from it, so the repository never holds it. Empty: the provider takes PKCE alone.
+    pub secret_env: &'static str,
+    pub built_secret: Option<&'static str>,
+    pub scope: &'static str,
+    pub extra: &'static [(&'static str, &'static str)],
+}
+
+impl KnownProvider {
+    fn secret(&self) -> String {
+        if self.secret_env.is_empty() {
+            return String::new();
+        }
+        std::env::var(self.secret_env)
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| self.built_secret.map(String::from))
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    }
+}
+
 struct Pending {
     at: f64,
     name: String,
@@ -635,6 +666,61 @@ impl OAuthManager {
         Ok(json!({"auth_url": auth_url, "state": state, "issuer": disc.issuer, "scope": scope}))
     }
 
+    /// Start a sign-in with a provider FLE Link has an app at: no discovery, no registration.
+    /// `lang`: the language of the page (`en`, `de-DE`), so the provider's pages speak it too; anything else is left out.
+    pub fn begin_known(&self, p: &KnownProvider, redirect_uri: &str, lang: &str) -> R<Value> {
+        if !p.secret_env.is_empty() && p.secret().is_empty() {
+            return err(format!(
+                "Signing in with {} is not set up in this build of FLE Link.",
+                p.name
+            ));
+        }
+        let state = b64url(&random(24));
+        let verifier = b64url(&random(48));
+        let challenge_value = challenge_s256(&verifier);
+        let mut params: Vec<(&str, &str)> = vec![
+            ("response_type", "code"),
+            ("client_id", p.client_id),
+            ("redirect_uri", redirect_uri),
+            ("state", &state),
+            ("code_challenge", &challenge_value),
+            ("code_challenge_method", "S256"),
+            ("scope", p.scope),
+        ];
+        params.extend_from_slice(p.extra);
+        let lang_ok = (2..=8).contains(&lang.len())
+            && lang.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+        if lang_ok {
+            params.push(("hl", lang));
+        }
+        let auth_url = format!("{}?{}", p.auth_endpoint, form_encode(&params));
+        let mut pending = self.pending.lock().unwrap();
+        let t = now();
+        pending.retain(|_, v| t - v.at < PENDING_SECONDS);
+        pending.insert(
+            state.clone(),
+            Pending {
+                at: t,
+                name: p.name.into(),
+                url: p.url.into(),
+                verifier,
+                redirect_uri: redirect_uri.into(),
+                client_id: p.client_id.into(),
+                client_secret: p.secret(),
+                issuer: p.url.into(),
+                token_endpoint: p.token_endpoint.into(),
+                revocation_endpoint: p.revocation_endpoint.into(),
+                resource: String::new(),
+            },
+        );
+        Ok(json!({"auth_url": auth_url, "state": state}))
+    }
+
+    /// Whether this sign-in was started here.
+    pub fn knows(&self, state: &str) -> bool {
+        self.pending.lock().unwrap().contains_key(state)
+    }
+
     /// The browser came back to the callback: exchange the code, store the token, return the server's name.
     pub fn complete(&self, state: &str, code: &str, error: &str, description: &str) -> R<String> {
         let pend = if state.is_empty() {
@@ -664,8 +750,10 @@ impl OAuthManager {
             ("redirect_uri", &pend.redirect_uri),
             ("client_id", &pend.client_id),
             ("code_verifier", &pend.verifier),
-            ("resource", &pend.resource),
         ];
+        if !pend.resource.is_empty() {
+            form.push(("resource", &pend.resource));
+        }
         if !pend.client_secret.is_empty() {
             form.push(("client_secret", &pend.client_secret));
         }
@@ -738,8 +826,10 @@ impl OAuthManager {
             ("grant_type", "refresh_token"),
             ("refresh_token", &rt),
             ("client_id", &cid),
-            ("resource", &res),
         ];
+        if !res.is_empty() {
+            form.push(("resource", &res));
+        }
         if !sec.is_empty() {
             form.push(("client_secret", &sec));
         }

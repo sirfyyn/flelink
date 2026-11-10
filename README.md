@@ -34,7 +34,7 @@ webhooks, your messages), and FLE Link starts it with your model on the Agent pa
 |---|---|
 | **66 s** | from nothing to the first answer on Linux with an NVIDIA card |
 | **68 s** | the same on an 8 GB M2 MacBook, model download included (FLE Link 0.1.3, fresh home, 3 Nov 2026) |
-| **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine, 2.5× plain llama.cpp |
+| **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine and its MTP draft head, 2.5× plain llama.cpp (`flelink run` starts it without the head so far) |
 | **50 tok/s** | DeepSeek-V4.1-Flash (763B, 2-bit quant ISTA GSQ-RCO IQ2_XXS, 232 GiB) on one 32 GB GPU with 120 GB RAM and the DSpark draft (FLE v1.2.5: 49.8 / 50.8 / 50.6; through FLE Link 49.9 median) (`flelink run deepseek-v41-ista-dspark`). The draft does not change the output: the same answer every run, 37.6 tok/s without it by hand, 37.2 through FLE Link. The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time |
 
 **Best performance measured on Linux.** The speed figures in this README were measured on Linux; macOS and Windows run
@@ -195,8 +195,7 @@ values; nothing runs code.
 ## Recipes
 
 A recipe is one TOML file: model, engine, start values, chat defaults, and optionally a draft model for speculative decoding.
-It never runs code. Keep the settings that work for you in `<data>/recipes/`, share the file, and `flelink run my.recipe.toml`
-reproduces them elsewhere. Format and places: [docs/RECIPES.md](docs/RECIPES.md). Plugins add recipes and engines as files:
+A recipe sets only the engine's own switches, but it does choose the files and the engine arguments, so treat one from someone else like a program: `flelink run my.recipe.toml` shows what it sets and asks first. Keep the settings that work for you in `<data>/recipes/` and share the file to reproduce them elsewhere. Format and places: [docs/RECIPES.md](docs/RECIPES.md). Plugins add recipes and engines as files:
 [docs/PLUGINS.md](docs/PLUGINS.md).
 
 ## In the Studio

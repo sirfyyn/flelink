@@ -217,7 +217,7 @@ pub fn extra_mcp(home: &Path) -> String {
     json!({"mcpServers": {"hub": {"url": url, "headers": headers}}}).to_string()
 }
 
-fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
+pub(crate) fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d)?;
         #[cfg(unix)]
