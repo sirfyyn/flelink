@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.12 (2026-11-10)
+
 - **Every page in seven languages.** French, Spanish, Russian, Chinese, Japanese and Korean covered about a quarter of
   the texts (the first look); they now cover all pages, about 870 more texts each: settings, engine, agent, lab, expert
   cache, tuner, Forge, remote access, updates. German got the same for the lab pages and Forge. What stays English:
