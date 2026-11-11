@@ -230,6 +230,25 @@ html:not(.js) .break-say{border-top:1px solid var(--line-2)}
 .legal h2{font-size:1.15rem;margin:30px 0 8px;line-height:1.2;letter-spacing:-.01em}
 .legal p{color:var(--muted);margin-bottom:12px}
 .legal p b{color:var(--text)}
+/* Sub-pages per model and per GPU size (written by site/seiten_bauen.mjs): the legal layout, wider, with tables. */
+.legal.doc{max-width:980px}
+.doc h1{font-size:clamp(1.7rem,4.4vw,2.7rem);max-width:22ch}
+.doc h2{font-size:1.3rem;margin-top:44px}
+.doc>p{max-width:72ch}
+.doc .crumb{font:500 .74rem var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-bottom:18px}
+.doc .crumb a{color:var(--faint);text-decoration:none}
+.doc .crumb a:hover{color:var(--text)}
+.doc .cmd{max-width:640px;margin:14px 0}
+.doc .cmd code{font-size:.9rem}
+.doc ul{margin:0 0 12px;padding-left:20px;color:var(--muted);max-width:72ch}
+.doc li{margin-bottom:8px}
+.doc li b{color:var(--text)}
+.doc ul.doc-list{list-style:none;padding:0;border-top:1px solid var(--line);max-width:none}
+.doc ul.doc-list li{margin:0;padding:14px 0;border-bottom:1px solid var(--line)}
+.doc ul.doc-list a{display:block;text-decoration:none;font-size:1.08rem}
+.doc .fit-table tbody th a{color:var(--text);text-decoration:none}
+.doc .fit-table tbody th a:hover{color:var(--accent)}
+.doc p.fine{margin-top:12px}
 
 @media (max-width:900px){
   .top-nav a:not(.btn){display:none}

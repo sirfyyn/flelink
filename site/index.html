@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>FLE Link · run big local AI models in one command</title>
-<meta name="description" content="FLE Link runs local AI models in one command: 68 seconds from an empty laptop to the first answer, DeepSeek V4.1 Flash (763B) at about 50 tokens/s on one 32 GB GPU with the FLE engine. Pick your card and see what fits. Open source, MIT.">
+<meta name="description" content="FLE Link runs big local AI models in one command: DeepSeek V4.1 Flash (763B) at about 50 tokens/s on one 32 GB GPU. Pick your card, see what fits. MIT.">
 <meta name="theme-color" content="#0b0e14">
 <link rel="icon" href="favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="favicon-64.png?v=2" type="image/png" sizes="64x64">
-<meta property="og:title" content="FLE Link">
+<meta property="og:title" content="FLE Link · run big local AI models in one command">
 <meta property="og:description" content="Big local AI models in one command. Watch the uncut first run, pick your card, see what fits.">
 <meta property="og:url" content="https://flelink.run/">
 <meta property="og:type" content="website">
@@ -17,11 +17,13 @@
 <link rel="canonical" href="https://flelink.run/">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <meta property="og:site_name" content="FLE Link">
-<meta name="twitter:title" content="FLE Link">
+<meta name="twitter:title" content="FLE Link · run big local AI models in one command">
+<meta property="og:image:alt" content="FLE Link: run big local AI models in one command">
 <meta name="twitter:description" content="Big local AI models in one command. Watch the uncut first run, pick your card, see what fits.">
 <meta name="twitter:image" content="https://flelink.run/og.png">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "FLE Link", "url": "https://flelink.run/", "description": "FLE Link sits between an inference engine and everything that talks to it. It reads your machine, installs the engine that fits, downloads a model that fits, picks the settings and serves an OpenAI-compatible API, a browser Studio and a desktop app.", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS, Linux, Windows", "softwareVersion": "0.1.12", "downloadUrl": "https://github.com/sirfyyn/flelink/releases/latest", "sameAs": ["https://github.com/sirfyyn/flelink", "https://github.com/sirfyyn/FastLocalExperts", "https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF"], "license": "https://opensource.org/licenses/MIT", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "image": "https://flelink.run/og.png", "author": {"@type": "Person", "name": "Max Bitzer", "url": "https://sirfyyn.de/"}, "codeRepository": "https://github.com/sirfyyn/flelink"}</script>
-<link rel="stylesheet" href="style.css?v=10">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "WebSite", "name": "FLE Link", "url": "https://flelink.run/", "inLanguage": "en", "publisher": {"@type": "Person", "name": "Max Bitzer", "url": "https://sirfyyn.de/"}}, {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does anything leave my computer?", "acceptedAnswer": {"@type": "Answer", "text": "No. FLE Link only connects to GitHub (to fetch the engine and its checksums) and Hugging Face (when you download a model). Nothing is sent to us, there is no account and no telemetry."}}, {"@type": "Question", "name": "Which models work with FLE Link?", "acceptedAnswer": {"@type": "Answer", "text": "The built-in catalog shows what fits your machine. Any GGUF file works with flelink run /path/to/model.gguf, and your own llama-server compatible build works as the engine."}}, {"@type": "Question", "name": "Why does macOS or Windows warn about the app?", "acceptedAnswer": {"@type": "Answer", "text": "The builds are not signed, to keep the project free of yearly fees. On macOS, right-click the app, choose Open, then confirm once. On Windows, choose More info, then Run anyway. The command-line install is checked against its SHA-256 instead."}}, {"@type": "Question", "name": "Does the agent see my Google Calendar?", "acceptedAnswer": {"@type": "Answer", "text": "Only if you connect your Google account under Settings > Accounts. FLE Link then reads the events on your computer and keeps them there; nothing goes to us."}}]}]}</script>
+<link rel="stylesheet" href="style.css?v=11">
 <script src="js.js?v=10"></script>
 </head>
 <body>
@@ -172,7 +174,7 @@ A Mixture-of-Experts (MoE) model is a multi-component model that consists of a n
         <input id="any-size" type="number" inputmode="decimal" min="0.1" max="2000" step="0.1" value="8">
         <output id="any-out" for="any-size">needs about 10 GB: <span class="v v-fits">fits</span></output>
       </div>
-      <p>The verdict is the rule FLE Link applies before it downloads anything: a model needs about 1.25 times its size, compared with the memory the GPU may use or half the RAM. Models for the FLE engine keep their experts in RAM, and a recipe that was measured states what it was measured with. <a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">The rules in full →</a> The page does not look at your computer; this is arithmetic in your browser. A size nobody measured yet? <code>flelink bench --task pagoda --share</code> posts yours to the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>.</p>
+      <p>The verdict is the rule FLE Link applies before it downloads anything: a model needs about 1.25 times its size, compared with the memory the GPU may use or half the RAM. Models for the FLE engine keep their experts in RAM, and a recipe that was measured states what it was measured with. <a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">The rules in full →</a> The page does not look at your computer; this is arithmetic in your browser. A size nobody measured yet? <code>flelink bench --task pagoda --share</code> posts yours to the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>. As pages: <a href="gpu/">every card size</a> · <a href="models/">every model</a>.</p>
     </details>
   </div>
 </section>
@@ -341,6 +343,14 @@ verify: failed
       <a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">DSpark draft model</a>
       <a href="https://github.com/sirfyyn/fle-durable">FLE Durable</a>
       <a href="https://huggingface.co/sirfyyn">Models on Hugging Face</a>
+      <a href="models/">Models</a>
+      <a href="models/deepseek-v4.1-flash.html">DeepSeek V4.1 Flash locally</a>
+      <a href="models/qwen3.8-flash-next.html">Qwen3.8-Flash-Next locally</a>
+      <a href="models/katy-27b.html">Katy 27B locally</a>
+      <a href="gpu/">What fits your GPU</a>
+      <a href="gpu/16gb.html">16 GB</a>
+      <a href="gpu/24gb.html">24 GB</a>
+      <a href="gpu/32gb.html">32 GB</a>
       <a href="https://sirfyyn.de/en/fle/">How FLE was measured</a>
       <a href="https://sirfyyn.de/fyos/en/">FYOS</a>
       <a href="https://sirfyyn.de/en/">sirfyyn.de</a>
