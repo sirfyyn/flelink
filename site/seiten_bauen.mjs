@@ -32,7 +32,7 @@ const PAGES = [
     slug: "deepseek-v4.1-flash", ids: ["deepseek-v41-ista-dspark", "rin-deepseek-v41-dspark"],
     name: "DeepSeek V4.1 Flash",
     title: "Run DeepSeek V4.1 Flash locally on one 32 GB GPU",
-    desc: "DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.",
+    desc: "DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link. One command, JSON and tool calls tested at 2 bit, every number measured.",
     lead: "DeepSeek V4.1 Flash is a mixture-of-experts model with 763 billion parameters. As a 2-bit GGUF it is 232 GiB, seven times the memory of a 32 GB card. FLE Link runs it anyway: the FLE engine keeps the experts in RAM, puts the busiest ones on the GPU and lets a small draft model (DSpark) propose tokens that the big model checks.",
     needs: "One NVIDIA card with 32 GB, 128 GB of RAM and about 260 GB on a fast NVMe. Of the 128 GB the model takes 120 GB, pinned so it cannot be swapped out; 8 GB stay with the system. FLE Link installs the FLE engine (v1.2.5 or newer) by itself.",
     more: [
@@ -40,6 +40,16 @@ const PAGES = [
       "<b>Rin</b> (<code>rin-deepseek-v41-dspark</code>) is the same model split into a hot half that stays on the GPU and a cold half served from RAM. It is a little faster and a little worse than the quant it is made from; the model card has the numbers.",
       "The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time.",
     ],
+    // Measured by Max on 11 Nov 2026 (ISTA IQ2_XXS, thinking on), asked for in r/LocalLLaMA. Small sample: say so.
+    extra: `<h2>Structured output and tool calls</h2>
+<p>A 2-bit quant that agrees with the original on 83.5 % of next tokens: do strict formats break? Measured on 11 Nov 2026 with the same quant (ISTA IQ2_XXS), thinking on, and for the JSON rows without a grammar or JSON mode:</p>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Task</th><th scope="col">Result</th><th scope="col">Details</th></tr></thead><tbody>
+<tr><th scope="row">JSON to a given schema</th><td><b>26/26</b> valid</td><td>nested objects, enums, escaped strings; no markdown fences, no extra text</td></tr>
+<tr><th scope="row">Long strict output</th><td><b>20</b> and <b>40</b> rows valid</td><td>no repeated rows; the 60-row case hit the 4000-token cap at row 51, clean up to there</td></tr>
+<tr><th scope="row">Single tool calls, 8 tools</th><td><b>16/16</b></td><td>right tool and valid arguments</td></tr>
+<tr><th scope="row">Short agent loops</th><td><b>5/5</b> solved</td><td>2 to 3 tool steps with simulated tools; 11 calls, none invalid, none repeated</td></tr>
+</tbody></table></div>
+<p class="fine">A small sample: short loops, English only, and it was not checked whether the server constrains the tool-call syntax itself. Agent runs over hours are not covered; that is where a 2-bit quant would be expected to show it first.</p>`,
     links: [
       ["https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF", "Rin on Hugging Face"],
       ["https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF", "DSpark draft model"],
@@ -167,7 +177,7 @@ function modelPage(p) {
     h += `</tbody></table></div>\n`;
     if (m.fle) h += `<p class="fine">"no engine": this recipe needs the FLE engine, which has an NVIDIA CUDA build only. File size ${gib(m.size + (m.draft || 0))} GiB including the draft model.</p>\n`;
   }
-  h += RULE + `\n<h2>Good to know</h2>\n<ul>${p.more.map((x) => `<li>${x}</li>`).join("")}</ul>\n`;
+  h += RULE + `\n${p.extra ? p.extra + "\n" : ""}<h2>Good to know</h2>\n<ul>${p.more.map((x) => `<li>${x}</li>`).join("")}</ul>\n`;
   h += `<h2>Sources</h2>\n<ul>${p.links.map(([u, t]) => `<li><a href="${u}">${esc(t)}</a></li>`).join("")}</ul>\n`;
   return [path, h + foot];
 }
