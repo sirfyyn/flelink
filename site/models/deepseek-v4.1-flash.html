@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Run DeepSeek V4.1 Flash locally on one 32 GB GPU · FLE Link</title>
-<meta name="description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.">
+<meta name="description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link. One command, JSON and tool calls tested at 2 bit, every number measured.">
 <meta name="theme-color" content="#0b0e14">
 <link rel="canonical" href="https://flelink.run/models/deepseek-v4.1-flash.html">
 <link rel="icon" href="../favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="../favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="../favicon-64.png?v=2" type="image/png" sizes="64x64">
 <meta property="og:title" content="Run DeepSeek V4.1 Flash locally on one 32 GB GPU · FLE Link">
-<meta property="og:description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.">
+<meta property="og:description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link. One command, JSON and tool calls tested at 2 bit, every number measured.">
 <meta property="og:url" content="https://flelink.run/models/deepseek-v4.1-flash.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="FLE Link">
@@ -16,7 +16,7 @@
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://flelink.run/og.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run DeepSeek V4.1 Flash locally on one 32 GB GPU","description":"DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.","url":"https://flelink.run/models/deepseek-v4.1-flash.html","inLanguage":"en","author":{"@type":"Person","name":"Max Bitzer","url":"https://sirfyyn.de/"},"about":{"@type":"SoftwareApplication","name":"FLE Link","url":"https://flelink.run/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"FLE Link","item":"https://flelink.run/"},{"@type":"ListItem","position":2,"name":"Models","item":"https://flelink.run/models/"},{"@type":"ListItem","position":3,"name":"DeepSeek V4.1 Flash","item":"https://flelink.run/models/deepseek-v4.1-flash.html"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run DeepSeek V4.1 Flash locally on one 32 GB GPU","description":"DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link. One command, JSON and tool calls tested at 2 bit, every number measured.","url":"https://flelink.run/models/deepseek-v4.1-flash.html","inLanguage":"en","author":{"@type":"Person","name":"Max Bitzer","url":"https://sirfyyn.de/"},"about":{"@type":"SoftwareApplication","name":"FLE Link","url":"https://flelink.run/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"FLE Link","item":"https://flelink.run/"},{"@type":"ListItem","position":2,"name":"Models","item":"https://flelink.run/models/"},{"@type":"ListItem","position":3,"name":"DeepSeek V4.1 Flash","item":"https://flelink.run/models/deepseek-v4.1-flash.html"}]}]}</script>
 <link rel="stylesheet" href="../style.css?v=11">
 </head>
 <body>
@@ -57,6 +57,15 @@
 </tbody></table></div>
 <p class="fine">"no engine": this recipe needs the FLE engine, which has an NVIDIA CUDA build only. File size 226 GiB including the draft model.</p>
 <p class="fine">The verdicts are the rule FLE Link applies before it downloads anything (<a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">the rules in full</a>). A speed is shown only for the hardware it was measured on. A size nobody measured yet? <code>flelink bench --task pagoda --share</code> posts yours to the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>.</p>
+<h2>Structured output and tool calls</h2>
+<p>A 2-bit quant that agrees with the original on 83.5 % of next tokens: do strict formats break? Measured on 11 Nov 2026 with the same quant (ISTA IQ2_XXS), thinking on, and for the JSON rows without a grammar or JSON mode:</p>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Task</th><th scope="col">Result</th><th scope="col">Details</th></tr></thead><tbody>
+<tr><th scope="row">JSON to a given schema</th><td><b>26/26</b> valid</td><td>nested objects, enums, escaped strings; no markdown fences, no extra text</td></tr>
+<tr><th scope="row">Long strict output</th><td><b>20</b> and <b>40</b> rows valid</td><td>no repeated rows; the 60-row case hit the 4000-token cap at row 51, clean up to there</td></tr>
+<tr><th scope="row">Single tool calls, 8 tools</th><td><b>16/16</b></td><td>right tool and valid arguments</td></tr>
+<tr><th scope="row">Short agent loops</th><td><b>5/5</b> solved</td><td>2 to 3 tool steps with simulated tools; 11 calls, none invalid, none repeated</td></tr>
+</tbody></table></div>
+<p class="fine">A small sample: short loops, English only, and it was not checked whether the server constrains the tool-call syntax itself. Agent runs over hours are not covered; that is where a 2-bit quant would be expected to show it first.</p>
 <h2>Good to know</h2>
 <ul><li>The recipe <code>deepseek-v41-ista-dspark</code> uses ISTA DASLab's GSQ-RCO quant (IQ2_XXS) with the DSpark draft model. The draft does not change the answer: the model checks every drafted token.</li><li><b>Rin</b> (<code>rin-deepseek-v41-dspark</code>) is the same model split into a hot half that stays on the GPU and a cold half served from RAM. It is a little faster and a little worse than the quant it is made from; the model card has the numbers.</li><li>The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time.</li></ul>
 <h2>Sources</h2>
