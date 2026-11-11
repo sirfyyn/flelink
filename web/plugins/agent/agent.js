@@ -292,6 +292,9 @@ export function mount(main, kit) {
       h("div", { class: "card stack" },
         h("div", { class: "card-head" }, icon("layers"), h("div", { class: "grow" }, h("h3", null, "Waiting"),
           h("p", null, waiting.length ? `${waiting.length} event${waiting.length === 1 ? "" : "s"} for the agent` : "Nothing waits; the agent is up to date."))),
+        // the agent keeps events while the model server does not answer (FLE Durable 0.2.2: nothing is lost any more)
+        waiting.length && queue?.model?.open === false ? h("div", { class: "callout warn small" },
+          "They wait for a model: the agent keeps them until one is loaded on the Engine page.") : null,
         waiting.map((e) => h("div", { class: "ag-event" }, h("div", { class: "row" }, h("span", { class: "tag" }, e.source),
           e.priority === "owner" ? h("span", { class: "pill info" }, "right of way") : null, h("span", { class: "grow" }), h("span", { class: "faint" }, ago(e.accepted))),
           h("div", { class: "faint ag-text" }, e.text)))),

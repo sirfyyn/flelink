@@ -1034,6 +1034,10 @@ export const T = {
   " This is a pre-release.": "これはプレリリースです。",
   "Add": "追加",
   ", then write to it.": "。その後で書いてください。",
+  "Install new versions by themselves": "新しいバージョンを自動でインストール",
+  "Only while nothing is being answered: no model is loaded, or it has been quiet for 15 minutes and “Load this model when FLE Link starts” (Engine page) brings it back. Otherwise FLE Link waits.": "何も回答していないときだけ: モデルが読み込まれていないか、15 分間静かで「FLE Link の起動時にこのモデルを読み込む」（エンジンページ）によりモデルが戻る場合。それ以外は FLE Link が待ちます。",
+  "Normal with a draft model that needs the main model (DFlash, DSpark): it cannot be measured on its own, so the engine fits the main model without it.": "メインモデルを必要とする下書きモデル（DFlash、DSpark）では正常です。単独では測定できないため、エンジンはそれを除いてメインモデルを収めます。",
+  "They wait for a model: the agent keeps them until one is loaded on the Engine page.": "モデルを待っています。エンジンページでモデルが読み込まれるまで、エージェントが保持します。",
 };
 
 export const P = [

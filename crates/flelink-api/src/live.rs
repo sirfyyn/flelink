@@ -448,6 +448,17 @@ impl Live {
     }
 
     /// The last answers, newest first (the Engine page's list of requests).
+    /// Seconds since the last answer went through (None: none yet), and whether the engine is answering right now.
+    pub fn quiet(&self) -> (Option<f64>, bool) {
+        let i = self.inner.lock().unwrap();
+        let last = i
+            .responses
+            .iter()
+            .filter_map(|r| r.get("t").and_then(Value::as_f64))
+            .fold(None, |m: Option<f64>, t| Some(m.map_or(t, |x| x.max(t))));
+        (last.map(|t| now() - t), i.busy)
+    }
+
     pub fn requests(&self) -> Value {
         let i = self.inner.lock().unwrap();
         json!({"requests": i.responses.iter().rev().cloned().collect::<Vec<_>>()})

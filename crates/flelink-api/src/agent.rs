@@ -652,6 +652,13 @@ impl Agent {
             expand(s.workspace.trim())
         };
         std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
+        // an agent a killed FLE Link left behind still holds the queue: it goes before the new one starts
+        let data = self.dir.parent().unwrap_or(&self.dir).to_path_buf();
+        for pid in flelink_core::orphans::reap_agents(&data) {
+            self.note(format!(
+                "[flelink] stopped an FLE Durable (pid {pid}) left behind by an FLE Link that ended without stopping it"
+            ));
+        }
         let port = free_port()?;
         let tok = token();
         let mut cmd = Command::new(&node);
@@ -694,6 +701,11 @@ impl Agent {
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("FLE Durable does not start: {e}"))?;
+        flelink_core::orphans::record_agent(
+            &data,
+            child.id(),
+            &runner.join("src").join("main.js").to_string_lossy(),
+        );
         for pipe in [
             child
                 .stdout
@@ -770,6 +782,7 @@ impl Agent {
     pub fn stop(&self) {
         let child = self.run.lock().unwrap().child.take();
         let Some(mut c) = child else { return };
+        flelink_core::orphans::forget_agent(self.dir.parent().unwrap_or(&self.dir), c.id());
         #[cfg(unix)]
         unsafe {
             libc::kill(c.id() as i32, libc::SIGTERM);

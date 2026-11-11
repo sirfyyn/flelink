@@ -384,7 +384,7 @@ pub fn check_rights(
     if client["admin"] != true {
         return Some((403, "This client may chat, look and measure. Changes need admin rights; the owner of the host can grant them.", "no_admin"));
     }
-    if re(r"^/api/(?:engines/install|engines/[\w.-]+/remove|update/apply|models/[0-9a-f]{12}/remove)$").is_match(path) && !confirmed {
+    if re(r"^/api/(?:engines/install|engines/[\w.-]+/remove|update/apply|update/auto|models/[0-9a-f]{12}/remove)$").is_match(path) && !confirmed {
         return Some((428, "Confirm this on the client.", "confirm"));
     }
     None

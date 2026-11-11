@@ -107,10 +107,27 @@ fn machine() -> String {
     }
 }
 
+/// The logical processors of the machine, as the System page shows them. Not `available_parallelism`: that counts only
+/// the cores this process may use (taskset, a container's CPU set), and the page then showed fewer logical than
+/// physical cores.
+fn logical_cpus() -> u64 {
+    #[cfg(unix)]
+    {
+        // SAFETY: sysconf with a valid name has no preconditions
+        let n = unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN) };
+        if n > 0 {
+            return n as u64;
+        }
+    }
+    std::thread::available_parallelism()
+        .map(|n| n.get() as u64)
+        .unwrap_or(1)
+}
+
 pub fn cpu() -> Value {
     static C: OnceLock<Value> = OnceLock::new();
     C.get_or_init(|| {
-        let logical = std::thread::available_parallelism().map(|n| n.get() as u64).unwrap_or(1);
+        let logical = logical_cpus();
         let mut name = if MAC && cfg!(target_arch = "aarch64") { "arm".to_string() } else { machine() };
         let (mut physical, mut avx2): (Option<u64>, Option<bool>) = (None, None);
         if LINUX {

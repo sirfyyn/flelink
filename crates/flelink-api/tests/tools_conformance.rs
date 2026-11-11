@@ -427,7 +427,15 @@ fn the_built_in_tools_match_the_python_studio() {
     let mut n = 0;
     for (i, e) in exprs.iter().enumerate() {
         let got = res(calculator(&json!({"expression": e})));
-        if got != py["calc"][i] {
+        // Python 3.14 words a math domain error by what it expected ("expected a positive input"); 3.13, the version
+        // the CI compares with, says "math domain error". Both are the same refusal.
+        let domain = |v: &Value| {
+            v["error"].as_str().is_some_and(|m| {
+                m == "Cannot calculate that: math domain error"
+                    || m.starts_with("Cannot calculate that: expected a")
+            })
+        };
+        if got != py["calc"][i] && !(domain(&got) && domain(&py["calc"][i])) {
             differ.push(format!("{e:?}: rust {got} python {}", py["calc"][i]));
         }
         n += 1;

@@ -14,7 +14,8 @@ mod plancmd;
 #[command(
     name = "flelink",
     version,
-    about = "Run large language models locally. No flags, no variables: just `flelink`."
+    about = "Run large language models locally. No flags, no variables: just `flelink`.",
+    after_help = "Start with `flelink` (the terminal interface) or `flelink studio` (the browser). The commands from `recipe` down look closer: the plan behind a start, model files, measurements.\n\nWhere things are: `flelink system` prints the data folder (engines, models, chats, logs). It is called \"FLE Studio\" and the settings of the command line are in ~/.config/fle, because FLE Link grew out of FLE Studio and keeps its places: nothing has to move."
 )]
 struct Cli {
     /// Keep engines, models and logs in this folder (default: per-user app data)
@@ -46,6 +47,7 @@ enum ConfigAction {
 #[derive(Subcommand)]
 enum Cmd {
     /// Show or change the global settings (~/.config/fle/config.toml)
+    #[command(display_order = 12)]
     Config {
         /// use another config file
         #[arg(long, global = true, value_name = "FILE")]
@@ -56,6 +58,7 @@ enum Cmd {
         action: ConfigAction,
     },
     /// Install the newest FLE Link (checked against the signed release list); `--check` only says whether there is one
+    #[command(display_order = 10)]
     Update {
         /// only say whether a newer version is out
         #[arg(long)]
@@ -65,17 +68,22 @@ enum Cmd {
         pre: bool,
     },
     /// The models FLE Link knows, and whether each fits this machine
+    #[command(display_order = 5)]
     Models,
     /// Plugins in <data>/plugins: the engines and recipes each one brings
+    #[command(display_order = 13)]
     Plugins,
     /// Recipes: a model with its engine and start settings (built in, in <data>/recipes, or from a plugin)
+    #[command(display_order = 6)]
     Recipes,
     /// Print a recipe as TOML, to share it or to save a changed copy in <data>/recipes
+    #[command(display_order = 16)]
     Recipe {
         /// recipe id, a .toml file or an https:// URL
         recipe: String,
     },
     /// Load a model (a recipe id or a part of one, a .toml recipe or an https:// URL to one) and serve it (OpenAI-compatible API) until Ctrl+C; without a model: list the recipes
+    #[command(display_order = 1)]
     Run {
         model: Option<String>,
         /// start a recipe from a URL or a file without asking
@@ -83,12 +91,14 @@ enum Cmd {
         yes: bool,
     },
     /// An MCP server on stdin/stdout: lets a coding agent list, download, load and stop models, read the log and change settings
+    #[command(display_order = 15)]
     Mcp {
         /// the data folder of the Studio to drive (default: per-user app data)
         #[arg(long, value_name = "DIR")]
         home: Option<std::path::PathBuf>,
     },
     /// Work on the project in this folder with FLE Durable (it stays its own program; each folder keeps its conversation)
+    #[command(display_order = 4)]
     Code {
         /// a recipe to load for the session; without one, the model already running
         model: Option<String>,
@@ -103,11 +113,13 @@ enum Cmd {
         yes: bool,
     },
     /// Always on: start FLE Link at login, with the last model and the agent
+    #[command(display_order = 11)]
     Service {
         #[command(subcommand)]
         what: ServiceCmd,
     },
     /// Set up Claude Code, Codex, OpenCode, pi or any other app for the model FLE Link serves (OpenAI and Anthropic API)
+    #[command(display_order = 9)]
     Connect {
         /// one of claude, codex, opencode, pi, api, mcp; all when left out
         tool: Option<String>,
@@ -119,6 +131,7 @@ enum Cmd {
         model: Option<String>,
     },
     /// Read a model's header: architecture, parts, expert bytes, KV cache (no weights are loaded)
+    #[command(display_order = 20)]
     Inspect {
         /// model file, first shard, or the folder that contains the shards
         model: std::path::PathBuf,
@@ -126,12 +139,14 @@ enum Cmd {
         json: bool,
     },
     /// Check parts, tensor count, offsets and tensor types of a model file
+    #[command(display_order = 21)]
     Verify {
         model: std::path::PathBuf,
         #[arg(long)]
         json: bool,
     },
     /// Start the Studio: the web page and the local API (`http://127.0.0.1:8642`)
+    #[command(display_order = 3)]
     Studio {
         /// data folder (settings, chats, engines, models); default: per-user app data
         #[arg(long, value_name = "DIR")]
@@ -159,10 +174,13 @@ enum Cmd {
         demo: bool,
     },
     /// A pairing code for another FLE Link (valid 10 minutes, one use); the host side of Remote access
+    #[command(display_order = 14)]
     PairCode,
     /// Show the llama-server command and the numbers behind it
+    #[command(display_order = 17)]
     Plan(Box<plancmd::PlanArgs>),
     /// Check model, engine, memory, disk and the command that would start
+    #[command(display_order = 8)]
     Doctor {
         #[command(flatten)]
         common: plancmd::Common,
@@ -171,8 +189,10 @@ enum Cmd {
         strict: bool,
     },
     /// What this computer has and which engines FLE Link could install
+    #[command(display_order = 7)]
     System,
     /// Start llama-server with the plan
+    #[command(display_order = 18)]
     Serve {
         #[command(flatten)]
         plan: Box<plancmd::PlanArgs>,
@@ -190,6 +210,7 @@ enum Cmd {
         ready_timeout: f64,
     },
     /// List the llama-server builds this program can find
+    #[command(display_order = 19)]
     Engines {
         #[command(flatten)]
         common: plancmd::Common,
@@ -210,6 +231,7 @@ enum Cmd {
         force: bool,
     },
     /// Write a redacted diagnostic report
+    #[command(display_order = 23)]
     Report {
         #[command(flatten)]
         common: plancmd::Common,
@@ -221,8 +243,10 @@ enum Cmd {
         zip: bool,
     },
     /// Measure tokens per second through /v1
+    #[command(display_order = 22)]
     Bench(Box<BenchArgs>),
     /// Ask one question and print the answer (loads the model for the duration)
+    #[command(display_order = 2)]
     Ask {
         /// a recipe id (`flelink recipes`), a model id (`flelink models`) or a .gguf file
         model: String,

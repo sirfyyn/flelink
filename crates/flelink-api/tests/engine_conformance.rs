@@ -214,6 +214,12 @@ fn port_of(s: &Value) -> i64 {
     s["plan"]["port"].as_i64().unwrap_or(0)
 }
 
+fn write_script(path: &Path, text: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::write(path, text).unwrap();
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
 #[test]
 fn the_engine_matches_the_python_studio() {
     let Some(src) = studio_src() else {
@@ -224,6 +230,18 @@ fn the_engine_matches_the_python_studio() {
     let (fp, fr) = (hp.join("fake-llama-server"), hr.join("fake-llama-server"));
     seed(&hp, &fp);
     seed(&hr, &fr);
+    // On a machine whose GPUs are in use, nvidia-smi answers differently from one moment to the next, and the two servers
+    // ask at different moments ("the largest free GPU" then differs). Both get an nvidia-smi that finds none, as on the CI.
+    let nogpu = tmp("eng-nogpu");
+    write_script(&nogpu.join("nvidia-smi"), "#!/bin/sh\nexit 9\n");
+    std::env::set_var(
+        "PATH",
+        format!(
+            "{}:{}",
+            nogpu.display(),
+            std::env::var("PATH").unwrap_or_default()
+        ),
+    );
     let py = start_python(&src, &hp);
     let rs: SocketAddr = start_rust(&src, &hr);
     let (tr, tp) = (

@@ -4,6 +4,8 @@
 //! without that a second start loads the model a second time next to the first. (PR_SET_PDEATHSIG does not fit here: it
 //! fires when the starting *thread* ends, and the TUI starts the engine from a worker thread. On Windows the app's job
 //! object ends the engine with the app.)
+//! The same for the agent FLE Link starts (FLE Durable): `<data>/run/agent-<pid>` with its program's pid and a part of
+//! its command line.
 use std::path::{Path, PathBuf};
 
 fn dir(home: &Path) -> PathBuf {
@@ -59,6 +61,58 @@ pub fn reap(home: &Path) -> Vec<u32> {
     stopped
 }
 
+/// Note that the agent `agent_pid` (FLE Durable, a node process) belongs to this process. `marker` is a part of its
+/// command line (the path of its main.js): only a process that still shows it is stopped later.
+pub fn record_agent(home: &Path, agent_pid: u32, marker: &str) {
+    let d = dir(home);
+    if std::fs::create_dir_all(&d).is_ok() {
+        let _ = std::fs::write(
+            d.join(format!("agent-{agent_pid}")),
+            format!("{}\n{marker}", std::process::id()),
+        );
+    }
+}
+
+/// The agent was stopped on purpose.
+pub fn forget_agent(home: &Path, agent_pid: u32) {
+    let _ = std::fs::remove_file(dir(home).join(format!("agent-{agent_pid}")));
+}
+
+/// Stop the agents whose program no longer runs: after `kill -9` or a crash the node process lives on, and a second
+/// agent on the same queue and SQLite file would run events twice. Returns their pids.
+pub fn reap_agents(home: &Path) -> Vec<u32> {
+    let mut stopped = vec![];
+    let Ok(rd) = std::fs::read_dir(dir(home)) else {
+        return stopped;
+    };
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let Some(pid) = name
+            .strip_prefix("agent-")
+            .and_then(|p| p.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let note = std::fs::read_to_string(e.path()).unwrap_or_default();
+        let mut lines = note.lines();
+        let owner = lines.next().and_then(|t| t.trim().parse::<u32>().ok());
+        let marker = lines.next().unwrap_or("").trim().to_string();
+        if !alive(pid) {
+            let _ = std::fs::remove_file(e.path());
+            continue;
+        }
+        if owner.is_some_and(alive) {
+            continue; // its FLE Link still runs
+        }
+        if !marker.is_empty() && command_has(pid, &marker) {
+            terminate(pid);
+            stopped.push(pid);
+        }
+        let _ = std::fs::remove_file(e.path());
+    }
+    stopped
+}
+
 fn engine_running(home: &Path) -> bool {
     std::fs::read_dir(dir(home)).is_ok_and(|rd| {
         rd.flatten().any(|e| {
@@ -100,6 +154,20 @@ fn is_engine(pid: u32) -> bool {
         .args(["-p", &pid.to_string(), "-o", "comm="])
         .output()
         .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("llama-server"))
+}
+
+/// Whether the command line of `pid` contains `marker` (a pid can be reused by an unrelated program).
+#[cfg(unix)]
+fn command_has(pid: u32, marker: &str) -> bool {
+    std::process::Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "command="])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains(marker))
+}
+
+#[cfg(not(unix))]
+fn command_has(_pid: u32, _marker: &str) -> bool {
+    false
 }
 
 #[cfg(unix)]
@@ -166,6 +234,50 @@ fn terminate(_pid: u32) {}
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_agent_whose_program_is_gone_is_stopped_and_one_with_a_live_program_stays() {
+        let home = std::env::temp_dir().join(format!("fle-agent-orphans-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(dir(&home)).unwrap();
+        let spawn = || {
+            std::process::Command::new("sleep")
+                .arg("300")
+                .spawn()
+                .unwrap()
+        };
+        // its program (this test) lives: kept
+        let mut kept = spawn();
+        record_agent(&home, kept.id(), "sleep 300");
+        assert!(reap_agents(&home).is_empty());
+        assert!(alive(kept.id()));
+        // its program is gone (pid 999999999 does not run): stopped, the note goes
+        let mut orphan = spawn();
+        std::fs::write(
+            dir(&home).join(format!("agent-{}", orphan.id())),
+            "999999999\nsleep 300",
+        )
+        .unwrap();
+        // another program now has the pid of an old agent (the marker is not in its command line): left alone
+        let mut other = spawn();
+        std::fs::write(
+            dir(&home).join(format!("agent-{}", other.id())),
+            "999999999\n/x/fle-durable/src/main.js",
+        )
+        .unwrap();
+        assert_eq!(reap_agents(&home), vec![orphan.id()]);
+        let _ = orphan.wait();
+        assert!(alive(other.id()) && alive(kept.id()));
+        assert!(!dir(&home).join(format!("agent-{}", orphan.id())).exists());
+        assert!(!dir(&home).join(format!("agent-{}", other.id())).exists());
+        forget_agent(&home, kept.id());
+        assert!(!dir(&home).join(format!("agent-{}", kept.id())).exists());
+        for c in [&mut kept, &mut other] {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+        let _ = std::fs::remove_dir_all(&home);
+    }
 
     #[test]
     fn notes_of_ended_engines_go_and_a_live_one_stays() {

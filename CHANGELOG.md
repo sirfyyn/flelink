@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.1.13 (2026-11-11)
+
+- **No second agent.** An FLE Durable that an FLE Link left behind when it was killed is stopped before a new one
+  starts; two agents on one queue would run events twice.
+- **Events wait for the model** (FLE Durable 0.2.2): while no model is loaded, what the agenda, a webhook or another
+  source hands the agent stays in the queue and goes on when a model runs again. Until now such an event was used up
+  after three failed tries. The Agent page says so, and its "Waiting" card works again (it stayed empty since 0.1.8).
+- **Agenda** (FLE Durable 0.2.3): two items planned in the same instant stay two items; one could be lost before.
+  The agent's compaction limits follow the context window of its model.
+- **Updates by themselves**, if you turn it on in Settings: only while nobody is served. No model is loaded, or it has
+  been quiet for 15 minutes and "Load this model when FLE Link starts" brings the model back.
+- **Terminal interface**: the model list is the first screen (m shows the machine), models already on this machine
+  have rows of their own, Ctrl+E in the chat goes back to choose another model.
+- `flelink --help` lists the commands by importance and says where things are.
+- Engine log: the two lines a DFlash or DSpark draft causes during memory fitting ("failed to measure the memory of
+  the extra model") are no longer shown as errors, with a note why.
+- Attaching to another server is refused while a start waits for GPU memory; before, it took the start's place.
+- The System page counts the machine's logical processors also when FLE Link is bound to some of them.
+- The first run measured again (README): 13 to 15 s without the download instead of 22 s with 0.1.3.
+- Inside: `server.rs` is split into `server/agent_routes.rs`, `forge_routes.rs`, `update_routes.rs` and `proxy.rs`; the
+  comparison tests hold on a machine whose GPUs are busy and with Python 3.14.
+
 ## 0.1.12 (2026-11-10)
 
 - **Every page in seven languages.** French, Spanish, Russian, Chinese, Japanese and Korean covered about a quarter of

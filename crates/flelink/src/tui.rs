@@ -94,6 +94,9 @@ struct App {
     models: Vec<catalog::Model>,
     // the recipes that are not in the catalog (DeepSeek V4.1 Flash, Rin, ...): a row each, between the catalog and the search
     rezepte: Vec<flelink_core::recipe::Recipe>,
+    // ids of the rows in `rezepte` that are models already on this machine (downloaded in the Studio, or by an earlier
+    // search here): nothing to download, so the disk does not count for them
+    lokal: std::collections::HashSet<String>,
     list: ListState,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -127,14 +130,22 @@ pub fn run(home: &Path) -> Result<()> {
         .into_iter()
         .filter(|r| !models.iter().any(|m| m.id == r.id))
         .collect();
+    let mut rezepte = rezepte;
+    let mut lokal = std::collections::HashSet::new();
+    for r in on_disk(home, &models, &rezepte) {
+        lokal.insert(r.id.clone());
+        rezepte.push(r);
+    }
     let mut list = ListState::default();
     list.select(Some(0));
     let mut app = App {
         home: home.to_path_buf(),
-        screen: Screen::Machine,
+        // the model list is the first thing to see; the machine is one key away (m)
+        screen: Screen::Models,
         sys,
         models,
         rezepte,
+        lokal,
         list,
         tx,
         rx,
@@ -261,8 +272,8 @@ impl App {
         }
         match self.screen {
             Screen::Machine => match code {
-                KeyCode::Enter => self.screen = Screen::Models,
-                KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
+                KeyCode::Enter | KeyCode::Esc | KeyCode::Char('m') => self.screen = Screen::Models,
+                KeyCode::Char('q') => self.quit = true,
                 _ => {}
             },
             Screen::Models => match code {
@@ -289,7 +300,7 @@ impl App {
                         self.start_load()
                     }
                 }
-                KeyCode::Esc | KeyCode::Left => self.screen = Screen::Machine,
+                KeyCode::Char('m') => self.screen = Screen::Machine,
                 KeyCode::Char('q') => self.quit = true,
                 _ => {}
             },
@@ -342,6 +353,18 @@ impl App {
                 KeyCode::Char('o') if mods.contains(KeyModifiers::CONTROL) => {
                     self.show_cmd = !self.show_cmd
                 }
+                // eject: stop the engine and choose another model, without leaving the program
+                KeyCode::Char('e') if mods.contains(KeyModifiers::CONTROL) => {
+                    drop(self.server.take());
+                    self.ready = None;
+                    self.history.clear();
+                    self.reasoning.clear();
+                    self.input.clear();
+                    self.busy = false;
+                    self.show_cmd = false;
+                    self.err = None;
+                    self.screen = Screen::Models;
+                }
                 KeyCode::Backspace => {
                     self.input.pop();
                 }
@@ -364,10 +387,20 @@ impl App {
         }
     }
 
+    /// Whether a recipe row fits. For a model already on this machine nothing is downloaded, so only the memory counts.
+    fn fit_of(&self, r: &flelink_core::recipe::Recipe) -> catalog::Fit {
+        if self.lokal.contains(&r.id) {
+            let mut s = self.sys.clone();
+            s.disk_free_bytes = 0;
+            return catalog::fit_size(r.model.size, false, &s);
+        }
+        r.fit(&self.home.join("models"), &self.sys)
+    }
+
     /// A built-in recipe that is not in the catalog (the same check as for a model: it must fit before anything is downloaded).
     fn start_recipe(&mut self, k: usize) {
         let r = self.rezepte[k].clone();
-        if r.fit(&self.home.join("models"), &self.sys) == catalog::Fit::TooBig {
+        if self.fit_of(&r) == catalog::Fit::TooBig {
             self.err = Some(format!("{} does not fit this machine.", r.title));
             return;
         }
@@ -490,14 +523,14 @@ impl App {
         let title = Line::from(title);
         f.render_widget(Paragraph::new(title), head);
         let hint = match self.screen {
-            Screen::Machine => "Enter: continue   q: quit",
-            Screen::Models => "up/down: choose   Enter: load or search   Esc: back   q: quit",
+            Screen::Machine => "Enter: back to the models   q: quit",
+            Screen::Models => "up/down: choose   Enter: load or search   m: this machine   q: quit",
             Screen::Search => {
                 "type, Enter: search   Down: results   Enter on a result: load   Esc: back"
             }
             Screen::Loading => "q: quit (stops the engine)",
             Screen::Chat => {
-                "Enter: send   Ctrl+O: API, agents and start command   Esc: clear   Ctrl+C: quit"
+                "Enter: send   Ctrl+O: API, agents and start command   Ctrl+E: other model   Esc: clear   Ctrl+C: quit"
             }
         };
         f.render_widget(
@@ -585,13 +618,14 @@ impl App {
                 ]))
             })
             .chain(self.rezepte.iter().map(|r| {
-                let fit = r.fit(&self.home.join("models"), &self.sys);
+                let fit = self.fit_of(r);
                 let col = match fit {
                     catalog::Fit::Fits => Color::Green,
                     catalog::Fit::Tight => Color::Yellow,
                     catalog::Fit::TooBig => Color::Red,
                 };
-                let got = r.missing_bytes(&self.home.join("models")) == 0;
+                let here = self.lokal.contains(&r.id);
+                let got = here || r.missing_bytes(&self.home.join("models")) == 0;
                 ListItem::new(Line::from(vec![
                     Span::styled(
                         format!(" {:<8}", fit.label()),
@@ -599,7 +633,13 @@ impl App {
                     ),
                     Span::raw(format!(" {:>9}  {}", system::gib(r.model.size), r.title)),
                     Span::styled(
-                        if got { "  [downloaded]" } else { "" },
+                        if here {
+                            "  [on this machine]"
+                        } else if got {
+                            "  [downloaded]"
+                        } else {
+                            ""
+                        },
                         Style::new().fg(Color::Cyan),
                     ),
                 ]))
@@ -625,7 +665,19 @@ impl App {
             None => self
                 .rezepte
                 .get(sel_i.saturating_sub(self.models.len()))
-                .and_then(|r| r.fit_reason(&self.home.join("models"), &self.sys)),
+                .and_then(|r| {
+                    if self.lokal.contains(&r.id) {
+                        (self.fit_of(r) != catalog::Fit::Fits).then(|| {
+                            catalog::size_reason(r.model.size, false, &{
+                                let mut s = self.sys.clone();
+                                s.disk_free_bytes = 0;
+                                s
+                            })
+                        })
+                    } else {
+                        r.fit_reason(&self.home.join("models"), &self.sys)
+                    }
+                }),
         };
         let mut lines = vec![];
         if let Some(w) = why {
@@ -911,6 +963,69 @@ fn pick_group(groups: &[serde_json::Value], ram: u64) -> Option<&serde_json::Val
 }
 
 /// A recipe for a found repo: the files of one quantisation, the default engine choice, nothing else.
+/// The models in the models folder that are neither catalog models nor built-in recipes: downloaded in the Studio
+/// (`<models>/<owner>/<name>/…`) or by a search here (`<models>/<owner>__<name>/…`). Each becomes a recipe row; the start
+/// finds the files where they are (flow: `locate::adopt`), nothing is downloaded.
+fn on_disk(
+    home: &Path,
+    models: &[catalog::Model],
+    rezepte: &[flelink_core::recipe::Recipe],
+) -> Vec<flelink_core::recipe::Recipe> {
+    let root = home.join("models");
+    let lib = flelink_api::library::Library::new(home);
+    let mut out: Vec<flelink_core::recipe::Recipe> = vec![];
+    for m in lib.scan(&root) {
+        if m["complete"] != true || !m["catalog_id"].is_null() || m["kind"] != "model" {
+            continue;
+        }
+        let folder = PathBuf::from(m["folder"].as_str().unwrap_or(""));
+        let Ok(rel) = folder.strip_prefix(&root) else {
+            continue; // a file added from somewhere else: the Studio starts those
+        };
+        let parts: Vec<String> = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().to_string())
+            .collect();
+        let repo = match parts.as_slice() {
+            [one] => match one.split_once("__") {
+                Some((o, n)) => format!("{o}/{n}"),
+                None => continue,
+            },
+            [owner, name] => format!("{owner}/{name}"),
+            _ => continue,
+        };
+        let files: Vec<String> = m["parts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p["name"].as_str().map(String::from))
+            .collect();
+        if files.is_empty()
+            || models
+                .iter()
+                .any(|c| c.repo == repo && files.contains(&c.file.to_string()))
+            || rezepte
+                .iter()
+                .any(|r| r.model.repo == repo && r.model.files.iter().any(|f| files.contains(f)))
+        {
+            continue;
+        }
+        let size = m["size"].as_u64().unwrap_or(0);
+        let Ok(mut r) =
+            flelink_core::recipe::Recipe::parse(&recipe_toml(&repo, &files, size), "library")
+        else {
+            continue;
+        };
+        if out.iter().any(|x| x.id == r.id) {
+            r.id = format!("{}-{}", r.id, out.len());
+        }
+        r.title = format!("{} ({repo})", m["name"].as_str().unwrap_or(&repo));
+        r.note = format!("On this machine: {}", m["path"].as_str().unwrap_or(""));
+        out.push(r);
+    }
+    out
+}
+
 fn recipe_toml(repo: &str, files: &[String], size: u64) -> String {
     let id: String = repo
         .chars()
