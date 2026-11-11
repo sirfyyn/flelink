@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Run DeepSeek V4.1 Flash locally on one 32 GB GPU · FLE Link</title>
-<meta name="description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 120 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.">
+<meta name="description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.">
 <meta name="theme-color" content="#0b0e14">
 <link rel="canonical" href="https://flelink.run/models/deepseek-v4.1-flash.html">
 <link rel="icon" href="../favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="../favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="../favicon-64.png?v=2" type="image/png" sizes="64x64">
 <meta property="og:title" content="Run DeepSeek V4.1 Flash locally on one 32 GB GPU · FLE Link">
-<meta property="og:description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 120 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.">
+<meta property="og:description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.">
 <meta property="og:url" content="https://flelink.run/models/deepseek-v4.1-flash.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="FLE Link">
@@ -16,7 +16,7 @@
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://flelink.run/og.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run DeepSeek V4.1 Flash locally on one 32 GB GPU","description":"DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 120 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.","url":"https://flelink.run/models/deepseek-v4.1-flash.html","inLanguage":"en","author":{"@type":"Person","name":"Max Bitzer","url":"https://sirfyyn.de/"},"about":{"@type":"SoftwareApplication","name":"FLE Link","url":"https://flelink.run/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"FLE Link","item":"https://flelink.run/"},{"@type":"ListItem","position":2,"name":"Models","item":"https://flelink.run/models/"},{"@type":"ListItem","position":3,"name":"DeepSeek V4.1 Flash","item":"https://flelink.run/models/deepseek-v4.1-flash.html"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run DeepSeek V4.1 Flash locally on one 32 GB GPU","description":"DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.","url":"https://flelink.run/models/deepseek-v4.1-flash.html","inLanguage":"en","author":{"@type":"Person","name":"Max Bitzer","url":"https://sirfyyn.de/"},"about":{"@type":"SoftwareApplication","name":"FLE Link","url":"https://flelink.run/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"FLE Link","item":"https://flelink.run/"},{"@type":"ListItem","position":2,"name":"Models","item":"https://flelink.run/models/"},{"@type":"ListItem","position":3,"name":"DeepSeek V4.1 Flash","item":"https://flelink.run/models/deepseek-v4.1-flash.html"}]}]}</script>
 <link rel="stylesheet" href="../style.css?v=11">
 </head>
 <body>
@@ -30,11 +30,11 @@
 <div class="cmd"><code>flelink run deepseek-v41-ista-dspark</code></div>
 <div class="cmd"><code>flelink run rin-deepseek-v41-dspark</code></div>
 <h2>What you need</h2>
-<p>One NVIDIA card with 32 GB, 120 GB of RAM and about 260 GB on a fast NVMe. FLE Link installs the FLE engine (v1.2.5 or newer) by itself.</p>
+<p>One NVIDIA card with 32 GB, 128 GB of RAM and about 260 GB on a fast NVMe. Of the 128 GB the model takes 120 GB, pinned so it cannot be swapped out; 8 GB stay with the system. FLE Link installs the FLE engine (v1.2.5 or newer) by itself.</p>
 <h2>Measured speed</h2>
 <div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Recipe</th><th scope="col">Decode</th><th scope="col">Measured on</th></tr></thead><tbody>
-<tr><th scope="row">DeepSeek V4.1 Flash + DSpark<small>763B mixture of experts, 232 GiB</small></th><td><b>49.9</b> tok/s</td><td>32 GB card, 120 GB RAM, through FLE Link, median of three (5 Nov 2026); 37.2 without the draft</td></tr>
-<tr><th scope="row">Rin (DeepSeek V4.1 Flash, split)<small>763B, hot half on the GPU</small></th><td><b>53.4</b> tok/s</td><td>32 GB card, 120 GB RAM, FLE v1.2.6; lossy, see the model card</td></tr>
+<tr><th scope="row">DeepSeek V4.1 Flash + DSpark<small>763B mixture of experts, 232 GiB</small></th><td><b>49.9</b> tok/s</td><td>32 GB card, 128 GB RAM (120 GB for the model, 8 GB left to the system), through FLE Link, median of three (5 Nov 2026); 37.2 without the draft</td></tr>
+<tr><th scope="row">Rin (DeepSeek V4.1 Flash, split)<small>763B, hot half on the GPU</small></th><td><b>53.4</b> tok/s</td><td>32 GB card, 128 GB RAM, FLE v1.2.6; lossy, see the model card</td></tr>
 </tbody></table></div>
 <h2>Does DeepSeek V4.1 Flash + DSpark fit my card?</h2>
 <div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Graphics</th><th scope="col">32 GB RAM</th><th scope="col">64 GB RAM</th><th scope="col">128 GB RAM</th></tr></thead><tbody>

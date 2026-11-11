@@ -6,7 +6,7 @@
 //                     (site.js calls FLECubes.fit(pile, card)).
 //
 // Measured: the sizes and the speeds (50.6 tok/s with the DSpark draft, 37.6 without; FLE v1.2.5, one RTX PRO 4500,
-// 120 GB RAM). Illustration: which cubes move and light up. The scenes say so in their small print.
+// 128 GB RAM). Illustration: which cubes move and light up. The scenes say so in their small print.
 // Without JavaScript the canvases stay empty; the text next to them says the same in words.
 (() => {
   "use strict";

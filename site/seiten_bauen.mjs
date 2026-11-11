@@ -32,9 +32,9 @@ const PAGES = [
     slug: "deepseek-v4.1-flash", ids: ["deepseek-v41-ista-dspark", "rin-deepseek-v41-dspark"],
     name: "DeepSeek V4.1 Flash",
     title: "Run DeepSeek V4.1 Flash locally on one 32 GB GPU",
-    desc: "DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 120 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.",
+    desc: "DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.",
     lead: "DeepSeek V4.1 Flash is a mixture-of-experts model with 763 billion parameters. As a 2-bit GGUF it is 232 GiB, seven times the memory of a 32 GB card. FLE Link runs it anyway: the FLE engine keeps the experts in RAM, puts the busiest ones on the GPU and lets a small draft model (DSpark) propose tokens that the big model checks.",
-    needs: "One NVIDIA card with 32 GB, 120 GB of RAM and about 260 GB on a fast NVMe. FLE Link installs the FLE engine (v1.2.5 or newer) by itself.",
+    needs: "One NVIDIA card with 32 GB, 128 GB of RAM and about 260 GB on a fast NVMe. Of the 128 GB the model takes 120 GB, pinned so it cannot be swapped out; 8 GB stay with the system. FLE Link installs the FLE engine (v1.2.5 or newer) by itself.",
     more: [
       "The recipe <code>deepseek-v41-ista-dspark</code> uses ISTA DASLab's GSQ-RCO quant (IQ2_XXS) with the DSpark draft model. The draft does not change the answer: the model checks every drafted token.",
       "<b>Rin</b> (<code>rin-deepseek-v41-dspark</code>) is the same model split into a hot half that stays on the GPU and a cold half served from RAM. It is a little faster and a little worse than the quant it is made from; the model card has the numbers.",
@@ -53,7 +53,7 @@ const PAGES = [
     title: "Run Qwen3.8-Flash-Next locally on one GPU",
     desc: "Qwen3.8-Flash-Next (125B mixture of experts, 88.9 GB GGUF) with FLE Link: about 90 tokens/s on one 32 GB GPU, about 15 on a 16 GB card with 64 GB RAM. One command.",
     lead: "Qwen3.8-Flash-Next is a mixture-of-experts model with 125 billion parameters. The FLE quant (FLE-IQ3_M) is an 88.9 GB file, far more than a graphics card holds. The FLE engine keeps the experts in RAM and the busiest ones on the GPU, so the model runs from a 16 GB card and 64 GB of RAM.",
-    needs: "One NVIDIA card from 16 GB and 64 GB of RAM; the measured top speed needs 32 GB and 120 GB.",
+    needs: "One NVIDIA card from 16 GB and 64 GB of RAM; the top speed was measured with 32 GB and 128 GB of RAM.",
     more: [
       "On the same file and the same 32 GB card the FLE engine decoded at 91 tokens/s, Strata at 74 and llama.cpp at 36 (median over six tasks, 6 Oct 2026).",
       "The 91 tokens/s were measured with the engine's MTP draft head started by hand; <code>flelink run</code> starts the model without the head so far.",
@@ -72,7 +72,7 @@ const PAGES = [
     lead: "Katy is a quantization of Swift-1.5-Qwen3.8-27B, a dense 27B model, as IQ4_XS with the DFlash2 draft model. From 20 GB of GPU memory all 66 layers are on the card; below that the rest runs on the CPU, which is slower.",
     needs: "One NVIDIA card from 12 GB and 24 GB of RAM. A 12 GB card is the minimum the recipe was measured with.",
     more: [
-      "Below 20 GB the speed depends on the CPU and the RAM: the numbers were measured on a Ryzen 9 9950X3D with 120 GB RAM, and a slower machine will be slower.",
+      "Below 20 GB the speed depends on the CPU and the RAM: the numbers were measured on a Ryzen 9 9950X3D with 128 GB RAM, and a slower machine will be slower.",
       "Licence of the model: Swift Open License v1.0, see the model page.",
     ],
     links: [

@@ -29,10 +29,10 @@
 <p>Qwen3.8-Flash-Next is a mixture-of-experts model with 125 billion parameters. The FLE quant (FLE-IQ3_M) is an 88.9 GB file, far more than a graphics card holds. The FLE engine keeps the experts in RAM and the busiest ones on the GPU, so the model runs from a 16 GB card and 64 GB of RAM.</p>
 <div class="cmd"><code>flelink run fle-iq3-m</code></div>
 <h2>What you need</h2>
-<p>One NVIDIA card from 16 GB and 64 GB of RAM; the measured top speed needs 32 GB and 120 GB.</p>
+<p>One NVIDIA card from 16 GB and 64 GB of RAM; the top speed was measured with 32 GB and 128 GB of RAM.</p>
 <h2>Measured speed</h2>
 <div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Recipe</th><th scope="col">Decode</th><th scope="col">Measured on</th></tr></thead><tbody>
-<tr><th scope="row">Qwen3.8-Flash-Next<small>125B mixture of experts, 88.9 GB</small></th><td><b>91</b> tok/s</td><td>32 GB card, 120 GB RAM, with the engine's MTP draft head started by hand; flelink run starts it without the head so far</td></tr>
+<tr><th scope="row">Qwen3.8-Flash-Next<small>125B mixture of experts, 88.9 GB</small></th><td><b>91</b> tok/s</td><td>32 GB card, 128 GB RAM, with the engine's MTP draft head started by hand; flelink run starts it without the head so far</td></tr>
 <tr><th scope="row">Qwen3.8-Flash-Next<small>125B mixture of experts, 88.9 GB</small></th><td><b>about 15</b> tok/s</td><td>16 GB card, 64 GB RAM (8 Nov 2026)</td></tr>
 </tbody></table></div>
 <h2>Does Qwen3.8-Flash-Next fit my card?</h2>

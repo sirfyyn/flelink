@@ -5,7 +5,8 @@
 > and a desktop app. Open source (MIT), no account, no telemetry. macOS, Linux, Windows.
 
 With the FLE engine (FastLocalExperts, a llama.cpp fork for mixture-of-experts models) FLE Link runs DeepSeek V4.1 Flash
-(763 billion parameters, 2-bit GGUF) at about 50 tokens per second on one 32 GB GPU with 120 GB RAM. The measurements and
+(763 billion parameters, 2-bit GGUF) at about 50 tokens per second on one 32 GB GPU with 128 GB RAM
+(120 GB of it for the model, 8 GB left to the system). The measurements and
 how they were taken are on https://sirfyyn.de/en/fle/.
 
 Install:

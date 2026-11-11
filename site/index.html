@@ -63,7 +63,7 @@
         <button type="button" data-replay>again</button>
       </div>
     </div>
-    <details class="small"><summary>DeepSeek V4.1 Flash, 763 billion parameters, one RTX PRO 4500. How this was measured</summary><p>Measured: the sizes, and both speeds (FLE v1.2.5, 120 GB RAM, Linux; three runs with the draft model, the same text each time; through FLE Link 49.9). Illustration: which cubes move and light up; one cube is one gibibyte. The draft model does not change the answer. The 2-bit quant of the model itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time. <a href="https://sirfyyn.de/en/fle/">Every measurement →</a></p></details>
+    <details class="small"><summary>DeepSeek V4.1 Flash, 763 billion parameters, one RTX PRO 4500. How this was measured</summary><p>Measured: the sizes, and both speeds (FLE v1.2.5, 128 GB RAM of which 120 GB go to the model and 8 GB stay with the system, Linux; three runs with the draft model, the same text each time; through FLE Link 49.9). Illustration: which cubes move and light up; one cube is one gibibyte. The draft model does not change the answer. The 2-bit quant of the model itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time. <a href="https://sirfyyn.de/en/fle/">Every measurement →</a></p></details>
   </div>
 </section>
 
@@ -189,7 +189,7 @@ A Mixture-of-Experts (MoE) model is a multi-component model that consists of a n
       <div class="lane" data-tok="36"><p class="lane-name"><b>llama.cpp</b><span>36<small>tok/s</small></span></p><p class="lane-text" aria-hidden="true"></p><div class="lane-bar"><i></i></div><p class="lane-time"></p></div>
     </div>
     <button class="again" type="button" data-again>Run it again</button>
-    <details class="small"><summary>Qwen3.8-Flash-Next, 125 billion parameters, the same file on the same 32 GB card. How this was measured</summary><p>Decode speed, median over six tasks, one RTX PRO 4500 with 120 GB RAM and 16 cores, Linux, 6 Oct 2026. The text in the lanes is written for this page; the three speeds are the measured ones. The <a href="https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF">FLE quant</a> is smaller than Unsloth's IQ4_XS at the same KL divergence to BF16. Reading long prompts was where FLE trailed in this run; it has been reworked since. <a href="https://sirfyyn.de/en/fle/">Every measurement, including the ones that did not work →</a></p></details>
+    <details class="small"><summary>Qwen3.8-Flash-Next, 125 billion parameters, the same file on the same 32 GB card. How this was measured</summary><p>Decode speed, median over six tasks, one RTX PRO 4500 with 128 GB RAM and 16 cores, Linux, 6 Oct 2026. The text in the lanes is written for this page; the three speeds are the measured ones. The <a href="https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF">FLE quant</a> is smaller than Unsloth's IQ4_XS at the same KL divergence to BF16. Reading long prompts was where FLE trailed in this run; it has been reworked since. <a href="https://sirfyyn.de/en/fle/">Every measurement, including the ones that did not work →</a></p></details>
   </div>
 </section>
 

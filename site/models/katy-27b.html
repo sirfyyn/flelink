@@ -32,8 +32,8 @@
 <p>One NVIDIA card from 12 GB and 24 GB of RAM. A 12 GB card is the minimum the recipe was measured with.</p>
 <h2>Measured speed</h2>
 <div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Recipe</th><th scope="col">Decode</th><th scope="col">Measured on</th></tr></thead><tbody>
-<tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><b>104</b> tok/s</td><td>from 20 GB up all 66 layers are on the card; one run, engine direct, context 32768, in a machine with 120 GB RAM</td></tr>
-<tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><b>19.4</b> tok/s</td><td>16 GB card, 51 of 66 layers on it; one run, Ryzen 9 9950X3D with 120 GB RAM; a slower CPU will be slower</td></tr>
+<tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><b>104</b> tok/s</td><td>from 20 GB up all 66 layers are on the card; one run, engine direct, context 32768, in a machine with 128 GB RAM</td></tr>
+<tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><b>19.4</b> tok/s</td><td>16 GB card, 51 of 66 layers on it; one run, Ryzen 9 9950X3D with 128 GB RAM; a slower CPU will be slower</td></tr>
 <tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><b>11.2</b> tok/s</td><td>12 GB, 33 of 66 layers; one run, memory limited on a larger card to simulate the size</td></tr>
 </tbody></table></div>
 <h2>Does Katy 27B + DFlash2 fit my card?</h2>
@@ -48,7 +48,7 @@
 <p class="fine">"no engine": this recipe needs the FLE engine, which has an NVIDIA CUDA build only. File size 16 GiB including the draft model.</p>
 <p class="fine">The verdicts are the rule FLE Link applies before it downloads anything (<a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">the rules in full</a>). A speed is shown only for the hardware it was measured on. A size nobody measured yet? <code>flelink bench --task pagoda --share</code> posts yours to the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>.</p>
 <h2>Good to know</h2>
-<ul><li>Below 20 GB the speed depends on the CPU and the RAM: the numbers were measured on a Ryzen 9 9950X3D with 120 GB RAM, and a slower machine will be slower.</li><li>Licence of the model: Swift Open License v1.0, see the model page.</li></ul>
+<ul><li>Below 20 GB the speed depends on the CPU and the RAM: the numbers were measured on a Ryzen 9 9950X3D with 128 GB RAM, and a slower machine will be slower.</li><li>Licence of the model: Swift Open License v1.0, see the model page.</li></ul>
 <h2>Sources</h2>
 <ul><li><a href="https://huggingface.co/sirfyyn/Katy-27B-GGUF">Katy on Hugging Face</a></li><li><a href="https://sirfyyn.de/en/katy/">Katy: size, quality and speed</a></li></ul>
 <h2>Install FLE Link</h2>
