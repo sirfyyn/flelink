@@ -9,6 +9,8 @@
 - **Events wait for the model** (FLE Durable 0.2.2): while no model is loaded, what the agenda, a webhook or another
   source hands the agent stays in the queue and goes on when a model runs again. Until now such an event was used up
   after three failed tries. The Agent page says so, and its "Waiting" card works again (it stayed empty since 0.1.8).
+- **Agenda** (FLE Durable 0.2.3): two items planned in the same instant stay two items; one could be lost before.
+  The agent's compaction limits follow the context window of its model.
 - **Updates by themselves**, if you turn it on in Settings: only while nobody is served. No model is loaded, or it has
   been quiet for 15 minutes and "Load this model when FLE Link starts" brings the model back.
 - **Terminal interface**: the model list is the first screen (m shows the machine), models already on this machine
