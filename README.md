@@ -255,7 +255,7 @@ The unit and end-to-end tests run on Linux, macOS and Windows for every pull req
 | Path | What |
 |---|---|
 | `crates/flelink-core` | machine inspection, GGUF reading, launch plan, engine install, downloads, supervisor, orphaned-engine cleanup, the settings for coding agents (`connect.rs`) |
-| `crates/flelink-api` | the `/api` the Studio talks to, and the `/v1` proxy |
+| `crates/flelink-api` | the `/api` the Studio talks to, and the `/v1` proxy. `server.rs` has the guard, the routes and the page; next to it `server/agent_routes.rs` (the agent, the calendar mirror), `server/forge_routes.rs`, `server/update_routes.rs` and `server/proxy.rs` (`/v1` and forwarding to another host) |
 | `crates/flelink` | the program: CLI, terminal interface, `studio`, the MCP server (`mcp.rs`) |
 | `web/studio` | the Studio page (embedded into the binary) |
 | `web/plugins` | the built-in pages: Agent, Forge, Updates, Remote access |
