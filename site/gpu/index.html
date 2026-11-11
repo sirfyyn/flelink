@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Which local AI model fits your GPU · FLE Link</title>
+<meta name="description" content="Pick the size of your NVIDIA card (12, 16, 24 or 32 GB) and see which local AI models FLE Link runs on it, with the measured tokens per second and the command for each.">
+<meta name="theme-color" content="#0b0e14">
+<link rel="canonical" href="https://flelink.run/gpu/">
+<link rel="icon" href="../favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="../favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="../favicon-64.png?v=2" type="image/png" sizes="64x64">
+<meta property="og:title" content="Which local AI model fits your GPU · FLE Link">
+<meta property="og:description" content="Pick the size of your NVIDIA card (12, 16, 24 or 32 GB) and see which local AI models FLE Link runs on it, with the measured tokens per second and the command for each.">
+<meta property="og:url" content="https://flelink.run/gpu/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="FLE Link">
+<meta property="og:image" content="https://flelink.run/og.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://flelink.run/og.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Which local AI model fits your GPU","description":"Pick the size of your NVIDIA card (12, 16, 24 or 32 GB) and see which local AI models FLE Link runs on it, with the measured tokens per second and the command for each.","url":"https://flelink.run/gpu/","inLanguage":"en","author":{"@type":"Person","name":"Max Bitzer","url":"https://sirfyyn.de/"},"about":{"@type":"SoftwareApplication","name":"FLE Link","url":"https://flelink.run/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"FLE Link","item":"https://flelink.run/"},{"@type":"ListItem","position":2,"name":"Your card","item":"https://flelink.run/gpu/"}]}]}</script>
+<link rel="stylesheet" href="../style.css?v=11">
+</head>
+<body>
+<header class="top"><div class="wrap top-in">
+  <a class="brand" href="../" aria-label="FLE Link home"><img src="../logo-mark.svg" alt="" width="34" height="34"><span><b>FLE</b> Link</span></a>
+  <nav class="top-nav" aria-label="Main"><a href="../models/">Models</a><a href="../gpu/">Your card</a><a class="btn ghost" href="../#install">Install</a></nav>
+</div></header>
+<main class="wrap legal doc"><p class="crumb"><a href="../">FLE Link</a></p>
+<h1>Which local AI model fits your GPU</h1>
+<p>FLE Link checks the memory before it downloads anything. These pages show the same verdict for the common card sizes; the <a href="../#fit">calculator on the main page</a> takes any size, an Apple Silicon Mac or a machine without a GPU.</p>
+<ul class="doc-list"><li><a href="12gb.html"><b>12 GB NVIDIA card</b></a> biggest that fits with 128 GB of RAM: Katy 27B + DFlash2</li><li><a href="16gb.html"><b>16 GB NVIDIA card</b></a> biggest that fits with 128 GB of RAM: Qwen3.8-Flash-Next</li><li><a href="24gb.html"><b>24 GB NVIDIA card</b></a> biggest that fits with 128 GB of RAM: Qwen3.8-Flash-Next</li><li><a href="32gb.html"><b>32 GB NVIDIA card</b></a> biggest that fits with 128 GB of RAM: Rin (DeepSeek V4.1 Flash, split)</li></ul>
+<p><a href="../models/">All models →</a></p>
+<h2>Install FLE Link</h2>
+<div class="cmd"><code>curl -fsSL https://flelink.run/install.sh | sh</code></div>
+<p>Windows: <code>irm https://flelink.run/install.ps1 | iex</code>. Open source, MIT. No account, no telemetry. <a href="../">What FLE Link does →</a></p>
+</main>
+<footer class="foot"><div class="wrap foot-in">
+  <div class="brand"><img src="../logo-mark.svg" alt="" width="26" height="26"><span><b>FLE</b> Link</span></div>
+  <nav aria-label="Links"><a href="../">FLE Link</a><a href="../models/">Models</a><a href="../gpu/">Your card</a><a href="https://github.com/sirfyyn/flelink">Source</a><a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a><a href="https://sirfyyn.de/en/">sirfyyn.de</a></nav>
+  <nav aria-label="Legal"><a href="../impressum.html">Impressum</a><a href="../privacy.html">Privacy</a><a href="../terms.html">Terms</a><a href="../datenschutz.html">Datenschutz</a></nav>
+  <p class="fine">MIT licence · no cookies, no third-party trackers · © 2026 Max Bitzer</p>
+</div></footer>
+</body>
+</html>
