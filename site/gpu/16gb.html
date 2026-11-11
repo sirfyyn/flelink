@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>What runs on a 16 GB GPU: local AI models that fit · FLE Link</title>
+<meta name="description" content="Local AI models for an NVIDIA card with 16 GB: which models FLE Link fits with 32, 64 or 128 GB of RAM, the measured tokens per second and the one command for each. Biggest that fits: Qwen3.8-Flash-Next.">
+<meta name="theme-color" content="#0b0e14">
+<link rel="canonical" href="https://flelink.run/gpu/16gb.html">
+<link rel="icon" href="../favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="../favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="../favicon-64.png?v=2" type="image/png" sizes="64x64">
+<meta property="og:title" content="What runs on a 16 GB GPU: local AI models that fit · FLE Link">
+<meta property="og:description" content="Local AI models for an NVIDIA card with 16 GB: which models FLE Link fits with 32, 64 or 128 GB of RAM, the measured tokens per second and the one command for each. Biggest that fits: Qwen3.8-Flash-Next.">
+<meta property="og:url" content="https://flelink.run/gpu/16gb.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="FLE Link">
+<meta property="og:image" content="https://flelink.run/og.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://flelink.run/og.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"What runs on a 16 GB GPU: local AI models that fit","description":"Local AI models for an NVIDIA card with 16 GB: which models FLE Link fits with 32, 64 or 128 GB of RAM, the measured tokens per second and the one command for each. Biggest that fits: Qwen3.8-Flash-Next.","url":"https://flelink.run/gpu/16gb.html","inLanguage":"en","author":{"@type":"Person","name":"Max Bitzer","url":"https://sirfyyn.de/"},"about":{"@type":"SoftwareApplication","name":"FLE Link","url":"https://flelink.run/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"FLE Link","item":"https://flelink.run/"},{"@type":"ListItem","position":2,"name":"Your card","item":"https://flelink.run/gpu/"},{"@type":"ListItem","position":3,"name":"16 GB","item":"https://flelink.run/gpu/16gb.html"}]}]}</script>
+<link rel="stylesheet" href="../style.css?v=11">
+</head>
+<body>
+<header class="top"><div class="wrap top-in">
+  <a class="brand" href="../" aria-label="FLE Link home"><img src="../logo-mark.svg" alt="" width="34" height="34"><span><b>FLE</b> Link</span></a>
+  <nav class="top-nav" aria-label="Main"><a href="../models/">Models</a><a href="../gpu/">Your card</a><a class="btn ghost" href="../#install">Install</a></nav>
+</div></header>
+<main class="wrap legal doc"><p class="crumb"><a href="../">FLE Link</a> / <a href="./">Your card</a></p>
+<h1>What runs on a 16 GB GPU: local AI models that fit</h1>
+<p>A 16 GB NVIDIA card runs more than its memory suggests. For mixture-of-experts models the FLE engine keeps the experts in RAM and only the busiest ones on the GPU, so the RAM decides which model fits. With 128 GB of RAM the biggest model in the catalog that fits a 16 GB card is <a href="../models/qwen3.8-flash-next.html">Qwen3.8-Flash-Next</a>.</p>
+<h2>16 GB card with 32 GB of RAM</h2>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Model</th><th scope="col">Does it fit?</th><th scope="col">Measured on this hardware</th><th scope="col">One command</th></tr></thead><tbody>
+<tr><th scope="row"><a href="../models/llama-3.2-1b.html">Llama 3.2 1B</a><small>1B, a first try on any laptop</small></th><td><span class="v v-fits">fits</span></td><td class="none">not measured on this size</td><td><code>flelink run llama-3.2-1b</code></td></tr>
+<tr><th scope="row"><a href="../models/katy-27b.html">Katy 27B + DFlash2</a><small>dense 27B with a draft model</small></th><td><span class="v v-fits">fits</span></td><td><b>19.4</b> tok/s<small>16 GB card, 51 of 66 layers on it; one run, Ryzen 9 9950X3D with 128 GB RAM; a slower CPU will be slower</small></td><td><code>flelink run katy-27b-dflash</code></td></tr>
+<tr class="off"><th scope="row"><a href="../models/qwen3.8-flash-next.html">Qwen3.8-Flash-Next</a><small>125B mixture of experts, 88.9 GB</small></th><td><span class="v v-big">too big</span></td><td class="none">not measured on this size</td><td><code>flelink run fle-iq3-m</code></td></tr>
+<tr class="off"><th scope="row"><a href="../models/deepseek-v4.1-flash.html">DeepSeek V4.1 Flash + DSpark</a><small>763B mixture of experts, 232 GiB</small></th><td><span class="v v-big">too big</span></td><td class="none">not measured on this size</td><td><code>flelink run deepseek-v41-ista-dspark</code></td></tr>
+<tr class="off"><th scope="row"><a href="../models/deepseek-v4.1-flash.html">Rin (DeepSeek V4.1 Flash, split)</a><small>763B, hot half on the GPU</small></th><td><span class="v v-big">too big</span></td><td class="none">not measured on this size</td><td><code>flelink run rin-deepseek-v41-dspark</code></td></tr>
+</tbody></table></div>
+<h2>16 GB card with 64 GB of RAM</h2>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Model</th><th scope="col">Does it fit?</th><th scope="col">Measured on this hardware</th><th scope="col">One command</th></tr></thead><tbody>
+<tr><th scope="row"><a href="../models/llama-3.2-1b.html">Llama 3.2 1B</a><small>1B, a first try on any laptop</small></th><td><span class="v v-fits">fits</span></td><td class="none">not measured on this size</td><td><code>flelink run llama-3.2-1b</code></td></tr>
+<tr><th scope="row"><a href="../models/katy-27b.html">Katy 27B + DFlash2</a><small>dense 27B with a draft model</small></th><td><span class="v v-fits">fits</span></td><td><b>19.4</b> tok/s<small>16 GB card, 51 of 66 layers on it; one run, Ryzen 9 9950X3D with 128 GB RAM; a slower CPU will be slower</small></td><td><code>flelink run katy-27b-dflash</code></td></tr>
+<tr><th scope="row"><a href="../models/qwen3.8-flash-next.html">Qwen3.8-Flash-Next</a><small>125B mixture of experts, 88.9 GB</small></th><td><span class="v v-fits">fits</span></td><td><b>about 15</b> tok/s<small>16 GB card, 64 GB RAM (8 Nov 2026)</small></td><td><code>flelink run fle-iq3-m</code></td></tr>
+<tr class="off"><th scope="row"><a href="../models/deepseek-v4.1-flash.html">DeepSeek V4.1 Flash + DSpark</a><small>763B mixture of experts, 232 GiB</small></th><td><span class="v v-big">too big</span></td><td class="none">not measured on this size</td><td><code>flelink run deepseek-v41-ista-dspark</code></td></tr>
+<tr class="off"><th scope="row"><a href="../models/deepseek-v4.1-flash.html">Rin (DeepSeek V4.1 Flash, split)</a><small>763B, hot half on the GPU</small></th><td><span class="v v-big">too big</span></td><td class="none">not measured on this size</td><td><code>flelink run rin-deepseek-v41-dspark</code></td></tr>
+</tbody></table></div>
+<h2>16 GB card with 128 GB of RAM</h2>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Model</th><th scope="col">Does it fit?</th><th scope="col">Measured on this hardware</th><th scope="col">One command</th></tr></thead><tbody>
+<tr><th scope="row"><a href="../models/llama-3.2-1b.html">Llama 3.2 1B</a><small>1B, a first try on any laptop</small></th><td><span class="v v-fits">fits</span></td><td class="none">not measured on this size</td><td><code>flelink run llama-3.2-1b</code></td></tr>
+<tr><th scope="row"><a href="../models/katy-27b.html">Katy 27B + DFlash2</a><small>dense 27B with a draft model</small></th><td><span class="v v-fits">fits</span></td><td><b>19.4</b> tok/s<small>16 GB card, 51 of 66 layers on it; one run, Ryzen 9 9950X3D with 128 GB RAM; a slower CPU will be slower</small></td><td><code>flelink run katy-27b-dflash</code></td></tr>
+<tr><th scope="row"><a href="../models/qwen3.8-flash-next.html">Qwen3.8-Flash-Next</a><small>125B mixture of experts, 88.9 GB</small></th><td><span class="v v-fits">fits</span></td><td class="none">not measured on this size</td><td><code>flelink run fle-iq3-m</code></td></tr>
+<tr class="off"><th scope="row"><a href="../models/deepseek-v4.1-flash.html">DeepSeek V4.1 Flash + DSpark</a><small>763B mixture of experts, 232 GiB</small></th><td><span class="v v-big">too big</span></td><td class="none">not measured on this size</td><td><code>flelink run deepseek-v41-ista-dspark</code></td></tr>
+<tr class="off"><th scope="row"><a href="../models/deepseek-v4.1-flash.html">Rin (DeepSeek V4.1 Flash, split)</a><small>763B, hot half on the GPU</small></th><td><span class="v v-big">too big</span></td><td class="none">not measured on this size</td><td><code>flelink run rin-deepseek-v41-dspark</code></td></tr>
+</tbody></table></div>
+<p class="fine">The verdicts are the rule FLE Link applies before it downloads anything (<a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">the rules in full</a>). A speed is shown only for the hardware it was measured on. A size nobody measured yet? <code>flelink bench --task pagoda --share</code> posts yours to the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>.</p>
+<p>Other sizes: <a href="12gb.html">12 GB</a> · <a href="24gb.html">24 GB</a> · <a href="32gb.html">32 GB</a>. Any other GGUF file works with <code>flelink run /path/to/model.gguf</code>; the <a href="../#fit">calculator on the main page</a> takes any size, an Apple Silicon Mac or no GPU.</p>
+<h2>Install FLE Link</h2>
+<div class="cmd"><code>curl -fsSL https://flelink.run/install.sh | sh</code></div>
+<p>Windows: <code>irm https://flelink.run/install.ps1 | iex</code>. Open source, MIT. No account, no telemetry. <a href="../">What FLE Link does →</a></p>
+</main>
+<footer class="foot"><div class="wrap foot-in">
+  <div class="brand"><img src="../logo-mark.svg" alt="" width="26" height="26"><span><b>FLE</b> Link</span></div>
+  <nav aria-label="Links"><a href="../">FLE Link</a><a href="../models/">Models</a><a href="../gpu/">Your card</a><a href="https://github.com/sirfyyn/flelink">Source</a><a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a><a href="https://sirfyyn.de/en/">sirfyyn.de</a></nav>
+  <nav aria-label="Legal"><a href="../impressum.html">Impressum</a><a href="../privacy.html">Privacy</a><a href="../terms.html">Terms</a><a href="../datenschutz.html">Datenschutz</a></nav>
+  <p class="fine">MIT licence · no cookies, no third-party trackers · © 2026 Max Bitzer</p>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Run DeepSeek V4.1 Flash locally on one 32 GB GPU · FLE Link</title>
+<meta name="description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.">
+<meta name="theme-color" content="#0b0e14">
+<link rel="canonical" href="https://flelink.run/models/deepseek-v4.1-flash.html">
+<link rel="icon" href="../favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="../favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="../favicon-64.png?v=2" type="image/png" sizes="64x64">
+<meta property="og:title" content="Run DeepSeek V4.1 Flash locally on one 32 GB GPU · FLE Link">
+<meta property="og:description" content="DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.">
+<meta property="og:url" content="https://flelink.run/models/deepseek-v4.1-flash.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="FLE Link">
+<meta property="og:image" content="https://flelink.run/og.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://flelink.run/og.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run DeepSeek V4.1 Flash locally on one 32 GB GPU","description":"DeepSeek V4.1 Flash (763B) on one 32 GB GPU with 128 GB RAM: about 50 tokens/s with FLE Link and the FLE engine. One command, what fits which card, every number measured.","url":"https://flelink.run/models/deepseek-v4.1-flash.html","inLanguage":"en","author":{"@type":"Person","name":"Max Bitzer","url":"https://sirfyyn.de/"},"about":{"@type":"SoftwareApplication","name":"FLE Link","url":"https://flelink.run/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"FLE Link","item":"https://flelink.run/"},{"@type":"ListItem","position":2,"name":"Models","item":"https://flelink.run/models/"},{"@type":"ListItem","position":3,"name":"DeepSeek V4.1 Flash","item":"https://flelink.run/models/deepseek-v4.1-flash.html"}]}]}</script>
+<link rel="stylesheet" href="../style.css?v=11">
+</head>
+<body>
+<header class="top"><div class="wrap top-in">
+  <a class="brand" href="../" aria-label="FLE Link home"><img src="../logo-mark.svg" alt="" width="34" height="34"><span><b>FLE</b> Link</span></a>
+  <nav class="top-nav" aria-label="Main"><a href="../models/">Models</a><a href="../gpu/">Your card</a><a class="btn ghost" href="../#install">Install</a></nav>
+</div></header>
+<main class="wrap legal doc"><p class="crumb"><a href="../">FLE Link</a> / <a href="./">Models</a></p>
+<h1>Run DeepSeek V4.1 Flash locally on one 32 GB GPU</h1>
+<p>DeepSeek V4.1 Flash is a mixture-of-experts model with 763 billion parameters. As a 2-bit GGUF it is 232 GiB, seven times the memory of a 32 GB card. FLE Link runs it anyway: the FLE engine keeps the experts in RAM, puts the busiest ones on the GPU and lets a small draft model (DSpark) propose tokens that the big model checks.</p>
+<div class="cmd"><code>flelink run deepseek-v41-ista-dspark</code></div>
+<div class="cmd"><code>flelink run rin-deepseek-v41-dspark</code></div>
+<h2>What you need</h2>
+<p>One NVIDIA card with 32 GB, 128 GB of RAM and about 260 GB on a fast NVMe. Of the 128 GB the model takes 120 GB, pinned so it cannot be swapped out; 8 GB stay with the system. FLE Link installs the FLE engine (v1.2.5 or newer) by itself.</p>
+<h2>Measured speed</h2>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Recipe</th><th scope="col">Decode</th><th scope="col">Measured on</th></tr></thead><tbody>
+<tr><th scope="row">DeepSeek V4.1 Flash + DSpark<small>763B mixture of experts, 232 GiB</small></th><td><b>49.9</b> tok/s</td><td>32 GB card, 128 GB RAM (120 GB for the model, 8 GB left to the system), through FLE Link, median of three (5 Nov 2026); 37.2 without the draft</td></tr>
+<tr><th scope="row">Rin (DeepSeek V4.1 Flash, split)<small>763B, hot half on the GPU</small></th><td><b>53.4</b> tok/s</td><td>32 GB card, 128 GB RAM, FLE v1.2.6; lossy, see the model card</td></tr>
+</tbody></table></div>
+<h2>Does DeepSeek V4.1 Flash + DSpark fit my card?</h2>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Graphics</th><th scope="col">32 GB RAM</th><th scope="col">64 GB RAM</th><th scope="col">128 GB RAM</th></tr></thead><tbody>
+<tr><th scope="row"><a href="../gpu/12gb.html">12 GB NVIDIA card</a></th><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td></tr>
+<tr><th scope="row"><a href="../gpu/16gb.html">16 GB NVIDIA card</a></th><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td></tr>
+<tr><th scope="row"><a href="../gpu/24gb.html">24 GB NVIDIA card</a></th><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td></tr>
+<tr><th scope="row"><a href="../gpu/32gb.html">32 GB NVIDIA card</a></th><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td><td><span class="v v-fits">fits</span></td></tr>
+<tr><th scope="row">Apple Silicon Mac</th><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td></tr>
+<tr><th scope="row">No GPU</th><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td></tr>
+</tbody></table></div>
+<p class="fine">"no engine": this recipe needs the FLE engine, which has an NVIDIA CUDA build only. File size 237 GiB including the draft model.</p>
+<h2>Does Rin (DeepSeek V4.1 Flash, split) fit my card?</h2>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Graphics</th><th scope="col">32 GB RAM</th><th scope="col">64 GB RAM</th><th scope="col">128 GB RAM</th></tr></thead><tbody>
+<tr><th scope="row"><a href="../gpu/12gb.html">12 GB NVIDIA card</a></th><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td></tr>
+<tr><th scope="row"><a href="../gpu/16gb.html">16 GB NVIDIA card</a></th><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td></tr>
+<tr><th scope="row"><a href="../gpu/24gb.html">24 GB NVIDIA card</a></th><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td></tr>
+<tr><th scope="row"><a href="../gpu/32gb.html">32 GB NVIDIA card</a></th><td><span class="v v-big">too big</span></td><td><span class="v v-big">too big</span></td><td><span class="v v-fits">fits</span></td></tr>
+<tr><th scope="row">Apple Silicon Mac</th><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td></tr>
+<tr><th scope="row">No GPU</th><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td></tr>
+</tbody></table></div>
+<p class="fine">"no engine": this recipe needs the FLE engine, which has an NVIDIA CUDA build only. File size 226 GiB including the draft model.</p>
+<p class="fine">The verdicts are the rule FLE Link applies before it downloads anything (<a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">the rules in full</a>). A speed is shown only for the hardware it was measured on. A size nobody measured yet? <code>flelink bench --task pagoda --share</code> posts yours to the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>.</p>
+<h2>Good to know</h2>
+<ul><li>The recipe <code>deepseek-v41-ista-dspark</code> uses ISTA DASLab's GSQ-RCO quant (IQ2_XXS) with the DSpark draft model. The draft does not change the answer: the model checks every drafted token.</li><li><b>Rin</b> (<code>rin-deepseek-v41-dspark</code>) is the same model split into a hot half that stays on the GPU and a cold half served from RAM. It is a little faster and a little worse than the quant it is made from; the model card has the numbers.</li><li>The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time.</li></ul>
+<h2>Sources</h2>
+<ul><li><a href="https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF">Rin on Hugging Face</a></li><li><a href="https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF">DSpark draft model</a></li><li><a href="https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF">ISTA DASLab's quant</a></li><li><a href="https://sirfyyn.de/en/fle/">How FLE was measured</a></li></ul>
+<h2>Install FLE Link</h2>
+<div class="cmd"><code>curl -fsSL https://flelink.run/install.sh | sh</code></div>
+<p>Windows: <code>irm https://flelink.run/install.ps1 | iex</code>. Open source, MIT. No account, no telemetry. <a href="../">What FLE Link does →</a></p>
+</main>
+<footer class="foot"><div class="wrap foot-in">
+  <div class="brand"><img src="../logo-mark.svg" alt="" width="26" height="26"><span><b>FLE</b> Link</span></div>
+  <nav aria-label="Links"><a href="../">FLE Link</a><a href="../models/">Models</a><a href="../gpu/">Your card</a><a href="https://github.com/sirfyyn/flelink">Source</a><a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a><a href="https://sirfyyn.de/en/">sirfyyn.de</a></nav>
+  <nav aria-label="Legal"><a href="../impressum.html">Impressum</a><a href="../privacy.html">Privacy</a><a href="../terms.html">Terms</a><a href="../datenschutz.html">Datenschutz</a></nav>
+  <p class="fine">MIT licence · no cookies, no third-party trackers · © 2026 Max Bitzer</p>
+</div></footer>
+</body>
+</html>

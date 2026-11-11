@@ -5,7 +5,7 @@
 <h1 align="center">FLE Link</h1>
 
 <p align="center"><b>Big models. One command.</b><br>
-DeepSeek V4.1 Flash (763B) at about 50 tokens/s on one 32 GB GPU with 120 GB RAM, with the <a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a>.<br>
+DeepSeek V4.1 Flash (763B) at about 50 tokens/s on one 32 GB GPU with 128 GB RAM, with the <a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a>.<br>
 The layer between an inference engine and everything that talks to it.</p>
 
 <p align="center">
@@ -33,7 +33,7 @@ webhooks, your messages), and FLE Link starts it with your model on the Agent pa
 | **66 s** | from nothing to the first answer on Linux with an NVIDIA card |
 | **68 s** | the same on an 8 GB M2 MacBook, model download included (FLE Link 0.1.3, fresh home, 3 Nov 2026). 46 s of it are the 0.8 GiB download. Measured again with 0.1.12 on 10 Nov, two runs: 74 s and 83 s on a slower connection (61 s and 68 s download); everything else took 13 s and 15 s instead of 22 |
 | **91 tok/s** | a 125B MoE on one 32 GB GPU with the FLE engine and its MTP draft head, 2.5× plain llama.cpp (`flelink run` starts it without the head so far) |
-| **50 tok/s** | DeepSeek-V4.1-Flash (763B, 2-bit quant ISTA GSQ-RCO IQ2_XXS, 232 GiB) on one 32 GB GPU with 120 GB RAM and the DSpark draft (FLE v1.2.5: 49.8 / 50.8 / 50.6; through FLE Link 49.9 median) (`flelink run deepseek-v41-ista-dspark`). The draft does not change the output: the same answer every run, 37.6 tok/s without it by hand, 37.2 through FLE Link. The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time |
+| **50 tok/s** | DeepSeek-V4.1-Flash (763B, 2-bit quant ISTA GSQ-RCO IQ2_XXS, 232 GiB) on one 32 GB GPU with 128 GB RAM and the DSpark draft (FLE v1.2.5: 49.8 / 50.8 / 50.6; through FLE Link 49.9 median) (`flelink run deepseek-v41-ista-dspark`). The draft does not change the output: the same answer every run, 37.6 tok/s without it by hand, 37.2 through FLE Link. The 2-bit quant itself is lossy: its next token agrees with the original weights 83.5 to 85.2 % of the time |
 
 **Best performance measured on Linux.** The speed figures in this README were measured on Linux; macOS and Windows run
 the same recipes.
@@ -82,8 +82,8 @@ Toolkit on the host; not tested yet). Built and smoke-tested with every release 
 
 | Model | Size | Measured | Notes |
 |---|---|---|---|
-| [Qwen3.8-Flash-Next · FLE](https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF) | 125B MoE, 88.9 GB | decode **91 tok/s** (Strata 74, llama.cpp 36) | one 32 GB RTX PRO 4500, 120 GB RAM, same machine for all three (6 Oct 2026); smaller than Unsloth IQ4_XS at the same KL divergence |
-| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, IQ2_XXS 232 GiB | with the [DSpark draft](https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF): **about 50 tok/s** (the draft does not change the output at temperature 0: same answer every run); 37.6 without it by hand, 37.2 through FLE Link | `flelink run deepseek-v41-ista-dspark` / `deepseek-v41-ista`; one 32 GB RTX PRO 4500, 120 GB RAM (an expert store in RAM of about 90 GB, an unlimited memlock limit), Ryzen 9 9950X3D, Linux, FLE engine v1.2.5 (5 Nov 2026). `deepseek-v41-ista-iq1m`: the IQ1_M quant for speed, less exact |
+| [Qwen3.8-Flash-Next · FLE](https://huggingface.co/sirfyyn/Qwen3.8-Flash-Next-FLE-GGUF) | 125B MoE, 88.9 GB | decode **91 tok/s** (Strata 74, llama.cpp 36) | one 32 GB RTX PRO 4500, 128 GB RAM, same machine for all three (6 Oct 2026); smaller than Unsloth IQ4_XS at the same KL divergence |
+| [DeepSeek-V4.1-Flash-1017 · ISTA-DASLab GSQ-RCO](https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF) | 763B MoE, IQ2_XXS 232 GiB | with the [DSpark draft](https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF): **about 50 tok/s** (the draft does not change the output at temperature 0: same answer every run); 37.6 without it by hand, 37.2 through FLE Link | `flelink run deepseek-v41-ista-dspark` / `deepseek-v41-ista`; one 32 GB RTX PRO 4500, 128 GB RAM (an expert store in RAM of about 90 GB, an unlimited memlock limit), Ryzen 9 9950X3D, Linux, FLE engine v1.2.5 (5 Nov 2026). `deepseek-v41-ista-iq1m`: the IQ1_M quant for speed, less exact |
 | [Rin - Deepseek V4.1 Flash 1017](https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF) | 763B MoE, 2-bit, split hot/cold | `flelink run rin-deepseek-v41-dspark`: 53.4 tok/s (about +6 % over ISTA IQ2_XXS), KL divergence 0.29 against the original (ISTA IQ2_XXS 0.25); needs FLE v1.2.6 or newer | built from ISTA DASLab's GSQ-RCO quants: the hot half stays on the GPU, the cold half is served from RAM; lossy, see the model card |
 
 Small models such as Llama 3.2 1B run on any laptop and are in the built-in catalog (`flelink models`). Any other GGUF on

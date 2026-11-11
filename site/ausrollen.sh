@@ -9,7 +9,7 @@ host="${VPS:-vps}"
 python3 -I site/pruefen.py
 stage="$(mktemp -d)"
 trap 'rm -rf -- "$stage"' EXIT
-rsync -a --exclude logo_gen.py --exclude pruefen.py --exclude casts_einsetzen.py --exclude entwurf --exclude og.svg --exclude CNAME --exclude ausrollen.sh --exclude .DS_Store site/ "$stage/"
+rsync -a --exclude logo_gen.py --exclude pruefen.py --exclude casts_einsetzen.py --exclude seiten_bauen.mjs --exclude entwurf --exclude og.svg --exclude CNAME --exclude ausrollen.sh --exclude .DS_Store site/ "$stage/"
 cp install.sh install.ps1 "$stage/"
 if [ "${1:-}" != "--ja" ]; then
   rsync -a --delete --dry-run --itemize-changes --rsync-path="sudo rsync" "$stage/" "$host:/var/www/flelink/"
@@ -19,6 +19,6 @@ fi
 ssh "$host" 'sudo cp -a /var/www/flelink /var/www/flelink.vor-$(date +%F-%H%M)'
 rsync -a --delete --rsync-path="sudo rsync" "$stage/" "$host:/var/www/flelink/"
 ssh "$host" 'sudo chown -R root:root /var/www/flelink'
-for u in / /impressum.html /datenschutz.html /privacy.html /terms.html /sitemap.xml /install.sh; do
+for u in / /impressum.html /datenschutz.html /privacy.html /terms.html /sitemap.xml /llms.txt /models/ /models/deepseek-v4.1-flash.html /gpu/ /gpu/16gb.html /install.sh; do
   curl -s -o /dev/null -w "%{http_code} $u\n" "https://flelink.run$u"
 done

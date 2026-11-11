@@ -1,0 +1,40 @@
+# FLE Link
+
+> FLE Link runs big local AI models in one command. It reads your machine, installs the inference engine that fits,
+> downloads a model that fits, picks the settings and serves an OpenAI- and Anthropic-compatible API, a browser Studio
+> and a desktop app. Open source (MIT), no account, no telemetry. macOS, Linux, Windows.
+
+With the FLE engine (FastLocalExperts, a llama.cpp fork for mixture-of-experts models) FLE Link runs DeepSeek V4.1 Flash
+(763 billion parameters, 2-bit GGUF) at about 50 tokens per second on one 32 GB GPU with 128 GB RAM
+(120 GB of it for the model, 8 GB left to the system). The measurements and
+how they were taken are on https://sirfyyn.de/en/fle/.
+
+Install:
+
+    curl -fsSL https://flelink.run/install.sh | sh        (macOS, Linux)
+    irm https://flelink.run/install.ps1 | iex             (Windows)
+
+## Pages
+
+- [FLE Link](https://flelink.run/): the first run uncut, which model fits which card, the speed comparison, what happens when things break
+- [Privacy](https://flelink.run/privacy.html): what the site and the program do with data
+- [Terms of use](https://flelink.run/terms.html)
+
+## Source and documentation
+
+- [FLE Link on GitHub](https://github.com/sirfyyn/flelink): source, releases, README
+- [How it works](https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md): every rule and number
+- [Recipes](https://github.com/sirfyyn/flelink/blob/main/docs/RECIPES.md): model, engine and settings in one file
+- [FLE engine (FastLocalExperts)](https://github.com/sirfyyn/FastLocalExperts): the llama.cpp fork FLE Link installs for mixture-of-experts models
+- [FLE Durable](https://github.com/sirfyyn/fle-durable): an always-on local agent that runs next to the model
+
+## Models
+
+- [Rin: DeepSeek V4.1 Flash 1017, 2-bit GGUF](https://huggingface.co/sirfyyn/Rin-Deepseek-V4.1-Flash-1017-FLE-GGUF)
+- [DSpark draft model for DeepSeek V4.1 Flash](https://huggingface.co/sirfyyn/DeepSeek-V4.1-Flash-1017-DSpark-FLE-GGUF)
+- [All models on Hugging Face](https://huggingface.co/sirfyyn)
+
+## Author
+
+- [Max Bitzer (sirfyyn)](https://sirfyyn.de/en/)
+- [FYOS](https://sirfyyn.de/fyos/en/): the personal operating system for AI that FLE Link belongs to

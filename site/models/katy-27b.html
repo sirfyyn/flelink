@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Run Katy 27B locally on a 12 to 32 GB GPU · FLE Link</title>
+<meta name="description" content="Katy 27B (IQ4_XS with the DFlash2 draft) with FLE Link: 104 tokens/s from 20 GB of GPU memory, 19.4 on a 16 GB card, 11.2 on 12 GB. One command, every number measured.">
+<meta name="theme-color" content="#0b0e14">
+<link rel="canonical" href="https://flelink.run/models/katy-27b.html">
+<link rel="icon" href="../favicon.svg?v=2" type="image/svg+xml"><link rel="icon" href="../favicon-32.png?v=2" type="image/png" sizes="32x32"><link rel="icon" href="../favicon-64.png?v=2" type="image/png" sizes="64x64">
+<meta property="og:title" content="Run Katy 27B locally on a 12 to 32 GB GPU · FLE Link">
+<meta property="og:description" content="Katy 27B (IQ4_XS with the DFlash2 draft) with FLE Link: 104 tokens/s from 20 GB of GPU memory, 19.4 on a 16 GB card, 11.2 on 12 GB. One command, every number measured.">
+<meta property="og:url" content="https://flelink.run/models/katy-27b.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="FLE Link">
+<meta property="og:image" content="https://flelink.run/og.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://flelink.run/og.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run Katy 27B locally on a 12 to 32 GB GPU","description":"Katy 27B (IQ4_XS with the DFlash2 draft) with FLE Link: 104 tokens/s from 20 GB of GPU memory, 19.4 on a 16 GB card, 11.2 on 12 GB. One command, every number measured.","url":"https://flelink.run/models/katy-27b.html","inLanguage":"en","author":{"@type":"Person","name":"Max Bitzer","url":"https://sirfyyn.de/"},"about":{"@type":"SoftwareApplication","name":"FLE Link","url":"https://flelink.run/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"FLE Link","item":"https://flelink.run/"},{"@type":"ListItem","position":2,"name":"Models","item":"https://flelink.run/models/"},{"@type":"ListItem","position":3,"name":"Katy 27B","item":"https://flelink.run/models/katy-27b.html"}]}]}</script>
+<link rel="stylesheet" href="../style.css?v=11">
+</head>
+<body>
+<header class="top"><div class="wrap top-in">
+  <a class="brand" href="../" aria-label="FLE Link home"><img src="../logo-mark.svg" alt="" width="34" height="34"><span><b>FLE</b> Link</span></a>
+  <nav class="top-nav" aria-label="Main"><a href="../models/">Models</a><a href="../gpu/">Your card</a><a class="btn ghost" href="../#install">Install</a></nav>
+</div></header>
+<main class="wrap legal doc"><p class="crumb"><a href="../">FLE Link</a> / <a href="./">Models</a></p>
+<h1>Run Katy 27B locally on a 12 to 32 GB GPU</h1>
+<p>Katy is a quantization of Swift-1.5-Qwen3.8-27B, a dense 27B model, as IQ4_XS with the DFlash2 draft model. From 20 GB of GPU memory all 66 layers are on the card; below that the rest runs on the CPU, which is slower.</p>
+<div class="cmd"><code>flelink run katy-27b-dflash</code></div>
+<h2>What you need</h2>
+<p>One NVIDIA card from 12 GB and 24 GB of RAM. A 12 GB card is the minimum the recipe was measured with.</p>
+<h2>Measured speed</h2>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Recipe</th><th scope="col">Decode</th><th scope="col">Measured on</th></tr></thead><tbody>
+<tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><b>104</b> tok/s</td><td>from 20 GB up all 66 layers are on the card; one run, engine direct, context 32768, in a machine with 128 GB RAM</td></tr>
+<tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><b>19.4</b> tok/s</td><td>16 GB card, 51 of 66 layers on it; one run, Ryzen 9 9950X3D with 128 GB RAM; a slower CPU will be slower</td></tr>
+<tr><th scope="row">Katy 27B + DFlash2<small>dense 27B with a draft model</small></th><td><b>11.2</b> tok/s</td><td>12 GB, 33 of 66 layers; one run, memory limited on a larger card to simulate the size</td></tr>
+</tbody></table></div>
+<h2>Does Katy 27B + DFlash2 fit my card?</h2>
+<div class="fit-scroll"><table class="fit-table"><thead><tr><th scope="col">Graphics</th><th scope="col">32 GB RAM</th><th scope="col">64 GB RAM</th><th scope="col">128 GB RAM</th></tr></thead><tbody>
+<tr><th scope="row"><a href="../gpu/12gb.html">12 GB NVIDIA card</a></th><td><span class="v v-fits">fits</span></td><td><span class="v v-fits">fits</span></td><td><span class="v v-fits">fits</span></td></tr>
+<tr><th scope="row"><a href="../gpu/16gb.html">16 GB NVIDIA card</a></th><td><span class="v v-fits">fits</span></td><td><span class="v v-fits">fits</span></td><td><span class="v v-fits">fits</span></td></tr>
+<tr><th scope="row"><a href="../gpu/24gb.html">24 GB NVIDIA card</a></th><td><span class="v v-fits">fits</span></td><td><span class="v v-fits">fits</span></td><td><span class="v v-fits">fits</span></td></tr>
+<tr><th scope="row"><a href="../gpu/32gb.html">32 GB NVIDIA card</a></th><td><span class="v v-fits">fits</span></td><td><span class="v v-fits">fits</span></td><td><span class="v v-fits">fits</span></td></tr>
+<tr><th scope="row">Apple Silicon Mac</th><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td></tr>
+<tr><th scope="row">No GPU</th><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td><td><span class="v v-none">no engine</span></td></tr>
+</tbody></table></div>
+<p class="fine">"no engine": this recipe needs the FLE engine, which has an NVIDIA CUDA build only. File size 16 GiB including the draft model.</p>
+<p class="fine">The verdicts are the rule FLE Link applies before it downloads anything (<a href="https://github.com/sirfyyn/flelink/blob/main/docs/HOW-IT-WORKS.md">the rules in full</a>). A speed is shown only for the hardware it was measured on. A size nobody measured yet? <code>flelink bench --task pagoda --share</code> posts yours to the <a href="https://github.com/sirfyyn/flelink/discussions/categories/benchmarks">benchmarks board</a>.</p>
+<h2>Good to know</h2>
+<ul><li>Below 20 GB the speed depends on the CPU and the RAM: the numbers were measured on a Ryzen 9 9950X3D with 128 GB RAM, and a slower machine will be slower.</li><li>Licence of the model: Swift Open License v1.0, see the model page.</li></ul>
+<h2>Sources</h2>
+<ul><li><a href="https://huggingface.co/sirfyyn/Katy-27B-GGUF">Katy on Hugging Face</a></li><li><a href="https://sirfyyn.de/en/katy/">Katy: size, quality and speed</a></li></ul>
+<h2>Install FLE Link</h2>
+<div class="cmd"><code>curl -fsSL https://flelink.run/install.sh | sh</code></div>
+<p>Windows: <code>irm https://flelink.run/install.ps1 | iex</code>. Open source, MIT. No account, no telemetry. <a href="../">What FLE Link does →</a></p>
+</main>
+<footer class="foot"><div class="wrap foot-in">
+  <div class="brand"><img src="../logo-mark.svg" alt="" width="26" height="26"><span><b>FLE</b> Link</span></div>
+  <nav aria-label="Links"><a href="../">FLE Link</a><a href="../models/">Models</a><a href="../gpu/">Your card</a><a href="https://github.com/sirfyyn/flelink">Source</a><a href="https://github.com/sirfyyn/FastLocalExperts">FLE engine</a><a href="https://sirfyyn.de/en/">sirfyyn.de</a></nav>
+  <nav aria-label="Legal"><a href="../impressum.html">Impressum</a><a href="../privacy.html">Privacy</a><a href="../terms.html">Terms</a><a href="../datenschutz.html">Datenschutz</a></nav>
+  <p class="fine">MIT licence · no cookies, no third-party trackers · © 2026 Max Bitzer</p>
+</div></footer>
+</body>
+</html>

@@ -12,6 +12,7 @@ Regeln:
   links        jede lokale Datei, auf die index.html zeigt (href, src, poster, data-cast, data-end), liegt in site/
                (install.sh und install.ps1 kommen beim Ausrollen aus der Wurzel dazu)
   aufnahmen    die Endzustände der Terminal-Aufzeichnungen in index.html passen zu den Dateien (casts_einsetzen.py --pruefen)
+  unterseiten  site/models/ und site/gpu/ sind das, was site/seiten_bauen.mjs aus fit.js schreibt (nur wenn node da ist)
   passt-regel  die Regel der Seite (site/fit.js) besteht die Fälle aus den Rust-Tests (tests/site-fit.test.mjs; nur wenn
                node da ist, sonst ein Hinweis)
 
@@ -38,7 +39,7 @@ def main() -> int:
         print("Cargo.toml: keine Version unter [workspace.package] gefunden")
         return 1
     version = m.group(1)
-    for datei in sorted(SITE.glob("*.html")):
+    for datei in sorted(SITE.glob("*.html")) + sorted(SITE.glob("models/*.html")) + sorted(SITE.glob("gpu/*.html")):
         roh = datei.read_text(encoding="utf-8")
         for v in re.findall(r'"softwareVersion"\s*:\s*"([^"]+)"', roh):
             if v != version:
@@ -60,7 +61,7 @@ def main() -> int:
         if re.search(r'\son[a-z]+="', roh):
             funde.append(f"{datei.name}: csp Ereignis-Attribut (on…=\"…\"; der Server führt es nicht aus)")
     for loc in re.findall(r"<loc>https://flelink\.run/([^<]*)</loc>", (SITE / "sitemap.xml").read_text(encoding="utf-8")):
-        ziel = SITE / (loc or "index.html")
+        ziel = SITE / (loc + "index.html" if loc == "" or loc.endswith("/") else loc)
         if not ziel.is_file():
             funde.append(f"sitemap.xml: sitemap /{loc} gibt es nicht")
         elif re.search(r'name="robots"[^>]*noindex', ziel.read_text(encoding="utf-8")):
@@ -72,7 +73,7 @@ def main() -> int:
     for ziel in sorted(ziele):
         if ziel in ("./", "install.sh", "install.ps1"):
             continue
-        if not (SITE / ziel).is_file():
+        if not (SITE / (ziel + "index.html" if ziel.endswith("/") else ziel)).is_file():
             funde.append(f"index.html: links {ziel} fehlt in site/")
     aufnahmen = subprocess.run([sys.executable, "-I", str(SITE / "casts_einsetzen.py"), "--pruefen"], capture_output=True, text=True)
     if aufnahmen.returncode != 0:
@@ -81,6 +82,9 @@ def main() -> int:
         test = subprocess.run(["node", "--test", str(WURZEL / "tests" / "site-fit.test.mjs")], capture_output=True, text=True)
         if test.returncode != 0:
             funde.append("fit.js: passt-regel besteht tests/site-fit.test.mjs nicht (node --test tests/site-fit.test.mjs)")
+        seiten = subprocess.run(["node", str(SITE / "seiten_bauen.mjs"), "--pruefen"], capture_output=True, text=True)
+        if seiten.returncode != 0:
+            funde.extend("unterseiten: " + z for z in (seiten.stdout.strip().splitlines() or ["seiten_bauen.mjs --pruefen schlug fehl"]))
     else:
         print("Hinweis: node fehlt, die Passt-Regel (tests/site-fit.test.mjs) wurde nicht geprüft.")
     for f in funde:
