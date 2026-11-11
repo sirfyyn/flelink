@@ -1037,6 +1037,7 @@ export const T = {
   "Install new versions by themselves": "새 버전을 자동으로 설치",
   "Only while nothing is being answered: no model is loaded, or it has been quiet for 15 minutes and “Load this model when FLE Link starts” (Engine page) brings it back. Otherwise FLE Link waits.": "아무것도 답하고 있지 않을 때만: 불러온 모델이 없거나, 15분 동안 조용했고 “FLE Link가 시작될 때 이 모델 불러오기”(엔진 페이지)로 모델이 돌아오는 경우. 그렇지 않으면 FLE Link가 기다립니다.",
   "Normal with a draft model that needs the main model (DFlash, DSpark): it cannot be measured on its own, so the engine fits the main model without it.": "주 모델이 필요한 초안 모델(DFlash, DSpark)에서는 정상입니다. 단독으로는 측정할 수 없어 엔진이 이를 빼고 주 모델을 맞춥니다.",
+  "They wait for a model: the agent keeps them until one is loaded on the Engine page.": "모델을 기다리는 중입니다. 엔진 페이지에서 모델을 불러올 때까지 에이전트가 보관합니다.",
 };
 
 export const P = [

@@ -909,6 +909,7 @@ export const DE = {
   "Install new versions by themselves": "Neue Versionen von selbst installieren",
   "Only while nothing is being answered: no model is loaded, or it has been quiet for 15 minutes and “Load this model when FLE Link starts” (Engine page) brings it back. Otherwise FLE Link waits.": "Nur, solange nichts beantwortet wird: Kein Modell ist geladen, oder es war 15 Minuten ruhig und „Dieses Modell laden, wenn FLE Link startet“ (Engine-Seite) bringt es zurück. Sonst wartet FLE Link.",
   "Normal with a draft model that needs the main model (DFlash, DSpark): it cannot be measured on its own, so the engine fits the main model without it.": "Normal bei einem Entwurfsmodell, das das Hauptmodell braucht (DFlash, DSpark): Es lässt sich nicht allein vermessen, deshalb passt die Engine das Hauptmodell ohne es ein.",
+  "They wait for a model: the agent keeps them until one is loaded on the Engine page.": "Sie warten auf ein Modell: Der Agent behält sie, bis auf der Engine-Seite eines geladen ist.",
 };
 
 // texts with a number, a size or a path in them

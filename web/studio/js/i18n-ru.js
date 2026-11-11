@@ -1037,6 +1037,7 @@ export const T = {
   "Install new versions by themselves": "Устанавливать новые версии автоматически",
   "Only while nothing is being answered: no model is loaded, or it has been quiet for 15 minutes and “Load this model when FLE Link starts” (Engine page) brings it back. Otherwise FLE Link waits.": "Только пока ничего не отвечается: модель не загружена либо уже 15 минут тихо и «Загружать эту модель при запуске FLE Link» (страница «Движок») вернёт её. Иначе FLE Link ждёт.",
   "Normal with a draft model that needs the main model (DFlash, DSpark): it cannot be measured on its own, so the engine fits the main model without it.": "Нормально для модели-черновика, которой нужна основная модель (DFlash, DSpark): отдельно её не измерить, поэтому движок размещает основную модель без неё.",
+  "They wait for a model: the agent keeps them until one is loaded on the Engine page.": "Они ждут модель: агент хранит их, пока на странице «Движок» не будет загружена модель.",
 };
 
 export const P = [
