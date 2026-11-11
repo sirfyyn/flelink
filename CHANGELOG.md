@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.13 (2026-11-11)
+
 - **No second agent.** An FLE Durable that an FLE Link left behind when it was killed is stopped before a new one
   starts; two agents on one queue would run events twice.
 - **Events wait for the model** (FLE Durable 0.2.2): while no model is loaded, what the agenda, a webhook or another
