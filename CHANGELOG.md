@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **The live panel stays when the agent answers.** In the chat, "Agent" showed no live data and no button for it: speed, accepted
+  drafts, GPUs and memory were only part of "Direct to model". Both now show the same panel (`web/studio/js/live-panel.js`).
+
 ## 0.1.13 (2026-11-11)
 
 - **No second agent.** An FLE Durable that an FLE Link left behind when it was killed is stopped before a new one
