@@ -115,6 +115,16 @@ struct State {
     next_gen: u64,
     /// when this program last stopped an engine; a start soon after waits for the GPU memory
     stopped_at: Option<Instant>,
+    /// inference servers found on this machine while no engine runs (local_servers.rs), and when it was last looked
+    found: Vec<Value>,
+    found_checked: Option<Instant>,
+    /// connect to the only server found (the setting attach_found); the port of FLE Link's own page is never one
+    find_auto: bool,
+    skip_port: u16,
+    /// the attached server is one FLE Link found by itself: a start of its own engine may take its place
+    found_by_itself: bool,
+    /// the user disconnected: do not connect again by itself in this run
+    user_left: bool,
 }
 
 enum Op {
@@ -169,6 +179,12 @@ impl Engine {
             proc: None,
             next_gen: 1,
             stopped_at: None,
+            found: vec![],
+            found_checked: None,
+            find_auto: true,
+            skip_port: 0,
+            found_by_itself: false,
+            user_left: false,
         }));
         let (tx, rx) = channel::<Op>();
         let e = Engine {
@@ -221,6 +237,14 @@ impl Engine {
     }
 
     pub fn start(&self, plan: Plan) -> Result<(), EngineErr> {
+        {
+            // a server FLE Link connected to by itself gives way to the model the user starts
+            let mut s = self.st.lock().unwrap();
+            if s.state == "attached" && s.found_by_itself {
+                Self::detach_locked(&mut s);
+                s.user_left = true;
+            }
+        }
         Self::refuse_start(&self.st.lock().unwrap())?;
         if port_taken(plan.port) {
             return Err(EngineErr::Busy(format!("Port {} is already in use: another server answers there. Stop that server first, or give this start another port.", plan.port)));
@@ -255,6 +279,7 @@ impl Engine {
         let mut s = self.st.lock().unwrap();
         if s.state == "attached" {
             Self::detach_locked(&mut s);
+            s.user_left = true; // a server found on this machine is not taken again behind the user's back
             return;
         }
         if s.proc.is_none() {
@@ -282,6 +307,76 @@ impl Engine {
         s.load_total = 0;
         s.load_read = 0;
         s.rss = None;
+        s.found_by_itself = false;
+    }
+
+    /// Whether to connect to a server found on this machine by itself, and which port is FLE Link's own page.
+    pub fn configure_find(&self, auto: bool, skip_port: u16) {
+        let mut s = self.st.lock().unwrap();
+        s.find_auto = auto;
+        s.skip_port = skip_port;
+    }
+
+    /// The servers found on this machine at the last look (empty while an engine runs or is attached).
+    pub fn found(&self) -> Value {
+        let s = self.st.lock().unwrap();
+        json!({"servers": if s.state == "stopped" { s.found.clone() } else { vec![] }, "auto": s.find_auto,
+               "by_itself": s.state == "attached" && s.found_by_itself})
+    }
+
+    /// While no engine runs: look for inference servers on this machine, at most every 15 s, off the request thread.
+    pub fn look_if_due(&self) {
+        {
+            let mut s = self.st.lock().unwrap();
+            let due = s.state == "stopped"
+                && s.proc.is_none()
+                && s.found_checked
+                    .is_none_or(|t| t.elapsed() > Duration::from_secs(15));
+            if !due {
+                return;
+            }
+            s.found_checked = Some(Instant::now());
+        }
+        let me = self.clone();
+        std::thread::spawn(move || me.look_for_servers());
+    }
+
+    /// Look for inference servers on this machine and, if exactly one answers and the user did not disconnect,
+    /// connect to it.
+    pub fn look_for_servers(&self) {
+        let skip = {
+            let mut s = self.st.lock().unwrap();
+            if s.state != "stopped" || s.proc.is_some() {
+                return;
+            }
+            s.found_checked = Some(Instant::now());
+            s.skip_port
+        };
+        let servers = crate::local_servers::local_servers(&[skip]);
+        let take = {
+            let mut s = self.st.lock().unwrap();
+            if s.state != "stopped" || s.proc.is_some() {
+                return;
+            }
+            s.found = servers.clone();
+            (s.find_auto
+                && !s.user_left
+                && servers.len() == 1
+                && servers[0]["locked"] != json!(true))
+            .then(|| servers[0]["url"].as_str().unwrap_or("").to_string())
+        };
+        if let Some(url) = take.filter(|u| !u.is_empty()) {
+            if self.attach(&url, "", "").is_ok() {
+                let mut s = self.st.lock().unwrap();
+                if s.state == "attached" && s.base_url == url {
+                    s.found_by_itself = true;
+                }
+                drop(s);
+                self.append(&format!(
+                    "FLE Link: connected to the server that runs on this machine ({url})"
+                ));
+            }
+        }
     }
 
     /// Use a server that runs already. A systemd unit to follow comes with the Linux service work.
@@ -313,6 +408,9 @@ impl Engine {
                 ));
             }
             s.state = "attached".into();
+            s.found_by_itself = false;
+            s.user_left = false;
+            s.found.clear();
             s.base_url = url;
             s.health_path = "/health".into();
             s.api_key = key.to_string();

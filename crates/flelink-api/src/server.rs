@@ -2148,7 +2148,7 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
             let models = st.library.lock().unwrap().scan(&st.models_dir());
             Ok(json!({"models": models, "extras": st.extras_view()}))
         }
-        // the first-run view: models already on this machine, and folders to search (found.rs)
+        // the first-run view: models already on this machine, and folders to search (local_servers.rs)
         ("GET", "/api/models/found") => {
             let lib = st.library.lock().unwrap().scan(&st.models_dir());
             let known: std::collections::HashSet<std::path::PathBuf> = lib
@@ -2288,7 +2288,21 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                 )),
             }
         }
-        ("GET", "/api/engine") => Ok(st.engine.status()),
+        ("GET", "/api/engine") => {
+            // no engine: a server that runs on this machine is found and connected (local_servers.rs)
+            let auto = st
+                .config
+                .lock()
+                .unwrap()
+                .get("attach_found")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            st.engine
+                .configure_find(auto, st.port.load(std::sync::atomic::Ordering::Relaxed));
+            st.engine.look_if_due();
+            Ok(st.engine.status())
+        }
+        ("GET", "/api/engine/found") => Ok(st.engine.found()),
         // FLE's own status (schema 1, FLE v1.2.6 and newer): what it decided at start (profile, cache, store, warnings)
         // and its live counters. Another engine, or an FLE without the endpoint, answers {"available": false}.
         ("GET", "/api/engine/fle-status") => Ok(st.engine.fle_status()),

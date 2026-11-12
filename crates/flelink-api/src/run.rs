@@ -223,6 +223,24 @@ pub fn run(o: RunOptions) -> i32 {
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_default();
         }
+        // Nothing to connect to and no model of its own to load: a server that already runs on this machine is found
+        // and connected (local_servers.rs), also when no page is open.
+        let will_autostart = cfg("launch.autostart")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+            && cfg("last_model")
+                .and_then(|v| v.as_str().map(|s| !s.is_empty()))
+                .unwrap_or(false);
+        st.engine.configure_find(
+            cfg("attach_found")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true),
+            actual,
+        );
+        if attach_url.is_empty() && attach_unit.is_empty() && !will_autostart {
+            let engine = st.engine.clone();
+            std::thread::spawn(move || engine.look_for_servers());
+        }
         if !attach_url.is_empty() || !attach_unit.is_empty() {
             let shown = if attach_unit.is_empty() {
                 attach_url.clone()

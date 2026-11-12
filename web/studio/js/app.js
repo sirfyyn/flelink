@@ -16,6 +16,9 @@ export const store = {
   downloads: [],
   online: true,
   plugins: [], // /api/plugins: the plugins of this machine, see plugin-page.js
+  found: [], // /api/engine/found: inference servers that run on this machine while FLE Link has no engine
+  elsewhere: [], // machines paired with this one that have a model running: {id, name, model} (the Remote access plugin)
+  switchHost: null, // (id) => switch the page to that machine; set by the Remote access plugin
 };
 
 const subs = new Map();
@@ -137,6 +140,12 @@ async function tick() {
     if (key !== lastEngineKey) { lastEngineKey = key; emit("engine"); }
     if (logMoved) emit("enginelog");
     if (stateChanged) renderEngineCard();
+    // no engine here: what FLE Link found running on this machine (it connects by itself when there is exactly one)
+    let found = [];
+    if (eng.state === "stopped") {
+      try { found = (await get("/api/engine/found")).servers || []; } catch { /* an older FLE Link on the other side */ }
+    }
+    store.found = found;
 
     const live = await get(`/api/live?since=${lastLive}`);
     if (live.history.length) {
@@ -321,10 +330,32 @@ function renderEngineCard() {
   else if (e.state === "ready" || e.state === "attached") sub = e.n_ctx ? `Context ${fmt.ctx(e.n_ctx)} tokens` : "Ready";
   else if (e.state === "stopping") sub = e.service ? `Stopping ${e.service.unit}` : "Stopping";
   else if (e.service) sub = `${e.service.unit} is not running`;
+  // A model that runs already, here or on a paired machine, is one click away instead of "No model loaded".
+  const offers = [];
+  if (e.state === "stopped" || e.state === "crashed") {
+    for (const f of store.found || []) {
+      if (f.locked) continue;
+      offers.push(offer("Runs on this computer", f.model || `port ${f.port}`, "Connect", async () => {
+        try { store.engine = await post("/api/engine/attach", { url: f.url }); emit("engine"); renderEngineCard(); } catch (err) { toast(err.message, "bad", 7000); }
+      }));
+    }
+    for (const x of store.elsewhere || []) {
+      offers.push(offer(x.name, x.model, "Switch", () => store.switchHost?.(x.id)));
+    }
+  }
   clear(card,
     h("div", { class: "row" }, stateBadge(e.state), h("span", { class: "grow" }), h("span", { class: "rate" }, rate)),
     h("div", { class: "model", title: name }, name || "No model loaded"),
-    h("div", { class: "small muted", style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, sub));
+    h("div", { class: "small muted", style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, sub),
+    ...offers);
+}
+
+function offer(where, model, action, run) {
+  return h("div", { class: "engine-offer" },
+    h("div", { class: "grow", style: { minWidth: 0 } },
+      h("div", { class: "small muted" }, where),
+      h("div", { class: "model", title: model }, model)),
+    h("button", { class: "btn sm", type: "button", onclick: (ev) => { ev.stopPropagation(); run(); } }, action));
 }
 
 // ----------------------------------------------------------------------------------------------- start

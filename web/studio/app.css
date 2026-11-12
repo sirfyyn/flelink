@@ -256,6 +256,7 @@ svg.i.lg { width: 22px; height: 22px; }
   padding: 10px 12px; display: grid; gap: 6px; cursor: pointer;
 }
 .engine-card:hover { border-color: var(--line-2); }
+.engine-offer { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); cursor: default; }
 .engine-card .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .engine-card .model { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .engine-card .rate { font-family: var(--mono); font-size: 12px; color: var(--muted); }

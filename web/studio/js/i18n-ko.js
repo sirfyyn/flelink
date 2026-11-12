@@ -51,7 +51,7 @@ export const T = {
   "Use": "사용",
   "Use a server that already runs": "이미 실행 중인 서버 사용",
   "Any llama.cpp or FLE server on this computer or the network.": "이 컴퓨터나 네트워크에 있는 모든 llama.cpp 또는 FLE 서버.",
-  "Connect to it": "연결",
+  "Connect to it": "연결", "Runs on this computer": "이 컴퓨터에서 실행 중", "Switch": "전환",
   "Load": "불러오기",
   "Get a model": "모델 받기",
   "Load it": "불러오기",
