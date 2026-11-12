@@ -2290,13 +2290,13 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
         }
         ("GET", "/api/engine") => {
             // no engine: a server that runs on this machine is found and connected (local_servers.rs)
-            let auto = st
-                .config
-                .lock()
-                .unwrap()
-                .get("attach_found")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
+            let auto = crate::local_servers::wanted(
+                st.config
+                    .lock()
+                    .unwrap()
+                    .get("attach_found")
+                    .and_then(|v| v.as_bool()),
+            );
             st.engine
                 .configure_find(auto, st.port.load(std::sync::atomic::Ordering::Relaxed));
             st.engine.look_if_due();

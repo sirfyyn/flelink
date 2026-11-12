@@ -232,9 +232,7 @@ pub fn run(o: RunOptions) -> i32 {
                 .and_then(|v| v.as_str().map(|s| !s.is_empty()))
                 .unwrap_or(false);
         st.engine.configure_find(
-            cfg("attach_found")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true),
+            crate::local_servers::wanted(cfg("attach_found").and_then(|v| v.as_bool())),
             actual,
         );
         if attach_url.is_empty() && attach_unit.is_empty() && !will_autostart {

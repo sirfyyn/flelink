@@ -4,6 +4,20 @@
 use serde_json::{json, Value};
 use std::time::Duration;
 
+/// Whether FLE Link connects to a server it finds by itself. On unless `FLE_ATTACH_FOUND` is 0, off, false or no,
+/// or the settings file has `attach_found: false` (no default there: the settings stay those of the Python Studio).
+pub fn wanted(setting: Option<bool>) -> bool {
+    let off = std::env::var("FLE_ATTACH_FOUND")
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "0" | "off" | "false" | "no"
+            )
+        })
+        .unwrap_or(false);
+    !off && setting.unwrap_or(true)
+}
+
 /// llama-server's own default port: asked even when no process shows up (a container, another user's process).
 const DEFAULT_PORT: u16 = 8080;
 

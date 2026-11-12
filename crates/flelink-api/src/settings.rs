@@ -36,7 +36,6 @@ pub fn defaults() -> Map<String, Value> {
         "switch_url": "",
         "attach_key": "",
         "attach_auto": false,
-        "attach_found": true,
         "last_model": "",
         "theme": "system",
         "updates": {"check": true, "prereleases": false, "dismissed": "", "dismissed_engines": ""}
