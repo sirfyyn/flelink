@@ -51,7 +51,7 @@ export const T = {
   "Use": "Utiliser",
   "Use a server that already runs": "Utiliser un serveur déjà lancé",
   "Any llama.cpp or FLE server on this computer or the network.": "N'importe quel serveur llama.cpp ou FLE sur cet ordinateur ou le réseau.",
-  "Connect to it": "Se connecter",
+  "Connect to it": "Se connecter", "Runs on this computer": "Fonctionne sur cet ordinateur", "Switch": "Basculer",
   "Load": "Charger",
   "Get a model": "Obtenir un modèle",
   "Load it": "Le charger",

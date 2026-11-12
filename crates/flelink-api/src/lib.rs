@@ -23,6 +23,7 @@ pub mod hf;
 pub mod launch;
 pub mod library;
 pub mod live;
+pub mod local_servers;
 pub mod loopguard;
 pub mod mcp;
 pub mod oauth;

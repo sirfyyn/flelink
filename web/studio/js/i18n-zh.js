@@ -51,7 +51,7 @@ export const T = {
   "Use": "使用",
   "Use a server that already runs": "使用已在运行的服务器",
   "Any llama.cpp or FLE server on this computer or the network.": "这台电脑或网络上的任意 llama.cpp 或 FLE 服务器。",
-  "Connect to it": "连接",
+  "Connect to it": "连接", "Runs on this computer": "在这台电脑上运行", "Switch": "切换",
   "Load": "加载",
   "Get a model": "获取模型",
   "Load it": "加载它",

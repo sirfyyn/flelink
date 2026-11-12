@@ -32,7 +32,7 @@ export const DE = {
   "A folder with GGUF files, e.g. ~/models": "Ein Ordner mit GGUF-Dateien, z. B. ~/models", "Add folder": "Ordner hinzufügen", "Use": "Nutzen",
   "Use a server that already runs": "Einen laufenden Server nutzen",
   "Any llama.cpp or FLE server on this computer or the network.": "Jeder llama.cpp- oder FLE-Server auf diesem Rechner oder im Netz.",
-  "Connect to it": "Verbinden", "Load": "Laden", "Get a model": "Modell holen", "Load it": "Laden",
+  "Connect to it": "Verbinden", "Runs on this computer": "Läuft auf diesem Rechner", "Switch": "Wechseln", "Load": "Laden", "Get a model": "Modell holen", "Load it": "Laden",
   "Ask anything. Nothing leaves this computer.": "Frag, was du willst. Nichts verlässt diesen Rechner.",
   "What should": "Woran soll", "work on?": "arbeiten?",
   "Explain mixture-of-experts": "Erkläre Mixture-of-Experts", "Write a Python script": "Schreib ein Python-Skript",

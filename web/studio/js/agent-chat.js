@@ -5,6 +5,7 @@ import { get, hostUrl, post } from "./api.js";
 import { engineUp, on, store, topbar } from "./app.js";
 import { renderMarkdown } from "./md.js";
 import { clear, copyText, h, icon, mark, toast } from "./ui.js";
+import { createLivePanel } from "./live-panel.js";
 
 const TOKEN = document.querySelector('meta[name="fle-token"]')?.content || "";
 const API = "/api/p/agent";
@@ -37,9 +38,11 @@ export function mountAgent(main, { seg }) {
     "The agent answers with the model of the Engine page, and none is loaded. ",
     h("a", { href: "/engine", "data-link": true }, "Load a model"), ", then write to it."));
 
+  const livePanel = createLivePanel(); // the engine's numbers stay in view while the agent answers
   main.replaceChildren(
-    topbar(h("h1", null, "FLE Durable"), seg),
-    h("div", { class: "chat" }, h("div", { class: "chat-col" }, messages, h("div", { class: "composer-wrap" }, approvalBox, modelNote, composer, note))));
+    topbar(h("h1", null, "FLE Durable"), seg, livePanel.button),
+    h("div", { class: "chat" }, h("div", { class: "chat-col" }, messages, h("div", { class: "composer-wrap" }, approvalBox, modelNote, composer, note)),
+      livePanel.el));
 
   const autosize = () => { ta.style.height = "auto"; ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`; };
   ta.addEventListener("input", autosize);
@@ -275,6 +278,7 @@ export function mountAgent(main, { seg }) {
       clearInterval(poll);
       clearInterval(statusPoll);
       offEngine();
+      livePanel.unmount();
       ctrl?.abort();
     },
   };

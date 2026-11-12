@@ -4,6 +4,7 @@
 // chosen host.
 
 import { get, post, transport } from "/js/api.js";
+import { store } from "/js/app.js";
 import { clear, confirmDialog, copyButton, h, icon, openMenu, toast } from "/js/ui.js";
 
 // ----------------------------------------------------------------------------------------------- the transport
@@ -274,6 +275,29 @@ export async function initHosts() {
   listeners.add(paintBadge);
   window.addEventListener("fle-host-problem", (e) => showProblem(e.detail));
   if (current) setInterval(healthCheck, CHECK_EVERY_MS);
+  else { store.switchHost = switchTo; lookElsewhere(); setInterval(lookElsewhere, ELSEWHERE_EVERY_MS); }
+}
+
+// While the page shows this computer: which paired machines have a model running. The engine card offers them, so a
+// model on the machine next door does not hide behind "No model loaded". A machine that does not answer is asked again
+// only every fifth round, so an unreachable one costs a connection attempt every five minutes, not every one.
+const ELSEWHERE_EVERY_MS = 60000;
+let elsewhereRound = 0;
+const silent = new Set();
+async function lookElsewhere() {
+  if (document.hidden) return;
+  const round = elsewhereRound++;
+  const out = [];
+  for (const x of hosts) {
+    if (silent.has(x.id) && round % 5 !== 0) continue;
+    try {
+      const e = await get(`/h/${x.id}/api/engine`);
+      silent.delete(x.id);
+      const model = e?.model?.name || "";
+      if (model && (e.state === "ready" || (e.state === "attached" && e.reachable))) out.push({ id: x.id, name: x.name, model });
+    } catch { silent.add(x.id); }
+  }
+  store.elsewhere = out;
 }
 
 // ----------------------------------------------------------------------------------------------- Settings

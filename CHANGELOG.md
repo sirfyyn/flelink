@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **A server that already runs on this machine is found and connected.** FLE Link said "No model loaded" next to a
+  llama-server that something else had started (a systemd service, a terminal). While it has no engine of its own it now
+  looks for llama-server processes (and port 8080), asks them and connects when exactly one answers; several are offered
+  on the engine card. Starting a model of your own takes the place of a server found this way, and a disconnect is kept
+  until FLE Link starts again. `FLE_ATTACH_FOUND=0` turns it off.
+- **A model on a paired machine is one click away.** While the page shows this computer and nothing runs here, the engine
+  card names the paired machines that have a model running ("Titan · katy") with a button to switch.
+- **The live panel stays when the agent answers.** In the chat, "Agent" showed no live data and no button for it: speed, accepted
+  drafts, GPUs and memory were only part of "Direct to model". Both now show the same panel (`web/studio/js/live-panel.js`).
+
 ## 0.1.13 (2026-11-11)
 
 - **No second agent.** An FLE Durable that an FLE Link left behind when it was killed is stopped before a new one
