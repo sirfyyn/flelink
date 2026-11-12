@@ -205,12 +205,43 @@ export const fmt = {
 
 // ----------------------------------------------------------------------------------------------- feedback
 
+// A message in the corner. It leaves by itself, at once on a click, and waits while the pointer rests on it (so a long
+// error can be read to the end). At most four at a time: the oldest makes room.
 export function toast(message, kind = "info", ms = 4200) {
   const box = document.getElementById("toasts");
-  const el = h("div", { class: `toast ${kind}`, role: kind === "bad" ? "alert" : "status" },
+  const el = h("div", { class: `toast ${kind}`, role: kind === "bad" ? "alert" : "status", title: "Click to dismiss" },
     icon(kind === "bad" ? "alert" : kind === "good" ? "ok" : "info"), h("div", { class: "grow" }, message));
+  let timer = null;
+  const leave = () => {
+    clearTimeout(timer);
+    if (el.classList.contains("leaving")) return;
+    el.classList.add("leaving");
+    setTimeout(() => el.remove(), 170); // the length of the leave animation; also the end when motion is reduced
+  };
+  const wait = () => { clearTimeout(timer); timer = setTimeout(leave, ms); };
+  el.addEventListener("click", leave);
+  el.addEventListener("mouseenter", () => clearTimeout(timer));
+  el.addEventListener("mouseleave", wait);
   box.append(el);
-  setTimeout(() => el.remove(), ms);
+  while (box.children.length > 4) box.firstElementChild.remove();
+  wait();
+}
+
+// A button that does something that takes a moment: it shows a spinner, cannot be pressed twice, and comes back when the
+// work is done or has failed. Returns what the work returns.
+export async function busy(btn, work) {
+  if (!btn || btn.classList.contains("busy")) return undefined;
+  btn.classList.add("busy");
+  btn.setAttribute("aria-busy", "true");
+  const was = btn.disabled;
+  btn.disabled = true;
+  try {
+    return await (typeof work === "function" ? work() : work);
+  } finally {
+    btn.classList.remove("busy");
+    btn.removeAttribute("aria-busy");
+    btn.disabled = was;
+  }
 }
 
 export function confirmDialog({ title, body, ok = "OK", danger = false }) {
@@ -236,7 +267,7 @@ export function openMenu(anchor, items) {
     items.map((it) => {
       if (it === "sep") return h("div", { class: "sep" });
       if (it.head) return h("div", { class: "head" }, it.head);
-      return h("button", { role: "menuitem", onclick: () => { menu.remove(); it.onclick(); } },
+      return h("button", { role: "menuitem", onclick: () => { close(); it.onclick(); } },
         it.icon ? icon(it.icon, "sm") : null, h("span", { class: "grow" }, it.label), it.hint ? h("small", null, it.hint) : null);
     }));
   document.body.append(menu);
@@ -245,8 +276,26 @@ export function openMenu(anchor, items) {
   menu.style.left = `${left}px`;
   const below = r.bottom + 6;
   menu.style.top = below + menu.offsetHeight > window.innerHeight - 8 ? `${Math.max(8, r.top - menu.offsetHeight - 6)}px` : `${below}px`;
-  const away = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("mousedown", away, true); } };
+  // the menu opens from the side of the anchor it sits on, and the keyboard works in it: arrows, Home, End, Escape
+  menu.classList.toggle("up", menu.style.top !== `${below}px`);
+  const buttons = () => [...menu.querySelectorAll("button")];
+  const onKey = (e) => {
+    const all = buttons();
+    const at = all.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); close(); anchor.focus?.(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); all[(at + 1) % all.length]?.focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); all[(at - 1 + all.length) % all.length]?.focus(); }
+    else if (e.key === "Home") { e.preventDefault(); all[0]?.focus(); }
+    else if (e.key === "End") { e.preventDefault(); all[all.length - 1]?.focus(); }
+  };
+  const away = (e) => { if (!menu.contains(e.target)) close(); };
+  function close() {
+    menu.remove();
+    document.removeEventListener("mousedown", away, true);
+    document.removeEventListener("keydown", onKey, true);
+  }
   setTimeout(() => document.addEventListener("mousedown", away, true));
+  document.addEventListener("keydown", onKey, true);
   return menu;
 }
 
@@ -264,7 +313,8 @@ export async function copyText(text, btn) {
   if (btn) {
     const old = [...btn.childNodes];
     btn.replaceChildren(icon("check", "sm"));
-    setTimeout(() => btn.replaceChildren(...old), 1200);
+    btn.classList.add("copied");
+    setTimeout(() => { btn.replaceChildren(...old); btn.classList.remove("copied"); }, 1200);
   }
 }
 
@@ -310,26 +360,41 @@ export function sparkline(values, { color = "var(--accent)", max = null, height 
 }
 
 // Ring gauge for a share between 0 and 1.
+// The live panel is built again every second. So that a ring or a bar still moves from its last value to the new one
+// instead of jumping, the last value is kept here by label and the new element starts from it.
+const lastShown = new Map();
+function glide(key, value, apply) {
+  const from = lastShown.has(key) ? lastShown.get(key) : value;
+  lastShown.set(key, value);
+  apply(from);
+  if (from !== value) requestAnimationFrame(() => requestAnimationFrame(() => apply(value)));
+}
+
 export function ring(value, { color = "var(--cyan)", label = "", help = "" } = {}) {
   const r = 30;
   const c = 2 * Math.PI * r;
   const v = value === null || value === undefined ? null : Math.max(0, Math.min(1, value));
+  let arc = null;
+  if (v !== null) {
+    arc = svg("circle", { class: "arc", cx: 37, cy: 37, r, fill: "none", stroke: color, "stroke-width": 7, "stroke-linecap": "round",
+      transform: "rotate(-90 37 37)" });
+    glide(`ring:${label}`, v, (x) => arc.setAttribute("stroke-dasharray", `${(c * x).toFixed(1)} ${c.toFixed(1)}`));
+  } else lastShown.delete(`ring:${label}`);
   return h("div", { class: "ring", title: help || null },
     svg("svg", { viewBox: "0 0 74 74", role: "img", "aria-label": `${label}: ${v === null ? "no data" : Math.round(v * 100) + " %"}` },
       svg("circle", { class: "track", cx: 37, cy: 37, r, fill: "none", "stroke-width": 7 }),
-      v === null ? null : svg("circle", {
-        cx: 37, cy: 37, r, fill: "none", stroke: color, "stroke-width": 7, "stroke-linecap": "round",
-        "stroke-dasharray": `${(c * v).toFixed(1)} ${c.toFixed(1)}`, transform: "rotate(-90 37 37)",
-      }),
+      arc,
       (() => { const t = svg("text", { class: "val", x: 37, y: 43, "text-anchor": "middle" }); t.textContent = v === null ? "–" : `${Math.round(v * 100)}%`; return t; })()),
     h("div", { class: "lbl" }, label));
 }
 
 export function meter(label, used, total, cls = "", text = null) {
   const share = total ? Math.max(0, Math.min(1, used / total)) : 0;
+  const fill = h("i");
+  glide(`meter:${label}`, share, (x) => { fill.style.width = `${(x * 100).toFixed(1)}%`; });
   return h("div", { class: "meter" },
     h("div", { class: "top" }, h("span", null, label), h("span", null, text ?? `${fmt.gib(used)} / ${fmt.gib(total, 0)}`)),
-    h("div", { class: `bar ${cls}` }, h("i", { style: { width: `${(share * 100).toFixed(1)}%` } })));
+    h("div", { class: `bar ${cls}` }, fill));
 }
 
 export function stateBadge(state, extra = "") {

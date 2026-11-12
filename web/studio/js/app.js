@@ -2,7 +2,7 @@
 
 import { del, get, post } from "./api.js";
 import { initChatSearch, searchActive } from "./chat-search.js";
-import { clear, confirmDialog, fmt, h, icon, stateBadge, toast } from "./ui.js";
+import { busy, clear, confirmDialog, fmt, h, icon, stateBadge, toast } from "./ui.js";
 import { startI18n } from "./i18n.js";
 
 // ----------------------------------------------------------------------------------------------- store
@@ -336,7 +336,12 @@ function renderEngineCard() {
     for (const f of store.found || []) {
       if (f.locked) continue;
       offers.push(offer("Runs on this computer", f.model || `port ${f.port}`, "Connect", async () => {
-        try { store.engine = await post("/api/engine/attach", { url: f.url }); emit("engine"); renderEngineCard(); } catch (err) { toast(err.message, "bad", 7000); }
+        try {
+          store.engine = await post("/api/engine/attach", { url: f.url });
+          emit("engine");
+          renderEngineCard();
+          toast(`Connected to ${f.model || `port ${f.port}`}`, "good");
+        } catch (err) { toast(err.message, "bad", 7000); }
       }));
     }
     for (const x of store.elsewhere || []) {
@@ -355,7 +360,7 @@ function offer(where, model, action, run) {
     h("div", { class: "grow", style: { minWidth: 0 } },
       h("div", { class: "small muted" }, where),
       h("div", { class: "model", title: model }, model)),
-    h("button", { class: "btn sm", type: "button", onclick: (ev) => { ev.stopPropagation(); run(); } }, action));
+    h("button", { class: "btn sm", type: "button", onclick: (ev) => { ev.stopPropagation(); busy(ev.currentTarget, run); } }, action));
 }
 
 // ----------------------------------------------------------------------------------------------- start
