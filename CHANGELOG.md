@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.14 (2026-11-12)
+
 - **A server that already runs on this machine is found and connected.** FLE Link said "No model loaded" next to a
   llama-server that something else had started (a systemd service, a terminal). While it has no engine of its own it now
   looks for llama-server processes (and port 8080), asks them and connects when exactly one answers; several are offered
