@@ -71,6 +71,32 @@ pub fn send(events: &[Ev]) -> Result<(), String> {
     if events.is_empty() {
         return Ok(());
     }
+    // Tested 14.11.2026 on Windows 11 (Notepad): many key presses in one SendInput call arrive with the text cut after a few
+    // characters and every later character replaced by the last one ("ABC abc 123 XYZ" -> "ABC ZZZZZZZZZZZ"). So text goes
+    // out one key press (down + up) per call, with a short pause for the target window to read it.
+    let tastendruecke = events
+        .iter()
+        .filter(|e| matches!(e, Ev::Unicode { up: true, .. } | Ev::Key { up: true, .. }))
+        .count();
+    if tastendruecke > 1 {
+        let mut stueck: Vec<Ev> = Vec::new();
+        for e in events {
+            stueck.push(e.clone());
+            if matches!(e, Ev::Unicode { up: true, .. } | Ev::Key { up: true, .. }) {
+                send_batch(&stueck)?;
+                stueck.clear();
+                std::thread::sleep(std::time::Duration::from_millis(8));
+            }
+        }
+        return send_batch(&stueck);
+    }
+    send_batch(events)
+}
+
+fn send_batch(events: &[Ev]) -> Result<(), String> {
+    if events.is_empty() {
+        return Ok(());
+    }
     let inputs: Vec<INPUT> = events.iter().map(input).collect();
     let sent = unsafe {
         SendInput(
