@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Banners for READMEs and model cards that point to FLE Link, in the look of flelink.run.
-     Open with ?v=engine|model|agent|rin|any; render 2560×640 from a server in site/ (python3 -m http.server 8779), e.g.
+     Open with ?v=engine|model|agent|rin|kate|any; render 2560×640 from a server in site/ (python3 -m http.server 8779), e.g.
      chrome --headless --hide-scrollbars --window-size=2560,640 --screenshot=media/banner-any.png "http://127.0.0.1:8779/banner/banner.html?v=any"
      then sips -s format jpeg -s formatOptions 92 (media/banner-*.jpg are what READMEs and model cards show). -->
 <meta charset="utf-8">
@@ -66,6 +66,9 @@ const V = {
   rin:    ["Run Rin in <span class=grad>one command</span>",
            "DeepSeek V4.1 Flash, 763B, at about 53 tokens/s on one 32 GB GPU. FLE Link installs the engine and fetches the model.",
            "flelink run rin-deepseek-v41-dspark"],
+  kate:   ["Run Kate in <span class=grad>one command</span>",
+           "Swift 1.5 27B without the refusal direction, as a healed IQ4_XS quant for one GPU. FLE Link installs the engine and fetches the model.",
+           "flelink run kate-27b-dspine"],
   any:    ["Run local models in <span class=grad>one command</span>",
            "Find this model in the Studio, see whether it fits before you download, and serve it.",
            "curl -fsSL https://flelink.run/install.sh | sh"],
