@@ -218,6 +218,16 @@ enum Cmd {
         #[arg(long)]
         all: bool,
     },
+    /// Try computer use without an agent: a screenshot into a file, the mouse to the middle, optional text typed
+    #[command(hide = true)]
+    DesktopProbe {
+        /// where the screenshot goes
+        #[arg(long, default_value = "flelink-desktop-probe.png")]
+        out: std::path::PathBuf,
+        /// typed where the focus is, after two seconds
+        #[arg(long)]
+        tippen: Option<String>,
+    },
     /// Download the MTP head and vocabulary for a known model
     #[command(hide = true)]
     FetchSidecars {
@@ -963,6 +973,18 @@ fn run() -> Result<()> {
             &home,
         )?),
         Some(Cmd::Engines { common, all }) => exit(plancmd::run_engines(common, all, &home)?),
+        Some(Cmd::DesktopProbe { out, tippen }) => {
+            if tippen.is_some() {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+            match flelink_api::desktop::probe(&out, tippen.as_deref()) {
+                Ok(text) => {
+                    println!("{text}");
+                    Ok(())
+                }
+                Err(e) => anyhow::bail!("{e}"),
+            }
+        }
         Some(Cmd::FetchSidecars {
             common,
             dry_run,

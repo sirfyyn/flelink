@@ -640,6 +640,7 @@ dependencies = [
  "tower",
  "unicode-normalization",
  "ureq",
+ "windows-sys 0.59.0",
  "zip",
 ]
 

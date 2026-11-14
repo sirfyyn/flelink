@@ -54,6 +54,8 @@ jobs:
         with: { workspaces: "app" }
       - run: npx -y @tauri-apps/cli@2 build
         working-directory: app
+      # the program next to the app, for tries from a terminal (`flelink desktop-probe`, `flelink update`)
+      - run: cargo build --release -p flelink
       - uses: actions/upload-artifact@v4
         with:
           name: "app-${{ matrix.os }}"
@@ -63,4 +65,8 @@ jobs:
             app/target/release/bundle/**/*-setup.exe
             app/target/release/bundle/**/*.AppImage
             app/target/release/bundle/**/*.deb
+            target/release/flelink
+            target/release/fle
+            target/release/flelink.exe
+            target/release/fle.exe
           retention-days: 7
