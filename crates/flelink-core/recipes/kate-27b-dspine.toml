@@ -1,10 +1,10 @@
 id = "kate-27b-dspine"
-title = "Kate 27B IQ4_XS + DSpine (FLE, for a 32 GB GPU)"
+title = "Kate - Qwen 27B - GGUF - SpedUp - Abliterated (FLE, IQ4_XS + DSpine)"
 # PENDING (Release 2026-11): Zahlen erst nach den Messungen auf der geheilten Kate eintragen (KLD, Tempo, kleinste Karte).
 note = "Kate is Katy (Swift-1.5-Qwen3.8-27B) with the refusal direction removed from the weights, as an IQ4_XS quant whose block scales were healed against its own BF16 (same size and format). It no longer refuses requests the original refused for safety reasons: you are responsible for what you do with it. Decode PENDING tok/s on one 32 GB RTX PRO 4500 with the DSpine draft (FLE, PENDING date). Licence: Swift Open License v1.0, the DSpine head Apache-2.0, see the model page."
 
 [model]
-repo = "sirfyyn/Kate-27B-GGUF"
+repo = "sirfyyn/Kate-Qwen-27B-GGUF-SpedUp-Abliterated"
 files = ["kate-27b-IQ4_XS-imat.gguf"]
 # PENDING: Groesse und sha256 der geheilten Datei aus der Upload-Liste (SHA256SUMS)
 size = 0
@@ -13,7 +13,7 @@ size = 0
 "kate-27b-IQ4_XS-imat.gguf" = "PENDING"
 
 [draft]
-repo = "sirfyyn/Kate-27B-GGUF"
+repo = "sirfyyn/Kate-Qwen-27B-GGUF-SpedUp-Abliterated"
 file = "Qwen3.8-27B-DSpine-b16-Q4_K_M.gguf"
 # unchanged tencent/Qwen3.8-27B-DSpine-b16 as GGUF Q4_K_M (sha256 gemessen 14.11.2026 auf Titan)
 sha256 = "0c6c984ac18611288d7b8f497bc347c4921e8231b1b6abf28650481eaf35ff55"
