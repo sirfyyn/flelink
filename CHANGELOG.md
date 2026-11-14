@@ -13,6 +13,12 @@ Tried on a real Windows 11 computer on 14 November (screenshot, mouse, typing in
 - **Typing on Windows sends one key at a time.** Notepad dropped text after a few characters and repeated the last one; each
   key press now goes out on its own with a short pause.
 
+- **The interface answers.** Messages in the corner leave on a click, wait while the pointer rests on them and slide out
+  instead of vanishing; at most four show at once. Menus open with a short movement and work with the keyboard (arrows,
+  Home, End, Escape). A button whose action takes a moment shows a spinner and cannot be pressed twice. Rings and bars in
+  the live panel glide from the last value to the new one. The page you are on has a mark in the navigation, a copied
+  text shows a green check, and switching to another machine says so while the page loads.
+
 ## 0.1.14 (2026-11-12)
 
 - **A server that already runs on this machine is found and connected.** FLE Link said "No model loaded" next to a
