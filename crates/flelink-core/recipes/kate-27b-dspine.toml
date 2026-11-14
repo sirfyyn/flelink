@@ -22,8 +22,9 @@ size = 1257892896
 [engine]
 prefer = ["fle"]
 strict = true
-# PENDING: erste oeffentliche FLE-Version mit DSpine (draft-dflash mit dem DSpine-Kopf); bis dahin nicht veroeffentlichen
-min_version = "PENDING"
+# dense-Linie (FLE v1.3.x, Basis upstream 344846b4f): DSpine, GDN-Replay, Faltungsfenster, Sampler-Schnellweg (Nr. 1131)
+line = "dense"
+min_version = "v1.3.0"
 
 [run]
 context = 32768
@@ -41,3 +42,12 @@ args = [
 ram_gib = 24
 vram_gib = 32
 vram_is_minimum = true
+
+# Schalter wie Katys Produktionsbau (fle.service, 13.11.2026): Faltungsfenster k28, GDN-Replay k30, Sampler-Schnellweg k77
+[run.env]
+FLE_RS_WINDOW = "1"
+FLE_GDN_REPLAY = "1"
+FLE_SAMPLE_TOPK = "1"
+LLAMA_DFLASH_DEV = "1"
+LLAMA_ATTN_ROT_DISABLE = "1"
+
