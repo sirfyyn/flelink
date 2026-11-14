@@ -132,21 +132,27 @@ pub fn asset_name() -> Option<String> {
     })
 }
 
-/// Where a desktop app lives that can replace itself: the bundle on macOS, the AppImage file on Linux. An app from a
-/// package (deb, rpm, the Windows setup) belongs to the system's installer and is not one of these.
+/// Where a desktop app lives that can replace itself: the bundle on macOS, the AppImage file on Linux, the program the
+/// Windows setup put in place (the release's setup installs over it). An app from a package (deb, rpm) or the msi belongs
+/// to the system's installer and is not one of these: the msi goes to a folder the user cannot write, so it fails the
+/// writable test of `advice`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppPlace {
     MacBundle(PathBuf),
     AppImage(PathBuf),
+    WindowsSetup(PathBuf),
 }
 
 impl AppPlace {
     fn path(&self) -> &Path {
         match self {
-            AppPlace::MacBundle(p) | AppPlace::AppImage(p) => p,
+            AppPlace::MacBundle(p) | AppPlace::AppImage(p) | AppPlace::WindowsSetup(p) => p,
         }
     }
 }
+
+/// The setup that `restart` starts on Windows after this program has ended (set by `install_app`).
+static PENDING_SETUP: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 /// `exe` is the running program, `appimage` what the AppImage runtime says in `APPIMAGE` (the file the user started).
 pub fn app_place_of(os: &str, exe: &Path, appimage: Option<&str>) -> Option<AppPlace> {
@@ -166,6 +172,11 @@ pub fn app_place_of(os: &str, exe: &Path, appimage: Option<&str>) -> Option<AppP
             let f = appimage.filter(|a| a.starts_with('/'))?;
             Some(AppPlace::AppImage(PathBuf::from(f)))
         }
+        // …\FLE Link\flelink-app.exe, where the setup put it
+        "windows" => exe
+            .extension()
+            .is_some_and(|x| x.eq_ignore_ascii_case("exe"))
+            .then(|| AppPlace::WindowsSetup(exe.to_path_buf())),
         _ => None,
     }
 }
@@ -185,6 +196,10 @@ pub fn app_asset(os: &str, arch: &str, tag: &str) -> Option<String> {
         ("macos", "x86_64") => Some("FLE.Link_x64.app.tar.gz".into()),
         ("linux", "x86_64") => Some(format!(
             "FLE.Link_{}_amd64.AppImage",
+            tag.trim_start_matches('v')
+        )),
+        ("windows", "x86_64") => Some(format!(
+            "FLE.Link_{}_x64-setup.exe",
             tag.trim_start_matches('v')
         )),
         _ => None,
@@ -693,15 +708,26 @@ impl Updates {
             .ok_or("There is no app build for this machine.")?;
         let data = fetch_checked(base, &asset)?;
         *self.run.lock().unwrap() = json!({"state": "running", "tag": tag, "message": "Installing the new version …", "tail": []});
+        let mut done =
+            json!({"status": "done", "tag": tag, "from": env!("CARGO_PKG_VERSION"), "at": now()});
         match &place {
             AppPlace::MacBundle(bundle) => swap_bundle(bundle, &data)?,
             AppPlace::AppImage(file) => swap_file(file, &data)?,
+            // a running program cannot be replaced on Windows: the checked setup waits in a folder of its own and
+            // `restart` starts it once this app has ended
+            AppPlace::WindowsSetup(_) => {
+                let dir =
+                    std::env::temp_dir().join(format!("flelink-update-{}", std::process::id()));
+                let _ = std::fs::remove_dir_all(&dir);
+                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                let setup = dir.join(&asset);
+                std::fs::write(&setup, &data)
+                    .map_err(|e| format!("The setup could not be saved: {e}."))?;
+                done["setup"] = json!(setup.to_string_lossy());
+                *PENDING_SETUP.lock().unwrap() = Some(setup);
+            }
         }
-        let _ = std::fs::write(
-            &self.result_file,
-            json!({"status": "done", "tag": tag, "from": env!("CARGO_PKG_VERSION"), "at": now()})
-                .to_string(),
-        );
+        let _ = std::fs::write(&self.result_file, done.to_string());
         *self.run.lock().unwrap() = json!({"state": "restarting", "tag": tag, "message": "FLE Link starts again with the new version …", "tail": []});
         Ok(())
     }
@@ -899,6 +925,10 @@ fn engine_updates(installed: &[&Value], release: &Value) -> Vec<Value> {
 /// Start this program again with the same arguments (no second browser tab). Unix replaces the process; Windows starts a
 /// new one a moment after this one has ended.
 pub fn restart() -> ! {
+    #[cfg(windows)]
+    if let Some(setup) = PENDING_SETUP.lock().unwrap().take() {
+        run_setup(&setup);
+    }
     let exe = std::env::current_exe().unwrap_or_default();
     #[cfg(unix)]
     if detect_install()["kind"] == "app" {
@@ -935,6 +965,41 @@ pub fn restart() -> ! {
     }
 }
 
+/// Windows: end this app and let the release's setup (checked by `install_app`) install over it, without questions (`/P`
+/// shows only its progress, `/UPDATE` keeps the shortcuts) and start the new app afterwards (`/R`): the flags of Tauri's
+/// NSIS installer. A shell waits two seconds first, so this app is gone when the setup looks for it; `ping` waits because
+/// `timeout` wants a console. The app keeps its children in a job that ends them with it, so the shell breaks away from
+/// it (main.rs of the app allows that); where that is refused it starts inside, as the CLI's own restart does.
+#[cfg(windows)]
+fn run_setup(setup: &Path) -> ! {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+    let line = format!(
+        "/C ping -n 3 127.0.0.1 >nul & start \"\" \"{}\" /P /UPDATE /R",
+        setup.display()
+    );
+    let spawn = |flags: u32| {
+        std::process::Command::new("cmd")
+            .raw_arg(&line)
+            .env_remove("FLE_UPDATE_FORCE")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(flags)
+            .spawn()
+    };
+    if let Err(e) =
+        spawn(CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB).or_else(|_| spawn(CREATE_NO_WINDOW))
+    {
+        eprintln!(
+            "flelink: could not start the setup {}: {e}; start it by hand",
+            setup.display()
+        );
+    }
+    std::process::exit(0);
+}
+
 /// Start the replaced app and end this one. The app allows one instance, so the new one starts a moment after this one
 /// is gone; the shell that waits is in its own process group and outlives it.
 #[cfg(unix)]
@@ -942,7 +1007,8 @@ fn relaunch_app(place: &AppPlace) -> ! {
     use std::os::unix::process::CommandExt;
     let script = match place {
         AppPlace::MacBundle(_) => "sleep 2; /usr/bin/open \"$0\"",
-        AppPlace::AppImage(_) => "sleep 2; \"$0\" >/dev/null 2>&1 &",
+        // (a Windows setup never gets here: run_setup)
+        AppPlace::AppImage(_) | AppPlace::WindowsSetup(_) => "sleep 2; \"$0\" >/dev/null 2>&1 &",
     };
     let started = std::process::Command::new("/bin/sh")
         .arg("-c")
@@ -988,6 +1054,12 @@ mod tests {
             ),
             Some(AppPlace::AppImage("/home/u/.local/bin/flelink-app".into()))
         );
+        // Windows: the program the setup installed, which the release's setup installs over
+        let win = Path::new(r"C:\Users\u\AppData\Local\FLE Link\flelink-app.exe");
+        assert_eq!(
+            app_place_of("windows", win, None),
+            Some(AppPlace::WindowsSetup(win.to_path_buf()))
+        );
         assert_eq!(app_place_of("windows", exe, None), None);
         assert_eq!(
             app_asset("macos", "aarch64", "v0.1.11").as_deref(),
@@ -997,7 +1069,12 @@ mod tests {
             app_asset("linux", "x86_64", "v0.1.11").as_deref(),
             Some("FLE.Link_0.1.11_amd64.AppImage")
         );
-        assert_eq!(app_asset("windows", "x86_64", "v0.1.11"), None);
+        // the name the release has (FLE.Link_0.1.14_x64-setup.exe) and install.ps1 takes
+        assert_eq!(
+            app_asset("windows", "x86_64", "v0.1.14").as_deref(),
+            Some("FLE.Link_0.1.14_x64-setup.exe")
+        );
+        assert_eq!(app_asset("windows", "aarch64", "v0.1.14"), None);
     }
 
     /// A .app.tar.gz like the release's, with one program file that says `text`.

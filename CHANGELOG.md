@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+Test build for Windows, not released until it has been tried on a real Windows computer:
+
+- **Computer use on Windows.** Screen, mouse and keys straight through Windows itself (user32 and gdi32), nothing to
+  install. The main screen in its real pixels; a window that runs as administrator takes no input from FLE Link. Off as
+  everywhere else, allowed only on the Agent page for a limited time.
+- **The desktop app updates itself on Windows.** It downloads the release's setup, checks it against the signed list, ends
+  and lets the setup install over it (`/P /UPDATE /R`: progress only, then the new app starts). An app from the msi in a
+  folder the user cannot write keeps the link to the release page.
+
 ## 0.1.14 (2026-11-12)
 
 - **A server that already runs on this machine is found and connected.** FLE Link said "No model loaded" next to a
