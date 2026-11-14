@@ -35,6 +35,8 @@ size = 5216519072
 [engine]
 prefer = ["fle"]
 strict = true
+# the FLE engine line (moe: v1.2.x with expert cache and split experts; dense: v1.3.0 and newer)
+line = "moe"
 # v1.2.5: RAM expert store (FLE_MOE_STORE_*), pool, prefill windows, a fixed GPU cache (no uploads while decoding) and a
 # read-only usage profile, so runs give the same text; exact (no cache bonus: with the store it costs speed)
 min_version = "v1.2.5"

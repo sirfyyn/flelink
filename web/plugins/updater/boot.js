@@ -139,7 +139,8 @@ async function applyNow() {
 async function updateEngine(e, btn) {
   btn.disabled = true;
   try {
-    await post("/api/engines/install", { variant: e.variant });
+    // the update stays in the build's engine line (moe or dense), not simply the latest FLE release
+    await post("/api/engines/install", e.line ? { variant: e.variant, line: e.line } : { variant: e.variant });
     toast(`Downloading ${e.label}. Progress is on the Engine page.`, "good", 6000);
   } catch (err) {
     toast(err.message, "bad", 8000);
