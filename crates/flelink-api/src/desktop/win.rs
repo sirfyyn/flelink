@@ -81,7 +81,7 @@ pub fn send(events: &[Ev]) -> Result<(), String> {
     if tastendruecke > 1 {
         let mut stueck: Vec<Ev> = Vec::new();
         for e in events {
-            stueck.push(e.clone());
+            stueck.push(*e);
             if matches!(e, Ev::Unicode { up: true, .. } | Ev::Key { up: true, .. }) {
                 send_batch(&stueck)?;
                 stueck.clear();
