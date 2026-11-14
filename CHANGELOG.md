@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.15 (2026-11-14)
 
-Test build for Windows, not released until it has been tried on a real Windows computer:
+Tried on a real Windows 11 computer on 14 November (screenshot, mouse, typing incl. umlauts, forced self-update):
 
 - **Computer use on Windows.** Screen, mouse and keys straight through Windows itself (user32 and gdi32), nothing to
   install. The main screen in its real pixels; a window that runs as administrator takes no input from FLE Link. Off as
@@ -10,6 +10,8 @@ Test build for Windows, not released until it has been tried on a real Windows c
 - **The desktop app updates itself on Windows.** It downloads the release's setup, checks it against the signed list, ends
   and lets the setup install over it (`/P /UPDATE /R`: progress only, then the new app starts). An app from the msi in a
   folder the user cannot write keeps the link to the release page.
+- **Typing on Windows sends one key at a time.** Notepad dropped text after a few characters and repeated the last one; each
+  key press now goes out on its own with a short pause.
 
 ## 0.1.14 (2026-11-12)
 
