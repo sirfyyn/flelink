@@ -46,7 +46,8 @@ size = 5216519072                      # optional, shown before the download
 prefer = ["fle"]       # engine ids in order; empty: the best for this machine
 strict = true          # only these may run it (the model needs FLE's expert offloading)
 min_version = "v1.2.3" # the oldest engine release the settings work with; the Studio refuses an older one with the reason
-
+line = "moe"           # the FLE engine line: "moe" (v1.2.x) or "dense" (v1.3.0 and newer); missing: "moe"
+max_version = "v1.2.9" # optional emergency brake: newer releases are neither installed nor started for this recipe
 
 [run]
 context = 65536                            # tokens; default: sized from free memory
@@ -78,6 +79,30 @@ Built-in recipes with a draft model or engine flags of their own are TOML files 
 (`deepseek-v41-ista`: DeepSeek-V4.1-Flash with the hot experts locked in RAM; `deepseek-v41-ista-dspark`: the same model
 with FLE's DSpark draft model, for the FLE engine v1.2.1). An engine that locks memory (`FLE_MOE_HOT_MLOCK_GB`) gets the
 system's limit for locked memory; when that is too low, the engine log says how to allow it.
+
+## Engine lines
+
+The FLE engine has two lines that share no code, each on its own llama.cpp base:
+
+| line | releases | what it has | for |
+|---|---|---|---|
+| `moe` | v1.2.x (v1.2.1 … v1.2.6, then v1.2.7 …) | expert cache, split hot/cold experts, `/fle/status` | mixture-of-experts models (Rin, DeepSeek-V4.1) |
+| `dense` | v1.3.0 and newer (v1.3.x, v1.4 …) | DSpine, GDN replay, the fast sampler path | dense models (Kate, Katy) |
+
+A release belongs to a line by its version number alone: before v1.3.0 it is `moe`, from v1.3.0 on `dense`. Tags and the
+folders of installed engines (`<data>/engines/fle-cuda-v1.2.6`) carry the number, so FLE Link knows the line offline and
+for every release, the ones before the split included. FLE Link then
+
+- installs and updates an FLE engine for a recipe only within the recipe's line: the newest release of the line (from
+  GitHub's release list, drafts and test builds such as `v1.3.0-rc1` left out), not simply the latest release;
+- keeps both lines side by side, each release in its own folder, and starts for each recipe the newest build of its line
+  (switching from Rin to Kate in the Studio switches the engine with it);
+- offers an update notice per installed line (a moe build is offered the next moe release, never a dense one);
+- refuses `min_version`/`max_version` outside the recipe's line when it reads the recipe (`line = "moe"` with
+  `min_version = "v1.3.0"` would never start).
+
+A recipe without `line` is `moe`, so recipes written before the split keep running as they did. A llama-server of your
+own (Engine page, custom path) has no line and is not refused.
 
 Checks when a recipe is read: the id and the repo are plain names, every file is a `.gguf` path inside the repo (no `..`,
 no absolute path), environment names are letters, digits and `_`, the context is between 512 and 1,048,576, and unknown
