@@ -1,16 +1,18 @@
 id = "kate-27b-dspine"
 title = "Kate - Qwen 27B - GGUF - SpedUp - Abliterated (FLE, IQ4_XS + DSpine)"
-# PENDING (Release 2026-11): Zahlen erst nach den Messungen auf der geheilten Kate eintragen (KLD, Tempo, kleinste Karte).
-note = "Kate is Katy (Swift-1.5-Qwen3.8-27B) with the refusal direction removed from the weights, as an IQ4_XS quant whose block scales were healed against its own BF16 (same size and format). It no longer refuses requests the original refused for safety reasons: you are responsible for what you do with it. Decode PENDING tok/s on one 32 GB RTX PRO 4500 with the DSpine draft (FLE, PENDING date). Licence: Swift Open License v1.0, the DSpine head Apache-2.0, see the model page."
+# PENDING (Release 2026-11): Tempo und kleinste Karte. Datei = Messbasis-Wahl R1-A (15.11.2026), ungeheilt.
+note = "Kate is Katy (Swift-1.5-Qwen3.8-27B) with the refusal direction removed from the weights, as an IQ4_XS quant in bartowski's tensor layout with our own importance matrix (15.48 GB). It no longer refuses requests the original refused for safety reasons: you are responsible for what you do with it. Decode PENDING tok/s on one 32 GB RTX PRO 4500 with the DSpine draft (FLE, PENDING date). Licence: Swift Open License v1.0, the DSpine head Apache-2.0, see the model page."
 
 [model]
 repo = "sirfyyn/Kate-Qwen-27B-GGUF-SpedUp-Abliterated"
-files = ["kate-27b-IQ4_XS-imat.gguf"]
-# PENDING: Groesse und sha256 der geheilten Datei aus der Upload-Liste (SHA256SUMS)
-size = 0
+# Messbasis-Wahl R1-A (bartowski-Layout + imatrix A), Titan /mnt/fastmodels/kate-varianten/kate-27b-R1-A.gguf,
+# beim Upload so umbenannt; neuer Name, weil kate-27b-IQ4_XS-imat.gguf die alte R0-Datei (15.309.039.712 B) war.
+# sha256 gemessen 15.11.2026 auf Titan (sha256sum).
+files = ["kate-27b-IQ4_XS-imat-R1-A.gguf"]
+size = 15475951648
 
 [model.sha256]
-"kate-27b-IQ4_XS-imat.gguf" = "PENDING"
+"kate-27b-IQ4_XS-imat-R1-A.gguf" = "4bd778cf6912cc1f85fa1aea66503a2d2b3dd7e9d2e58e48255038dbdcadae0b"
 
 [draft]
 repo = "sirfyyn/Kate-Qwen-27B-GGUF-SpedUp-Abliterated"
