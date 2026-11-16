@@ -20,7 +20,10 @@ fn kill_children_with_me() {
             return;
         }
         let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        // breakaway only for a process that asks for it: the shell that starts the setup of an update has to outlive the
+        // app (updates.rs, run_setup); the engine does not ask and stays in
+        info.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
         SetInformationJobObject(
             job,
             JobObjectExtendedLimitInformation,

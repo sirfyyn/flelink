@@ -102,6 +102,99 @@ pub struct EngineSpec {
     /// instead of starting with settings it does not know.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_version: Option<String>,
+    /// The FLE engine line the recipe belongs to (`moe` or `dense`, see [`EngineLine`]); FLE Link installs, updates and
+    /// starts only FLE releases of this line for it. Missing: `moe`.
+    #[serde(default, skip_serializing_if = "EngineLine::is_default")]
+    pub line: EngineLine,
+    /// The newest engine release the settings work with (`v1.2.9`), an emergency brake within the line: newer releases
+    /// are neither installed nor started for this recipe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_version: Option<String>,
+}
+
+/// The two lines of the FLE engine. They share no code (each sits on its own upstream base), so a recipe's numbers belong
+/// to one of them:
+///
+/// - `moe` (v1.2.x): expert cache, split experts, `/fle/status`; for mixture-of-experts models such as Rin.
+/// - `dense` (v1.3.0 and newer): DSpine, GDN replay, the fast sampler path; for dense models such as Kate and Katy.
+///
+/// A release belongs to a line by its version number alone (see [`EngineLine::of`]): every tag and every installed folder
+/// (`fle-cuda-v1.2.6`) carries it, offline too, without an extra download, and the releases before the split need no
+/// marker added afterwards.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum EngineLine {
+    #[default]
+    Moe,
+    Dense,
+}
+
+/// The first release of the dense line; everything before it is the moe line.
+pub const DENSE_FROM: (u32, u32, u32) = (1, 3, 0);
+
+impl EngineLine {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EngineLine::Moe => "moe",
+            EngineLine::Dense => "dense",
+        }
+    }
+
+    /// The versions of the line, in words for messages.
+    pub fn range(&self) -> &'static str {
+        match self {
+            EngineLine::Moe => "v1.2.x",
+            EngineLine::Dense => "v1.3.0 or newer",
+        }
+    }
+
+    /// The line of a release tag, an installed engine's folder or the path of its llama-server (`v1.2.6`,
+    /// `fle-cuda-v1.3.0`, `.../fle-cuda-v1.3.1/bin/llama-server`). Before v1.3.0: moe; from v1.3.0 on: dense. None
+    /// when no version can be read (an own build).
+    pub fn of(path_or_tag: &str) -> Option<EngineLine> {
+        let v = path_or_tag.rsplit(['/', '\\']).find_map(engine_version)?;
+        Some(if v >= DENSE_FROM {
+            EngineLine::Dense
+        } else {
+            EngineLine::Moe
+        })
+    }
+
+    /// Does the release (tag, folder or path) belong to this line? An unknown version (an own build) is not refused.
+    pub fn admits(&self, path_or_tag: &str) -> bool {
+        EngineLine::of(path_or_tag).is_none_or(|l| l == *self)
+    }
+}
+
+impl std::fmt::Display for EngineLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl EngineSpec {
+    /// May this recipe use the FLE release (tag, folder or path)? Its line and, when set, `max_version`. (`min_version`
+    /// is checked on its own: an older engine is refused with the reason, see [`engine_too_old`].)
+    pub fn admits(&self, path_or_tag: &str) -> bool {
+        self.line.admits(path_or_tag)
+            && !self
+                .max_version
+                .as_deref()
+                .is_some_and(|max| engine_too_new(path_or_tag, max))
+    }
+}
+
+/// Is the engine at `path_or_tag` newer than `max`? Unknown versions (an own build) are not refused.
+pub fn engine_too_new(path_or_tag: &str, max: &str) -> bool {
+    let found = path_or_tag.rsplit(['/', '\\']).find_map(engine_version);
+    match (found, engine_version(max)) {
+        (Some(have), Some(top)) => have > top,
+        _ => false,
+    }
 }
 
 /// `v1.2.3` (or the folder of an installed engine that contains it, `fle-cuda-v1.2.3`) as numbers.
@@ -355,6 +448,36 @@ impl Recipe {
             if !env_allowed(k) {
                 bail!(
                     "recipe {}: environment name '{k}' is not allowed (only the engine's own: FLE_, GGML_, LLAMA_, CUDA_VISIBLE_DEVICES, CUDA_DEVICE_ORDER)",
+                    self.id
+                );
+            }
+        }
+        // the version bounds must name a release, and one of the recipe's line (v1.3.0 with line = "moe" never starts)
+        for (field, v) in [
+            ("min_version", &self.engine.min_version),
+            ("max_version", &self.engine.max_version),
+        ] {
+            if let Some(v) = v {
+                let Some(l) = EngineLine::of(v) else {
+                    bail!(
+                        "recipe {}: engine.{field} '{v}' is not a version like v1.2.6",
+                        self.id
+                    );
+                };
+                if l != self.engine.line {
+                    bail!(
+                        "recipe {}: engine.{field} {v} belongs to the {l} line, but the recipe says line = \"{}\" ({})",
+                        self.id,
+                        self.engine.line,
+                        self.engine.line.range()
+                    );
+                }
+            }
+        }
+        if let (Some(min), Some(max)) = (&self.engine.min_version, &self.engine.max_version) {
+            if engine_too_old(max, min) {
+                bail!(
+                    "recipe {}: engine.max_version {max} is older than engine.min_version {min}",
                     self.id
                 );
             }
@@ -698,7 +821,7 @@ fn builtin_catalog() -> Vec<Recipe> {
                         vec![]
                     },
                     strict: m.fle_only,
-                    min_version: None,
+                    ..EngineSpec::default()
                 },
                 run: RunSpec::default(),
                 requires: Requires::default(),
@@ -934,6 +1057,91 @@ temperature = 0.2
         );
         let r = find(std::path::Path::new("/nonexistent"), "deepseek-v41-ista").unwrap();
         assert_eq!(r.engine.min_version.as_deref(), Some("v1.2.5"));
+    }
+
+    #[test]
+    fn a_release_belongs_to_its_line_by_its_version() {
+        use EngineLine::*;
+        for (t, l) in [
+            ("v1.2.1", Moe),
+            ("v1.2.6", Moe),
+            ("v1.2.7", Moe),
+            ("v1.2.12", Moe),
+            ("v1.3.0", Dense),
+            ("v1.3.0-rc1", Dense),
+            ("v1.3.4", Dense),
+            ("v1.4.0", Dense),
+            ("v1.10.0", Dense),
+            ("v2.0.0", Dense),
+            ("fle-cuda-v1.2.6", Moe),
+            ("fle-cuda-v1.3.0", Dense),
+            (
+                "/d/engines/fle-cuda-v1.2.6/fle-d90513f3-bin/llama-server",
+                Moe,
+            ),
+            ("/d/engines/fle-cuda-v1.3.1/bin/llama-server", Dense),
+        ] {
+            assert_eq!(EngineLine::of(t), Some(l), "{t}");
+        }
+        assert_eq!(EngineLine::of("/usr/local/bin/llama-server"), None);
+        assert!(
+            Dense.admits("/usr/local/bin/llama-server"),
+            "an own build is not refused"
+        );
+        assert!(Moe.admits("v1.2.9") && !Moe.admits("v1.3.0"));
+        assert!(Dense.admits("v1.3.0") && !Dense.admits("v1.2.6"));
+        let spec = EngineSpec {
+            max_version: Some("v1.2.8".into()),
+            ..EngineSpec::default()
+        };
+        assert!(spec.admits("fle-cuda-v1.2.8") && !spec.admits("fle-cuda-v1.2.9"));
+    }
+
+    #[test]
+    fn the_line_defaults_to_moe_and_must_agree_with_the_version_bounds() {
+        let base = "id = \"x\"\ntitle = \"X\"\n[model]\nrepo = \"a/b\"\nfiles = [\"m.gguf\"]\n[engine]\nprefer = [\"fle\"]\n";
+        let r = Recipe::parse(base, "t").unwrap();
+        assert_eq!(r.engine.line, EngineLine::Moe);
+        assert!(
+            !r.to_toml().contains("line"),
+            "the default is not written out"
+        );
+        let dense = format!("{base}line = \"dense\"\nmin_version = \"v1.3.0\"\n");
+        let r = Recipe::parse(&dense, "t").unwrap();
+        assert_eq!(r.engine.line, EngineLine::Dense);
+        assert!(r.to_toml().contains("line = \"dense\""));
+        let e = Recipe::parse(&format!("{base}min_version = \"v1.3.0\"\n"), "t").unwrap_err();
+        assert!(format!("{e:#}").contains("dense line"), "{e:#}");
+        let e = Recipe::parse(
+            &format!("{base}line = \"dense\"\nmax_version = \"v1.2.6\"\n"),
+            "t",
+        )
+        .unwrap_err();
+        assert!(format!("{e:#}").contains("moe line"), "{e:#}");
+        assert!(Recipe::parse(&format!("{base}line = \"big\"\n"), "t").is_err());
+        let e = Recipe::parse(
+            &format!("{base}min_version = \"v1.2.6\"\nmax_version = \"v1.2.5\"\n"),
+            "t",
+        )
+        .unwrap_err();
+        assert!(format!("{e:#}").contains("older than"), "{e:#}");
+    }
+
+    #[test]
+    fn every_builtin_recipe_names_its_line() {
+        for r in builtin().into_iter().filter(|r| r.source == "builtin") {
+            if let Some(min) = &r.engine.min_version {
+                assert_eq!(EngineLine::of(min), Some(r.engine.line), "{}", r.id);
+            }
+        }
+        for id in [
+            "rin-deepseek-v41-dspark",
+            "katy-27b-dflash",
+            "deepseek-v41-ista",
+        ] {
+            let r = find(std::path::Path::new("/nonexistent"), id).unwrap();
+            assert_eq!(r.engine.line, EngineLine::Moe, "{id}");
+        }
     }
 
     #[test]

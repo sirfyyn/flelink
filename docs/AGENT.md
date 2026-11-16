@@ -54,7 +54,7 @@ Settings > Accounts connects Hugging Face, GitHub and Google with a click; the s
 
 ## Computer use
 
-Off unless you allow it on the Agent page, 30 minutes at a time. It is off again at every start of FLE Link, only this computer can allow it, and until then every screen, mouse and key call of the agent is refused. It needs on macOS the Screen Recording and Accessibility permissions, on X11 `xdotool` and ImageMagick (`wmctrl` for window lists), on Wayland with a wlroots compositor `grim`, `wtype` and `ydotool`. Windows is not supported yet. An agent that may run shell commands acts as your user anyway: this switch governs its screen, mouse and keyboard tools, it is not a sandbox.
+Off unless you allow it on the Agent page, 30 minutes at a time. It is off again at every start of FLE Link, only this computer can allow it, and until then every screen, mouse and key call of the agent is refused. It needs on macOS the Screen Recording and Accessibility permissions, on X11 `xdotool` and ImageMagick (`wmctrl` for window lists), on Wayland with a wlroots compositor `grim`, `wtype` and `ydotool`. On Windows it needs nothing extra (the main screen only; a window that runs as administrator takes no input from it). An agent that may run shell commands acts as your user anyway: this switch governs its screen, mouse and keyboard tools, it is not a sandbox.
 
 ## In a terminal: `flelink code`
 

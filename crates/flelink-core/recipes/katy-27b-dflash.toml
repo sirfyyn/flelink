@@ -19,6 +19,9 @@ size = 2056414112
 [engine]
 prefer = ["fle"]
 strict = true
+# the FLE engine line (moe: v1.2.x with expert cache and split experts; dense: v1.3.0 and newer)
+line = "moe"
+# measured on v1.2.6; Katy stays on the moe line until a dense recipe of its own is measured
 min_version = "v1.2.6"
 
 [run]

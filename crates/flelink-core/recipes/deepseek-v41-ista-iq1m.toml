@@ -28,6 +28,8 @@ size = 231316485152
 [engine]
 prefer = ["fle"]
 strict = true
+# the FLE engine line (moe: v1.2.x with expert cache and split experts; dense: v1.3.0 and newer)
+line = "moe"
 # v1.2.4: pool and prefill windows; no RAM store here, the hot experts are locked in RAM (needs permission to lock memory)
 min_version = "v1.2.4"
 

@@ -41,3 +41,7 @@ iana-time-zone = "0.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# computer use on Windows (desktop/win.rs): screen, mouse and keys straight from user32 and gdi32
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }

@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **Each recipe knows its FLE engine line.** The FLE engine now has two lines without shared code: `moe` (v1.2.x: expert
+  cache, split experts, `/fle/status`; Rin) and `dense` (v1.3.0 and newer: DSpine, GDN replay, the fast sampler path;
+  Kate, Katy). A recipe says `[engine] line = "moe"` or `"dense"` (missing: `moe`, so every recipe so far stays as it
+  was), and FLE Link installs, updates and starts an FLE engine for it only within that line: the newest release of the
+  line from GitHub's release list (or, when the API refuses, the release feed), not simply the latest release. A release
+  belongs to a line by its version number, so tags and installed folders carry it, offline too. Both lines can be
+  installed side by side; `flelink run` and the Studio start the newest build of the recipe's line, a Studio recipe start
+  without one installs it (Downloads) and starts once it is in. The update notice is per installed line. Optional
+  `max_version` as an emergency brake. All built-in recipes (Rin, DeepSeek-V4.1, Katy) say `line = "moe"`.
+  See docs/RECIPES.md, "Engine lines".
+
+## 0.1.15 (2026-11-14)
+
+Tried on a real Windows 11 computer on 14 November (screenshot, mouse, typing incl. umlauts, forced self-update):
+
+- **Computer use on Windows.** Screen, mouse and keys straight through Windows itself (user32 and gdi32), nothing to
+  install. The main screen in its real pixels; a window that runs as administrator takes no input from FLE Link. Off as
+  everywhere else, allowed only on the Agent page for a limited time.
+- **The desktop app updates itself on Windows.** It downloads the release's setup, checks it against the signed list, ends
+  and lets the setup install over it (`/P /UPDATE /R`: progress only, then the new app starts). An app from the msi in a
+  folder the user cannot write keeps the link to the release page.
+- **Typing on Windows sends one key at a time.** Notepad dropped text after a few characters and repeated the last one; each
+  key press now goes out on its own with a short pause.
+
 ## 0.1.14 (2026-11-12)
 
 - **A server that already runs on this machine is found and connected.** FLE Link said "No model loaded" next to a

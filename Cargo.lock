@@ -589,7 +589,7 @@ dependencies = [
 
 [[package]]
 name = "flelink"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "anyhow",
  "clap",
@@ -605,7 +605,7 @@ dependencies = [
 
 [[package]]
 name = "flelink-api"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "anyhow",
  "axum",
@@ -640,12 +640,13 @@ dependencies = [
  "tower",
  "unicode-normalization",
  "ureq",
+ "windows-sys 0.59.0",
  "zip",
 ]
 
 [[package]]
 name = "flelink-core"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "anyhow",
  "dirs",

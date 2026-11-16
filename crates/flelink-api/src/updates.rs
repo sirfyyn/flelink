@@ -132,21 +132,27 @@ pub fn asset_name() -> Option<String> {
     })
 }
 
-/// Where a desktop app lives that can replace itself: the bundle on macOS, the AppImage file on Linux. An app from a
-/// package (deb, rpm, the Windows setup) belongs to the system's installer and is not one of these.
+/// Where a desktop app lives that can replace itself: the bundle on macOS, the AppImage file on Linux, the program the
+/// Windows setup put in place (the release's setup installs over it). An app from a package (deb, rpm) or the msi belongs
+/// to the system's installer and is not one of these: the msi goes to a folder the user cannot write, so it fails the
+/// writable test of `advice`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppPlace {
     MacBundle(PathBuf),
     AppImage(PathBuf),
+    WindowsSetup(PathBuf),
 }
 
 impl AppPlace {
     fn path(&self) -> &Path {
         match self {
-            AppPlace::MacBundle(p) | AppPlace::AppImage(p) => p,
+            AppPlace::MacBundle(p) | AppPlace::AppImage(p) | AppPlace::WindowsSetup(p) => p,
         }
     }
 }
+
+/// The setup that `restart` starts on Windows after this program has ended (set by `install_app`).
+static PENDING_SETUP: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 /// `exe` is the running program, `appimage` what the AppImage runtime says in `APPIMAGE` (the file the user started).
 pub fn app_place_of(os: &str, exe: &Path, appimage: Option<&str>) -> Option<AppPlace> {
@@ -166,6 +172,11 @@ pub fn app_place_of(os: &str, exe: &Path, appimage: Option<&str>) -> Option<AppP
             let f = appimage.filter(|a| a.starts_with('/'))?;
             Some(AppPlace::AppImage(PathBuf::from(f)))
         }
+        // …\FLE Link\flelink-app.exe, where the setup put it
+        "windows" => exe
+            .extension()
+            .is_some_and(|x| x.eq_ignore_ascii_case("exe"))
+            .then(|| AppPlace::WindowsSetup(exe.to_path_buf())),
         _ => None,
     }
 }
@@ -185,6 +196,10 @@ pub fn app_asset(os: &str, arch: &str, tag: &str) -> Option<String> {
         ("macos", "x86_64") => Some("FLE.Link_x64.app.tar.gz".into()),
         ("linux", "x86_64") => Some(format!(
             "FLE.Link_{}_amd64.AppImage",
+            tag.trim_start_matches('v')
+        )),
+        ("windows", "x86_64") => Some(format!(
+            "FLE.Link_{}_x64-setup.exe",
             tag.trim_start_matches('v')
         )),
         _ => None,
@@ -529,8 +544,10 @@ impl Updates {
         }
         let fle: Vec<&Value> = installed.iter().filter(|e| e["kind"] == "fle").collect();
         if state["error"] == "" && !fle.is_empty() {
-            state["engines"] = match self.get(&format!("{ENGINE_REPO}/releases/latest")) {
-                Ok(rel) => json!(engine_updates(&fle, &rel)),
+            // the release list, not the latest release: the FLE engine has two lines (moe, dense), each build is updated
+            // within its own
+            state["engines"] = match self.get(&format!("{ENGINE_REPO}/releases?per_page=100")) {
+                Ok(list) => json!(engine_updates(&fle, &list)),
                 Err(_) => json!([]), // the engine notice is a bonus; a failure is not shown
             };
         } else if fle.is_empty() {
@@ -693,15 +710,26 @@ impl Updates {
             .ok_or("There is no app build for this machine.")?;
         let data = fetch_checked(base, &asset)?;
         *self.run.lock().unwrap() = json!({"state": "running", "tag": tag, "message": "Installing the new version …", "tail": []});
+        let mut done =
+            json!({"status": "done", "tag": tag, "from": env!("CARGO_PKG_VERSION"), "at": now()});
         match &place {
             AppPlace::MacBundle(bundle) => swap_bundle(bundle, &data)?,
             AppPlace::AppImage(file) => swap_file(file, &data)?,
+            // a running program cannot be replaced on Windows: the checked setup waits in a folder of its own and
+            // `restart` starts it once this app has ended
+            AppPlace::WindowsSetup(_) => {
+                let dir =
+                    std::env::temp_dir().join(format!("flelink-update-{}", std::process::id()));
+                let _ = std::fs::remove_dir_all(&dir);
+                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                let setup = dir.join(&asset);
+                std::fs::write(&setup, &data)
+                    .map_err(|e| format!("The setup could not be saved: {e}."))?;
+                done["setup"] = json!(setup.to_string_lossy());
+                *PENDING_SETUP.lock().unwrap() = Some(setup);
+            }
         }
-        let _ = std::fs::write(
-            &self.result_file,
-            json!({"status": "done", "tag": tag, "from": env!("CARGO_PKG_VERSION"), "at": now()})
-                .to_string(),
-        );
+        let _ = std::fs::write(&self.result_file, done.to_string());
         *self.run.lock().unwrap() = json!({"state": "restarting", "tag": tag, "message": "FLE Link starts again with the new version …", "tail": []});
         Ok(())
     }
@@ -857,48 +885,113 @@ pub fn cli(
     ))
 }
 
-/// FLE engines that have a newer build in `release`, one entry per installed variant.
-fn engine_updates(installed: &[&Value], release: &Value) -> Vec<Value> {
-    let latest = release["tag_name"].as_str().unwrap_or("");
+/// FLE engines that have a newer build in `releases` (GitHub's release list), one entry per installed variant and engine
+/// line: a moe build (v1.2.x) is offered the newest moe release, a dense build (v1.3.0 and newer) the newest dense one,
+/// never the other line's.
+fn engine_updates(installed: &[&Value], releases: &Value) -> Vec<Value> {
+    use flelink_core::recipe::{EngineLine, EngineSpec};
     let ok = regex::Regex::new(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,60}$").unwrap();
-    if !ok.is_match(latest) {
-        return vec![];
-    }
-    let mut variants: Vec<String> = installed
-        .iter()
-        .filter_map(|e| e["variant"].as_str().map(String::from))
+    let tags: Vec<&str> = releases
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["draft"] != true && r["prerelease"] != true)
+        .filter_map(|r| r["tag_name"].as_str())
+        .filter(|t| ok.is_match(t))
         .collect();
-    variants.sort();
-    variants.dedup();
+    let mut groups: Vec<(String, EngineLine)> = installed
+        .iter()
+        .filter_map(|e| {
+            let v = e["variant"].as_str()?;
+            let line = EngineLine::of(&crate::engines::entry_release(e)).unwrap_or_default();
+            Some((v.to_string(), line))
+        })
+        .collect();
+    groups.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.as_str().cmp(b.1.as_str())));
+    groups.dedup();
     let mut out = vec![];
-    for v in variants {
+    for (v, line) in groups {
+        let spec = EngineSpec {
+            line,
+            ..EngineSpec::default()
+        };
+        let Some(latest) = flelink_core::engines::pick_tag(tags.iter().copied(), &spec) else {
+            continue;
+        };
         let have: Vec<&&Value> = installed
             .iter()
-            .filter(|e| e["variant"] == v.as_str())
+            .filter(|e| {
+                e["variant"] == v.as_str()
+                    && EngineLine::of(&crate::engines::entry_release(e)).unwrap_or_default() == line
+            })
             .collect();
-        if have.iter().any(|e| e["tag"] == latest) {
+        if have.iter().any(|e| e["tag"] == latest.as_str()) {
             continue;
         }
         let newest = have
             .iter()
             .max_by(|a, b| {
-                a["installed"]
-                    .as_f64()
-                    .unwrap_or(0.0)
-                    .total_cmp(&b["installed"].as_f64().unwrap_or(0.0))
+                flelink_core::recipe::engine_version(&crate::engines::entry_release(a))
+                    .cmp(&flelink_core::recipe::engine_version(
+                        &crate::engines::entry_release(b),
+                    ))
+                    .then(
+                        a["installed"]
+                            .as_f64()
+                            .unwrap_or(0.0)
+                            .total_cmp(&b["installed"].as_f64().unwrap_or(0.0)),
+                    )
             })
             .unwrap();
+        let installed_tag = newest["tag"].as_str().unwrap_or("");
+        if !flelink_core::engines::newer_in_line(&format!("x-{installed_tag}"), &latest, &spec) {
+            continue;
+        }
         let backend = newest["backend"].as_str().unwrap_or(&v).to_string();
-        out.push(json!({"id": format!("{v}@{latest}"), "variant": v, "label": format!("FLE engine ({backend})"),
-            "installed": newest["tag"].as_str().unwrap_or(""), "latest": latest,
-            "url": format!("https://github.com/{ENGINE_REPO}/releases/tag/{latest}")}));
+        out.push(
+            json!({"id": format!("{v}@{latest}"), "variant": v, "line": line.as_str(),
+            "label": format!("FLE engine ({backend}, {line} line)"),
+            "installed": installed_tag, "latest": latest,
+            "url": format!("https://github.com/{ENGINE_REPO}/releases/tag/{latest}")}),
+        );
     }
     out
+}
+
+#[cfg(test)]
+mod engine_line_tests {
+    use super::*;
+
+    #[test]
+    fn each_installed_line_is_offered_the_newest_release_of_its_own() {
+        let e = |tag: &str| json!({"variant": "fle-cuda", "kind": "fle", "backend": "cuda", "tag": tag, "installed": 1.0});
+        let rels = json!([
+            {"tag_name": "v1.3.1"}, {"tag_name": "v1.3.0"}, {"tag_name": "v1.2.7"},
+            {"tag_name": "v1.2.6"}, {"tag_name": "v1.4.0", "draft": true}
+        ]);
+        let (a, b) = (e("v1.2.6"), e("v1.3.0"));
+        let out = engine_updates(&[&a, &b], &rels);
+        assert_eq!(out.len(), 2, "{out:?}");
+        let moe = out.iter().find(|x| x["line"] == "moe").unwrap();
+        assert_eq!(
+            (moe["installed"].as_str(), moe["latest"].as_str()),
+            (Some("v1.2.6"), Some("v1.2.7"))
+        );
+        let dense = out.iter().find(|x| x["line"] == "dense").unwrap();
+        assert_eq!(dense["latest"], "v1.3.1");
+        // only a moe build installed and no newer moe release: v1.3.x is not offered as its update
+        let only = engine_updates(&[&e("v1.2.7")], &rels);
+        assert!(only.is_empty(), "{only:?}");
+    }
 }
 
 /// Start this program again with the same arguments (no second browser tab). Unix replaces the process; Windows starts a
 /// new one a moment after this one has ended.
 pub fn restart() -> ! {
+    #[cfg(windows)]
+    if let Some(setup) = PENDING_SETUP.lock().unwrap().take() {
+        run_setup(&setup);
+    }
     let exe = std::env::current_exe().unwrap_or_default();
     #[cfg(unix)]
     if detect_install()["kind"] == "app" {
@@ -935,6 +1028,41 @@ pub fn restart() -> ! {
     }
 }
 
+/// Windows: end this app and let the release's setup (checked by `install_app`) install over it, without questions (`/P`
+/// shows only its progress, `/UPDATE` keeps the shortcuts) and start the new app afterwards (`/R`): the flags of Tauri's
+/// NSIS installer. A shell waits two seconds first, so this app is gone when the setup looks for it; `ping` waits because
+/// `timeout` wants a console. The app keeps its children in a job that ends them with it, so the shell breaks away from
+/// it (main.rs of the app allows that); where that is refused it starts inside, as the CLI's own restart does.
+#[cfg(windows)]
+fn run_setup(setup: &Path) -> ! {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+    let line = format!(
+        "/C ping -n 3 127.0.0.1 >nul & start \"\" \"{}\" /P /UPDATE /R",
+        setup.display()
+    );
+    let spawn = |flags: u32| {
+        std::process::Command::new("cmd")
+            .raw_arg(&line)
+            .env_remove("FLE_UPDATE_FORCE")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(flags)
+            .spawn()
+    };
+    if let Err(e) =
+        spawn(CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB).or_else(|_| spawn(CREATE_NO_WINDOW))
+    {
+        eprintln!(
+            "flelink: could not start the setup {}: {e}; start it by hand",
+            setup.display()
+        );
+    }
+    std::process::exit(0);
+}
+
 /// Start the replaced app and end this one. The app allows one instance, so the new one starts a moment after this one
 /// is gone; the shell that waits is in its own process group and outlives it.
 #[cfg(unix)]
@@ -942,7 +1070,8 @@ fn relaunch_app(place: &AppPlace) -> ! {
     use std::os::unix::process::CommandExt;
     let script = match place {
         AppPlace::MacBundle(_) => "sleep 2; /usr/bin/open \"$0\"",
-        AppPlace::AppImage(_) => "sleep 2; \"$0\" >/dev/null 2>&1 &",
+        // (a Windows setup never gets here: run_setup)
+        AppPlace::AppImage(_) | AppPlace::WindowsSetup(_) => "sleep 2; \"$0\" >/dev/null 2>&1 &",
     };
     let started = std::process::Command::new("/bin/sh")
         .arg("-c")
@@ -988,6 +1117,12 @@ mod tests {
             ),
             Some(AppPlace::AppImage("/home/u/.local/bin/flelink-app".into()))
         );
+        // Windows: the program the setup installed, which the release's setup installs over
+        let win = Path::new(r"C:\Users\u\AppData\Local\FLE Link\flelink-app.exe");
+        assert_eq!(
+            app_place_of("windows", win, None),
+            Some(AppPlace::WindowsSetup(win.to_path_buf()))
+        );
         assert_eq!(app_place_of("windows", exe, None), None);
         assert_eq!(
             app_asset("macos", "aarch64", "v0.1.11").as_deref(),
@@ -997,7 +1132,12 @@ mod tests {
             app_asset("linux", "x86_64", "v0.1.11").as_deref(),
             Some("FLE.Link_0.1.11_amd64.AppImage")
         );
-        assert_eq!(app_asset("windows", "x86_64", "v0.1.11"), None);
+        // the name the release has (FLE.Link_0.1.14_x64-setup.exe) and install.ps1 takes
+        assert_eq!(
+            app_asset("windows", "x86_64", "v0.1.14").as_deref(),
+            Some("FLE.Link_0.1.14_x64-setup.exe")
+        );
+        assert_eq!(app_asset("windows", "aarch64", "v0.1.14"), None);
     }
 
     /// A .app.tar.gz like the release's, with one program file that says `text`.
