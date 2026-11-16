@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.16 (2026-11-16)
 
+- **Kate.** New recipe `kate-27b-dspine`: Katy with the refusal direction removed (IQ4_XS, 15.48 GB) and the public
+  DSpine b16 draft head, on the FLE dense line from v1.3.0. 152.6 tok/s on agent tasks on one 32 GB card, full speed from
+  20 GB, smallest card 12 GB. It no longer refuses requests the original refused for safety reasons.
 - **Each recipe knows its FLE engine line.** The FLE engine now has two lines without shared code: `moe` (v1.2.x: expert
   cache, split experts, `/fle/status`; Rin) and `dense` (v1.3.0 and newer: DSpine, GDN replay, the fast sampler path;
   Kate, Katy). A recipe says `[engine] line = "moe"` or `"dense"` (missing: `moe`, so every recipe so far stays as it
