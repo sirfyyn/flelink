@@ -910,6 +910,7 @@ export const DE = {
   "Only while nothing is being answered: no model is loaded, or it has been quiet for 15 minutes and “Load this model when FLE Link starts” (Engine page) brings it back. Otherwise FLE Link waits.": "Nur, solange nichts beantwortet wird: Kein Modell ist geladen, oder es war 15 Minuten ruhig und „Dieses Modell laden, wenn FLE Link startet“ (Engine-Seite) bringt es zurück. Sonst wartet FLE Link.",
   "Normal with a draft model that needs the main model (DFlash, DSpark): it cannot be measured on its own, so the engine fits the main model without it.": "Normal bei einem Entwurfsmodell, das das Hauptmodell braucht (DFlash, DSpark): Es lässt sich nicht allein vermessen, deshalb passt die Engine das Hauptmodell ohne es ein.",
   "They wait for a model: the agent keeps them until one is loaded on the Engine page.": "Sie warten auf ein Modell: Der Agent behält sie, bis auf der Engine-Seite eines geladen ist.",
+  "Click to dismiss": "Klicken zum Schließen", "Switching to this computer …": "Wechsle zu diesem Rechner …",
 };
 
 // texts with a number, a size or a path in them
@@ -1071,6 +1072,8 @@ export const DE_PATTERNS = [
   [/^Missing: (.*)\. Install an engine on the Engine page or enter the folder above\.$/, "Fehlt: $1. Installiere eine Engine auf der Engine-Seite oder trag oben den Ordner ein."],
   [/^The recipe was made with (.*)\. Point this at your copy\.$/, "Das Rezept wurde mit $1 gemacht. Richte das hier auf deine Kopie."],
 
+  [/^Switching to (.*) …$/, "Wechsle zu $1 …"],
+  [/^Connected to ([^:.]*)$/, "Verbunden mit $1"],
 ];
 
 export const T = DE;

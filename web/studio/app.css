@@ -811,6 +811,40 @@ svg.i.flip { transform: scaleX(-1); }
 .btn:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .btn.primary:not(:disabled):hover { box-shadow: 0 6px 18px -8px var(--accent); }
 
+/* Feedback: what was pressed answers, what changed moves there, what takes a moment says so. All of it stops with
+   prefers-reduced-motion (below). */
+.toast { cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+.toast:hover { transform: translateY(-1px); }
+.toast.leaving { animation: toast-out 0.17s ease-in forwards; pointer-events: none; }
+@keyframes toast-out { to { opacity: 0; transform: translateX(14px); } }
+.menu { transform-origin: top left; animation: menu-in 0.12s ease-out; }
+.menu.up { transform-origin: bottom left; }
+@keyframes menu-in { from { opacity: 0; transform: scale(0.96) translateY(-3px); } to { opacity: 1; transform: none; } }
+.menu button:focus-visible { background: var(--soft); outline-offset: -2px; }
+.modal { animation: modal-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+.btn.busy { position: relative; color: transparent !important; pointer-events: none; }
+.btn.busy > * { visibility: hidden; }
+.btn.busy::after { content: ""; position: absolute; inset: 0; margin: auto; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--muted); border-top-color: transparent; animation: spin 0.7s linear infinite; }
+.btn.primary.busy::after { border-color: var(--accent-ink); border-top-color: transparent; }
+.btn.copied { color: var(--good); }
+.btn.copied .i { animation: pop 0.25s ease-out; }
+@keyframes pop { 0% { transform: scale(0.6); } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }
+.ring .arc { transition: stroke-dasharray 0.7s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.meter .bar i { transition: width 0.7s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.nav a, .nav .nav-group { transition: background-color 0.15s, color 0.15s; position: relative; }
+.nav a.active::before { content: ""; position: absolute; left: -6px; top: 8px; bottom: 8px; width: 3px; border-radius: 3px;
+  background: var(--text); opacity: 0.55; animation: nav-in 0.2s ease-out; }
+@keyframes nav-in { from { transform: scaleY(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
+.chip { transition: background-color 0.15s, border-color 0.15s, color 0.15s; }
+.engine-offer { animation: rise 0.22s ease-out; }
+.host-leaving { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; gap: 12px; align-content: center;
+  background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(3px); animation: fade 0.15s ease-out;
+  color: var(--muted); font-size: 14px; }
+.host-leaving .spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

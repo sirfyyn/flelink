@@ -61,6 +61,9 @@ function remember(id, name) {
 export function switchTo(id) {
   const host = hosts.find((x) => x.id === id);
   remember(id, host?.name || "");
+  // the page loads again for the other machine: say so instead of freezing for a moment
+  document.body.append(h("div", { class: "host-leaving", role: "status" },
+    h("div", { class: "spinner" }), h("div", null, host ? `Switching to ${host.name} …` : "Switching to this computer …")));
   location.href = "/";
 }
 
