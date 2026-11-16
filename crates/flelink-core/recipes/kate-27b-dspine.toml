@@ -1,7 +1,7 @@
 id = "kate-27b-dspine"
 title = "Kate - Qwen 27B - GGUF - SpedUp - Abliterated (FLE, IQ4_XS + DSpine)"
-# PENDING (Release 2026-11): Tempo und kleinste Karte. Datei = Messbasis-Wahl R1-A (15.11.2026), ungeheilt.
-note = "Kate is Katy (Swift-1.5-Qwen3.8-27B) with the refusal direction removed from the weights, as an IQ4_XS quant in bartowski's tensor layout with our own importance matrix (15.48 GB). It no longer refuses requests the original refused for safety reasons: you are responsible for what you do with it. Decode PENDING tok/s on one 32 GB RTX PRO 4500 with the DSpine draft (FLE, PENDING date). Licence: Swift Open License v1.0, the DSpine head Apache-2.0, see the model page."
+# Datei = Messbasis-Wahl R1-A (15.11.2026), ungeheilt. Tempo und Karten: Titan /mnt/perf/kate/statistik_r1a/ergebnis.md (k80, -fitt).
+note = "Kate is Katy (Swift-1.5-Qwen3.8-27B) with the refusal direction removed from the weights, as an IQ4_XS quant in bartowski's tensor layout with our own importance matrix (15.48 GB). It no longer refuses requests the original refused for safety reasons: you are responsible for what you do with it. Decode with the DSpine draft on one 32 GB RTX PRO 4500: 152.6 tok/s on agent tasks, 153.6 on code (FLE v1.3.0 source, Nov 2026). From 20 GB of GPU memory all 66 layers fit at full speed (142.7 tok/s, memory limit simulated on the 32 GB card); 111.9 at 18 GB, 37.3 at 16 GB, 22.8 at 14 GB, 14.1 at 12 GB. Licence: Swift Open License v1.0, the DSpine head Apache-2.0, see the model page."
 
 [model]
 repo = "sirfyyn/Kate-Qwen-27B-GGUF-SpedUp-Abliterated"
@@ -39,10 +39,10 @@ args = [
   "--temp", "1.0", "--top-p", "0.95", "--top-k", "20", "--min-p", "0",
 ]
 
-# PENDING: kleinste gemessene Kartengroesse (wie bei Katy durch Speichergrenze auf der 32-GB-Karte simulieren)
+# kleinste gemessene Karte 12 GB (14.1 tok/s), per -fitt auf der 32-GB-Karte simuliert wie bei Katy
 [requires]
 ram_gib = 24
-vram_gib = 32
+vram_gib = 12
 vram_is_minimum = true
 
 # Schalter wie Katys Produktionsbau (fle.service, 13.11.2026): Faltungsfenster k28, GDN-Replay k30, Sampler-Schnellweg k77
