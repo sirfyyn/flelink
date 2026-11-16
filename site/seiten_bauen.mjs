@@ -91,6 +91,25 @@ const PAGES = [
     ],
   },
   {
+    slug: "kate-27b", ids: ["kate-27b-dspine"],
+    name: "Kate 27B",
+    title: "Run Kate 27B (abliterated) locally on a 12 to 32 GB GPU",
+    desc: "Kate 27B, Katy with the refusal direction removed, as IQ4_XS with the DSpine draft head, with FLE Link: 142.7 tokens/s from 20 GB of GPU memory, 37.3 on 16 GB, 14.1 on 12 GB. One command, every number measured.",
+    lead: "Kate is Katy (Swift-1.5-Qwen3.8-27B) with the refusal direction removed from the weights, as IQ4_XS in bartowski's tensor layout with our own importance matrix, plus the public DSpine b16 draft head. Requests that only sound unsafe are no longer refused (OR-Bench hard: 88 of 100 for Katy, 1 for Kate); clearly harmful ones still are, 70 of 100.",
+    needs: "One NVIDIA card from 12 GB and 24 GB of RAM, and FLE v1.3.0 (the dense engine line), which FLE Link installs for this recipe.",
+    more: [
+      "Kate no longer refuses requests the original model refused for safety reasons. You are responsible for what you do with it.",
+      "Quality against Katy on the same build: ARC-Challenge 94.2 % (Katy 94.3), GSM8K 97.6 % (97.2), LiveCodeBench 44 (42); no difference is significant.",
+      "Below 20 GB the speed depends on the CPU and the RAM: measured on a Ryzen 9 9950X3D with 128 GB RAM, with the memory limit simulated on a 32 GB card.",
+      "Licence of the model: Swift Open License v1.0, the DSpine head Apache-2.0, see the model page.",
+    ],
+    links: [
+      ["https://huggingface.co/sirfyyn/Kate-Qwen-27B-GGUF-SpedUp-Abliterated", "Kate on Hugging Face"],
+      ["https://youtu.be/Bye6WPpkxA4", "The Kate report as a video"],
+      ["https://github.com/sirfyyn/FastLocalExperts", "The FLE engine"],
+    ],
+  },
+  {
     slug: "llama-3.2-1b", ids: ["llama-3.2-1b"],
     name: "Llama 3.2 1B",
     title: "Run Llama 3.2 1B locally on any laptop",
