@@ -10,6 +10,7 @@
 use crate::downloads::Downloads;
 use crate::settings::Config;
 use flelink_core::launch::run_capture;
+use flelink_core::recipe::EngineSpec;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -360,8 +361,62 @@ impl Engines {
         }
     }
 
+    /// The newest release of `repo` in a recipe's FLE line (and up to its `max_version`): the release list, drafts and
+    /// test builds left out; when GitHub's API refuses (403/429), the release feed (flelink-core `release_for`).
+    fn release_in_line(&self, repo: &str, spec: &EngineSpec) -> Result<Value, EngineError> {
+        let none = || {
+            Runtime(format!(
+                "No FLE release of the {} line ({}) in {repo}",
+                spec.line,
+                spec.line.range()
+            ))
+        };
+        match http_json(&format!(
+            "{}/{repo}/releases?per_page=100",
+            self.inner.github_api
+        )) {
+            Ok(Value::Array(list)) => {
+                let ok: Vec<&Value> = list
+                    .iter()
+                    .filter(|r| r["draft"] != true && r["prerelease"] != true)
+                    .collect();
+                let tag = flelink_core::engines::pick_tag(
+                    ok.iter().filter_map(|r| r["tag_name"].as_str()),
+                    spec,
+                )
+                .ok_or_else(none)?;
+                Ok(ok
+                    .into_iter()
+                    .find(|r| r["tag_name"] == tag.as_str())
+                    .cloned()
+                    .unwrap_or_default())
+            }
+            Ok(_) => Err(Network("GitHub sent no release list".into())),
+            Err(Network(ref m))
+                if (m == "Forbidden" || m == "Too Many Requests")
+                    && self.inner.github_api == GITHUB_API =>
+            {
+                let tag = flelink_core::engines::release_for(repo, spec)
+                    .map_err(|e| Runtime(format!("{e:#}")))?;
+                self.release(repo, &tag)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     /// Which release assets an install would download (a readable reason if none fits).
     pub fn plan_install(&self, variant: &str, sys: &Value) -> Result<Value, EngineError> {
+        self.plan_install_for(variant, sys, None)
+    }
+
+    /// The same for a recipe: an FLE engine is then the newest release of the recipe's line (moe or dense), not simply
+    /// the latest release, which may belong to the other line.
+    pub fn plan_install_for(
+        &self,
+        variant: &str,
+        sys: &Value,
+        spec: Option<&EngineSpec>,
+    ) -> Result<Value, EngineError> {
         let (os, arch) = os_arch();
         // where the variant's engine comes from is its adapter's; the settings can name another tag (`<kind>_tag`)
         let kind = if variant.starts_with("fle") {
@@ -375,7 +430,12 @@ impl Engines {
             t if t.is_empty() => r.default_tag.unwrap_or("latest").to_string(),
             t => t,
         };
-        let (rel, source) = (self.release(r.repo, &tag)?, r.repo);
+        let in_line = spec.filter(|_| kind == "fle" && tag == "latest");
+        let rel = match in_line {
+            Some(sp) => self.release_in_line(r.repo, sp)?,
+            None => self.release(r.repo, &tag)?,
+        };
+        let source = r.repo;
         let assets = rel["assets"].as_array().cloned().unwrap_or_default();
         let pattern = asset_patterns(variant, os, &arch)
             .map_err(Runtime)?
@@ -464,7 +524,17 @@ impl Engines {
     }
 
     pub fn install(&self, variant: &str, sys: &Value) -> Result<Value, EngineError> {
-        let plan = self.plan_install(variant, sys)?;
+        self.install_for(variant, sys, None)
+    }
+
+    /// Install for a recipe (or a line the page names): an FLE engine of that line, see [`Engines::plan_install_for`].
+    pub fn install_for(
+        &self,
+        variant: &str,
+        sys: &Value,
+        spec: Option<&EngineSpec>,
+    ) -> Result<Value, EngineError> {
+        let plan = self.plan_install_for(variant, sys, spec)?;
         let stage = self.inner.dir.join("_downloads");
         let _ = std::fs::create_dir_all(&stage);
         let files: Vec<Value> = plan["assets"].as_array().unwrap().iter().map(|a| json!({"url": a["url"], "dest": stage.join(a["name"].as_str().unwrap_or("")).to_string_lossy(), "size": a["size"], "sha256": a["sha256"]})).collect();
@@ -655,6 +725,17 @@ impl Engines {
 
     /// The engine a launch should use. `want`: auto | fle | upstream | custom.
     pub fn resolve(&self, want: &str, sys: &Value) -> Result<Value, EngineError> {
+        self.resolve_for(want, sys, None)
+    }
+
+    /// The same for a recipe: FLE builds only of the recipe's line (and up to its `max_version`), the newest of them first,
+    /// so a moe build and a dense build can be installed side by side and each recipe starts its own.
+    pub fn resolve_for(
+        &self,
+        want: &str,
+        sys: &Value,
+        spec: Option<&EngineSpec>,
+    ) -> Result<Value, EngineError> {
         let choice = self.setting("choice");
         if want == "custom" || (want == "auto" && choice == "custom") {
             let path = self.setting("custom_path");
@@ -694,6 +775,9 @@ impl Engines {
             .map(|v| v["id"].as_str().unwrap_or("").to_string())
             .collect();
         let mut have = self.installed();
+        if let Some(sp) = spec {
+            have.retain(|e| e["kind"] != "fle" || sp.admits(&entry_release(e)));
+        }
         have.sort_by(|a, b| {
             let rank = |e: &Value| {
                 order
@@ -701,7 +785,14 @@ impl Engines {
                     .position(|o| e["variant"] == o.as_str())
                     .unwrap_or(99)
             };
-            rank(a).cmp(&rank(b)).then(
+            // for a recipe the newest build of its line comes first (min_version), otherwise the last installed one
+            let newest = if spec.is_some() {
+                flelink_core::recipe::engine_version(&entry_release(b))
+                    .cmp(&flelink_core::recipe::engine_version(&entry_release(a)))
+            } else {
+                std::cmp::Ordering::Equal
+            };
+            rank(a).cmp(&rank(b)).then(newest).then(
                 b["installed"]
                     .as_f64()
                     .unwrap_or(0.0)
@@ -720,6 +811,14 @@ impl Engines {
             json!({"kind": e["kind"], "flavor": if e["flavor"].is_null() || e["flavor"] == "" { e["kind"].clone() } else { e["flavor"].clone() }, "backend": e["backend"], "path": e["path"],
             "version": e.get("version").cloned().unwrap_or(json!("")), "id": e["id"], "log_verbosity": true}),
         )
+    }
+}
+
+/// The release an installed engine entry was built from: its tag (`v1.2.6`), else its folder in the path.
+pub fn entry_release(e: &Value) -> String {
+    match e["tag"].as_str().filter(|t| !t.is_empty()) {
+        Some(t) => t.to_string(),
+        None => e["path"].as_str().unwrap_or("").to_string(),
     }
 }
 

@@ -109,11 +109,22 @@ pub fn ensure_and_start_recipe(
             .context("no engine fits this machine")?,
     };
     emit(Event::Step(format!("Engine: {} - {}", v.label, v.why)));
-    let existing = engines::newest_installed(home, v.id);
+    // the FLE engine has two lines without shared code (moe, dense): only a build of the recipe's line counts, and only
+    // releases of that line are installed for it; a build of the other line stays where it is, for its own recipes
+    let spec = &r.engine;
+    let fle = v.kind == "fle";
+    if fle {
+        emit(Event::Step(format!(
+            "Engine line: {} ({})",
+            spec.line,
+            spec.line.range()
+        )));
+    }
+    let existing = engines::newest_installed_for(home, &v, spec);
     let server_bin = match existing {
         // a recipe's numbers belong to an engine: a newer release is only taken when this recipe needs it (the old folder
         // stays, so a failed update keeps it)
-        Some((name, p)) => match engines::update_available(home, &v, &name) {
+        Some((name, p)) => match engines::update_available(home, &v, &name, spec) {
             Some(tag)
                 if !r
                     .engine
@@ -129,7 +140,13 @@ pub fn ensure_and_start_recipe(
             }
             Some(tag) => {
                 emit(Event::Step(format!("Updating {} to {tag}", v.label)));
-                let updated = engines::install(home, &v, &sys, &mut progress(&mut *emit));
+                let updated = engines::install(
+                    home,
+                    &v,
+                    &sys,
+                    fle.then_some(spec),
+                    &mut progress(&mut *emit),
+                );
                 match updated {
                     Ok(p2) => p2,
                     Err(e) => {
@@ -146,7 +163,13 @@ pub fn ensure_and_start_recipe(
             emit(Event::Step(
                 "Installing the engine (checked against the SHA-256 GitHub publishes)".into(),
             ));
-            engines::install(home, &v, &sys, &mut progress(&mut *emit))?
+            engines::install(
+                home,
+                &v,
+                &sys,
+                fle.then_some(spec),
+                &mut progress(&mut *emit),
+            )?
         }
     };
     start_with(home, r, &sys, &server_bin, v.kind, v.label, None, emit)

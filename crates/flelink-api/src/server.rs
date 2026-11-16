@@ -87,6 +87,8 @@ pub type Ctx = Arc<Studio>;
 
 /// The words of recipe_start's refusal when the installed FLE is older than the recipe's `min_version`.
 const NEEDS_NEWER: &str = "needs FLE ";
+/// The words of recipe_start's refusal when no installed FLE belongs to the recipe's engine line (moe, dense).
+const NEEDS_LINE: &str = "needs the FLE engine of the ";
 
 /// A recipe start that updates the engine itself when the recipe needs a newer FLE (as `flelink run` does): the newer
 /// release goes into Downloads like an install from the Engine page, and the recipe starts once it is in. Anything else
@@ -119,9 +121,17 @@ pub fn recipe_start_updating(st: &Ctx, id: &str) -> Result<Value, ApiError> {
         }
     }
     let m = match st.recipe_start(id) {
-        Err(ApiError(409, m)) if m.contains(NEEDS_NEWER) && m.contains(" or newer.") => m,
+        Err(ApiError(409, m))
+            if (m.contains(NEEDS_NEWER) && m.contains(" or newer.")) || m.contains(NEEDS_LINE) =>
+        {
+            m
+        }
         r => return r,
     };
+    // the release to install is the newest of the recipe's line (the latest release may belong to the other one)
+    let spec = flelink_core::recipe::find(&st.opts.home, id)
+        .map(|r| r.engine)
+        .unwrap_or_default();
     let info = st.sysinfo();
     let (os, arch) = crate::engines::os_arch();
     // the variant of the engine in use (its build), else the first FLE build that fits this machine
@@ -143,11 +153,14 @@ pub fn recipe_start_updating(st: &Ctx, id: &str) -> Result<Value, ApiError> {
     else {
         return Err(ApiError(409, m));
     };
-    let job = st.engines.install(&variant, &info).map_err(|e| match e {
-        EngineError::Runtime(x) => ApiError(409, format!("{m} ({x})")),
-        EngineError::Network(x) => ApiError(502, format!("{m} Could not reach GitHub: {x}")),
-        EngineError::NotFound => ApiError(409, m.clone()),
-    })?;
+    let job = st
+        .engines
+        .install_for(&variant, &info, Some(&spec))
+        .map_err(|e| match e {
+            EngineError::Runtime(x) => ApiError(409, format!("{m} ({x})")),
+            EngineError::Network(x) => ApiError(502, format!("{m} Could not reach GitHub: {x}")),
+            EngineError::NotFound => ApiError(409, m.clone()),
+        })?;
     let (job_id, tag) = (
         job["id"].as_str().unwrap_or("").to_string(),
         job["meta"]["tag"].as_str().unwrap_or("").to_string(),
@@ -182,9 +195,22 @@ pub fn recipe_start_updating(st: &Ctx, id: &str) -> Result<Value, ApiError> {
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
         });
-    let title = m.split(NEEDS_NEWER).next().unwrap_or("").trim().to_string();
+    let title = m
+        .split(NEEDS_LINE)
+        .next()
+        .unwrap_or("")
+        .split(NEEDS_NEWER)
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let why = if m.contains(NEEDS_LINE) {
+        format!("the FLE engine of the {} line", spec.line)
+    } else {
+        "a newer FLE engine".to_string()
+    };
     Ok(json!({"installing": true, "job": job,
-              "message": format!("{title} needs a newer FLE engine: FLE Link installs {tag} now (progress on the Engine page) and starts the recipe when it is in")}))
+              "message": format!("{title} needs {why}: FLE Link installs {tag} now (progress on the Engine page) and starts the recipe when it is in")}))
 }
 
 fn make_token() -> String {
@@ -677,6 +703,16 @@ impl Studio {
 
     /// The engine a start should use (`engine_for`).
     pub fn engine_for(&self, want: &str, info: &Value) -> Result<Value, ApiError> {
+        self.engine_for_spec(want, info, None)
+    }
+
+    /// The same for a recipe: an installed FLE engine only of the recipe's line (see `Engines::resolve_for`).
+    pub fn engine_for_spec(
+        &self,
+        want: &str,
+        info: &Value,
+        spec: Option<&flelink_core::recipe::EngineSpec>,
+    ) -> Result<Value, ApiError> {
         let (custom_path, choice) = {
             let c = self.config.lock().unwrap();
             let g = |k: &str| {
@@ -709,7 +745,7 @@ impl Studio {
                 return Ok(c.clone());
             }
         }
-        match self.engines.resolve(want, info) {
+        match self.engines.resolve_for(want, info, spec) {
             Ok(e) => Ok(e),
             Err(EngineError::Runtime(m)) => match custom {
                 Some(c) if want == "auto" || c["flavor"] == want => Ok(c),
@@ -724,6 +760,16 @@ impl Studio {
         &self,
         model_ident: &str,
         profile_ident: Option<&Value>,
+    ) -> Result<crate::launch::Plan, ApiError> {
+        self.make_plan_for(model_ident, profile_ident, None)
+    }
+
+    /// The same for a recipe, whose engine spec says which FLE line (and versions) the engine must come from.
+    pub fn make_plan_for(
+        &self,
+        model_ident: &str,
+        profile_ident: Option<&Value>,
+        spec: Option<&flelink_core::recipe::EngineSpec>,
     ) -> Result<crate::launch::Plan, ApiError> {
         use crate::launch::{
             auto_plan, free_port, profile_plan, AutoInput, PlanError, ProfileInput,
@@ -769,7 +815,9 @@ impl Studio {
                         "This model is not completely downloaded yet".into(),
                     )));
                 }
-                let eng = self.engine_for("auto", &info).map_err(Fail::Api)?;
+                let eng = self
+                    .engine_for_spec("auto", &info, spec)
+                    .map_err(Fail::Api)?;
                 return auto_plan(&AutoInput {
                     model: m,
                     engine: &eng,
@@ -794,7 +842,10 @@ impl Studio {
                     None
                 }
             } else {
-                Some(self.engine_for(&pengine, &info).map_err(Fail::Api)?)
+                Some(
+                    self.engine_for_spec(&pengine, &info, spec)
+                        .map_err(Fail::Api)?,
+                )
             };
             profile_plan(&ProfileInput {
                 profile: &prof,
@@ -1714,10 +1765,50 @@ impl Studio {
                 ),
             ));
         }
+        // the FLE engine has two lines without shared code (moe, dense): a recipe that wants FLE starts only a build of its
+        // line; when none is installed (only the other line, or none at all for a recipe that needs FLE), say so, and
+        // recipe_start_updating installs the newest release of the line
+        let wants_fle = builtin_first.is_some_and(|bi| r.engine.prefer[bi] == "fle");
+        // (a llama-server of one's own, chosen on the Engine page, is the user's choice and has no line)
+        let own_choice = self
+            .config
+            .lock()
+            .unwrap()
+            .get("engine")
+            .and_then(|e| e.get("choice"))
+            .and_then(Value::as_str)
+            == Some("custom");
+        if plugin.is_none() && wants_fle && !own_choice {
+            let fle: Vec<Value> = self
+                .engines
+                .installed()
+                .into_iter()
+                .filter(|e| e["kind"] == "fle")
+                .collect();
+            let in_line = fle
+                .iter()
+                .any(|e| r.engine.admits(&crate::engines::entry_release(e)));
+            let info = self.sysinfo();
+            let (os, arch) = crate::engines::os_arch();
+            let fits = crate::engines::variants(&info, os, &arch)
+                .iter()
+                .any(|v| v["kind"] == "fle");
+            if !in_line && fits && (r.engine.strict || !fle.is_empty()) {
+                return Err(ApiError(
+                    409,
+                    format!(
+                        "{} {NEEDS_LINE}{} line ({}); none is installed. Install it on the Engine page, then start again.",
+                        r.title,
+                        r.engine.line,
+                        r.engine.line.range()
+                    ),
+                ));
+            }
+        }
         let template = plugin.as_ref().is_some_and(|(_, e)| !e.command.is_empty());
         let mut plan = match &plugin {
             Some((_, e)) => self.plugin_plan(&r, e, &main)?,
-            None => self.make_plan(&main, Some(&json!("auto")))?,
+            None => self.make_plan_for(&main, Some(&json!("auto")), Some(&r.engine))?,
         };
         // a recipe whose settings need a newer engine than the installed one: say so instead of starting it with values the
         // engine does not know (`flelink run` installs the newer release itself)
@@ -2221,7 +2312,20 @@ fn route(st: &Ctx, r: &Req) -> Option<Result<Value, ApiError>> {
                     "That engine does not fit this machine".into(),
                 ));
             }
-            st.engines.install(&variant, &info).map_err(|e| match e {
+            // `line` ("moe" or "dense"): the newest FLE release of that line instead of the latest release (an update
+            // notice names the line of the build it updates)
+            let line = match body.get("line").and_then(Value::as_str).unwrap_or("") {
+                "" => None,
+                l => Some(
+                    serde_json::from_value::<flelink_core::recipe::EngineLine>(json!(l))
+                        .map_err(|_| ApiError(400, format!("Unknown engine line '{l}' (moe or dense)")))?,
+                ),
+            };
+            let spec = line.map(|line| flelink_core::recipe::EngineSpec {
+                line,
+                ..Default::default()
+            });
+            st.engines.install_for(&variant, &info, spec.as_ref()).map_err(|e| match e {
                 EngineError::Runtime(m) => ApiError(409, m),
                 EngineError::Network(m) => ApiError(502, format!("Could not reach GitHub: {m}")),
                 EngineError::NotFound => ApiError(404, "Not found".into()),

@@ -112,6 +112,107 @@ fn release(repo: &str, tag: Option<&str>) -> Result<Release> {
     bail!("GitHub answered {code} for {url}")
 }
 
+/// A release as GitHub's release list shows it.
+#[derive(Deserialize)]
+struct Listed {
+    tag_name: String,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
+    #[serde(default)]
+    assets: Vec<Asset>,
+}
+
+/// A plain release tag (`v1.2.6`, `v1.3`), no test build (`v1.3.0-rc1`).
+fn stable(tag: &str) -> bool {
+    tag.strip_prefix('v').is_some_and(|t| {
+        !t.is_empty()
+            && t.split('.').count() <= 3
+            && t.split('.')
+                .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+    })
+}
+
+/// The newest of `tags` that the recipe's engine spec admits (its line and `max_version`); only plain release tags.
+pub fn pick_tag<'a>(
+    tags: impl IntoIterator<Item = &'a str>,
+    spec: &crate::recipe::EngineSpec,
+) -> Option<String> {
+    tags.into_iter()
+        .filter(|t| stable(t) && crate::recipe::EngineLine::of(t).is_some() && spec.admits(t))
+        .max_by_key(|t| crate::recipe::engine_version(t))
+        .map(str::to_string)
+}
+
+/// The release tags a release feed (`github.com/<repo>/releases.atom`) names, newest first. GitHub serves it without the
+/// API's hourly limit; it lists published releases only (no drafts).
+fn parse_atom_tags(xml: &str, repo: &str) -> Vec<String> {
+    let mark = format!("/{repo}/releases/tag/");
+    let mut out: Vec<String> = Vec::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find(&mark) {
+        rest = &rest[i + mark.len()..];
+        let end = rest
+            .find(|c: char| c == '"' || c == '<' || c.is_whitespace())
+            .unwrap_or(rest.len());
+        let t = &rest[..end];
+        if !t.is_empty() && !t.contains('/') && !out.iter().any(|x| x == t) {
+            out.push(t.to_string());
+        }
+    }
+    out
+}
+
+/// The newest release of `repo` that the recipe's engine spec admits (the FLE line, `max_version`). The FLE engine has two
+/// lines without shared code, so "the latest release" may belong to the other one: the release list is read instead
+/// (`/releases`, drafts and test builds left out), or, when GitHub's API refuses (403/429), the release feed and the
+/// chosen release's page.
+pub fn release_for(repo: &str, spec: &crate::recipe::EngineSpec) -> Result<String> {
+    Ok(release_in_line(repo, spec)?.tag_name)
+}
+
+fn release_in_line(repo: &str, spec: &crate::recipe::EngineSpec) -> Result<Release> {
+    let what = || {
+        format!(
+            "no FLE release of the {} line ({}{}) in {repo}",
+            spec.line,
+            spec.line.range(),
+            spec.max_version
+                .as_deref()
+                .map(|m| format!(", up to {m}"))
+                .unwrap_or_default()
+        )
+    };
+    let url = format!("https://api.github.com/repos/{repo}/releases?per_page=100");
+    let r = client()?
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .send()?;
+    let code = r.status();
+    if code.is_success() {
+        let list: Vec<Listed> = r.json()?;
+        let ok: Vec<&Listed> = list.iter().filter(|l| !l.draft && !l.prerelease).collect();
+        let tag = pick_tag(ok.iter().map(|l| l.tag_name.as_str()), spec).with_context(what)?;
+        let l = list.into_iter().find(|l| l.tag_name == tag).unwrap();
+        return Ok(Release {
+            tag_name: l.tag_name,
+            assets: l.assets,
+        });
+    }
+    if code.as_u16() == 403 || code.as_u16() == 429 {
+        let feed = client()?
+            .get(format!("https://github.com/{repo}/releases.atom"))
+            .send()?;
+        if feed.status().is_success() {
+            let tags = parse_atom_tags(&feed.text()?, repo);
+            let tag = pick_tag(tags.iter().map(String::as_str), spec).with_context(what)?;
+            return release_from_page(repo, Some(&tag));
+        }
+    }
+    bail!("GitHub answered {code} for {url}")
+}
+
 /// [`release_from_page`] in the API's shape (`tag_name`, `assets` with `name`, `browser_download_url`, `digest`), for the
 /// Studio's engine install when GitHub's API refuses (403/429).
 pub fn release_page_json(repo: &str, tag: Option<&str>) -> Result<serde_json::Value> {
@@ -247,21 +348,56 @@ pub fn version_key(name: &str) -> Vec<u64> {
 
 /// The newest installed build of a variant (by its version, not by name order).
 pub fn newest_installed(dir: &Path, variant_id: &str) -> Option<(String, PathBuf)> {
+    newest_installed_where(dir, variant_id, |_| true)
+}
+
+/// The newest installed build of a variant that a recipe may use: for an FLE variant only builds of the recipe's line
+/// (and up to its `max_version`), so a moe build and a dense build can sit side by side, each in its own folder
+/// (`fle-cuda-v1.2.6`, `fle-cuda-v1.3.0`), and each recipe starts its own.
+pub fn newest_installed_for(
+    dir: &Path,
+    v: &Variant,
+    spec: &crate::recipe::EngineSpec,
+) -> Option<(String, PathBuf)> {
+    if v.kind != "fle" {
+        return newest_installed(dir, v.id);
+    }
+    newest_installed_where(dir, v.id, |n| spec.admits(n))
+}
+
+fn newest_installed_where(
+    dir: &Path,
+    variant_id: &str,
+    keep: impl Fn(&str) -> bool,
+) -> Option<(String, PathBuf)> {
     installed(dir)
         .into_iter()
-        .filter(|(n, _)| n.starts_with(&format!("{variant_id}-")))
+        .filter(|(n, _)| n.starts_with(&format!("{variant_id}-")) && keep(n))
         .max_by_key(|(n, _)| version_key(n))
 }
 
-/// A newer FLE release than `installed_name`, if there is one. Asks GitHub at most once a day (the answer is kept in
-/// `<data>/engines/.latest-<variant>`); offline, on any error and with FLE_NO_UPDATE set it says nothing. Only the FLE
-/// engine follows its releases (its adapter says so): upstream llama.cpp is pinned (LLAMA_TAG).
-pub fn update_available(dir: &Path, v: &Variant, installed_name: &str) -> Option<String> {
+/// A newer FLE release than `installed_name` within the recipe's line (and up to its `max_version`), if there is one.
+/// Asks GitHub at most once a day per line (the answer is kept in `<data>/engines/.latest-<variant>-<line>`); offline, on
+/// any error and with FLE_NO_UPDATE set it says nothing. Only the FLE engine follows its releases (its adapter says so):
+/// upstream llama.cpp is pinned (LLAMA_TAG).
+pub fn update_available(
+    dir: &Path,
+    v: &Variant,
+    installed_name: &str,
+    spec: &crate::recipe::EngineSpec,
+) -> Option<String> {
     let rel = crate::adapter::release_of(v.kind).filter(|r| r.self_updates)?;
     if std::env::var_os("FLE_NO_UPDATE").is_some_and(|x| !x.is_empty()) {
         return None;
     }
-    let memo = dir.join("engines").join(format!(".latest-{}", v.id));
+    let max = spec
+        .max_version
+        .as_deref()
+        .map(|m| format!("-max{m}"))
+        .unwrap_or_default();
+    let memo = dir
+        .join("engines")
+        .join(format!(".latest-{}-{}{max}", v.id, spec.line));
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -274,13 +410,21 @@ pub fn update_available(dir: &Path, v: &Variant, installed_name: &str) -> Option
     let tag = match cached {
         Some(t) => t,
         None => {
-            let t = release(rel.repo, rel.default_tag).ok()?.tag_name;
+            let t = match rel.default_tag {
+                Some(pinned) => release(rel.repo, Some(pinned)).ok()?.tag_name,
+                None => release_for(rel.repo, spec).ok()?,
+            };
             let _ = std::fs::write(&memo, format!("{now} {t}"));
             t
         }
     };
-    let have = version_key(installed_name);
-    (version_key(&format!("x-{tag}")) > have).then_some(tag)
+    newer_in_line(installed_name, &tag, spec).then_some(tag)
+}
+
+/// Is release `tag` an update of the installed build `installed_name` for this recipe (same line, newer, within
+/// `max_version`)?
+pub fn newer_in_line(installed_name: &str, tag: &str, spec: &crate::recipe::EngineSpec) -> bool {
+    spec.admits(tag) && version_key(&format!("x-{tag}")) > version_key(installed_name)
 }
 
 /// Install a server from any GitHub release (an engine a plugin brings): the archive whose name contains every token goes
@@ -397,18 +541,23 @@ pub fn fle_signed_sha(tag: &str, asset: &str) -> Result<Option<String>> {
     crate::signature::fle_sha(tag, asset, &get)
 }
 
-/// Download and unpack an engine; returns the path of its llama-server. An FLE release is checked against its signed
-/// checksums, any other against the SHA-256 GitHub publishes.
+/// Download and unpack an engine; returns the path of its llama-server. With a recipe's engine spec an FLE engine is the
+/// newest release of the recipe's line (see [`release_for`]); without one, the latest release. An FLE release is checked
+/// against its signed checksums, any other against the SHA-256 GitHub publishes.
 pub fn install(
     dir: &Path,
     v: &Variant,
     s: &SysInfo,
+    spec: Option<&crate::recipe::EngineSpec>,
     progress: &mut dyn FnMut(&str, u64, u64),
 ) -> Result<PathBuf> {
     let r = crate::adapter::release_of(v.kind)
         .with_context(|| format!("FLE Link does not install the {} engine", v.kind))?;
     let (repo, tag) = (r.repo, r.default_tag);
-    let rel = release(repo, tag)?;
+    let rel = match spec.filter(|_| tag.is_none() && repo == crate::adapter::FLE_REPO) {
+        Some(sp) => release_in_line(repo, sp)?,
+        None => release(repo, tag)?,
+    };
     let asset = pick(&rel.assets, v, &s.os, &s.arch).with_context(|| {
         format!(
             "no {} build for {}-{} in {repo} {}",
@@ -620,6 +769,122 @@ mod version_tests {
             "fle-cuda-v1.10.0"
         );
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    fn fle_variant() -> Variant {
+        Variant {
+            id: "fle-cuda",
+            kind: "fle",
+            backend: "cuda",
+            label: "FLE engine (NVIDIA CUDA)",
+            why: "",
+        }
+    }
+
+    #[test]
+    fn both_lines_sit_side_by_side_and_each_recipe_takes_its_own() {
+        use crate::recipe::{EngineLine, EngineSpec};
+        let home = std::env::temp_dir().join(format!("fle-lines-{}", std::process::id()));
+        for n in [
+            "fle-cuda-v1.2.5",
+            "fle-cuda-v1.2.6",
+            "fle-cuda-v1.3.0",
+            "upstream-cuda-b11540",
+        ] {
+            let d = home.join("engines").join(n).join("bin");
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(
+                d.join(if cfg!(windows) {
+                    "llama-server.exe"
+                } else {
+                    "llama-server"
+                }),
+                "",
+            )
+            .unwrap();
+        }
+        let v = fle_variant();
+        let moe = EngineSpec::default();
+        let dense = EngineSpec {
+            line: EngineLine::Dense,
+            ..EngineSpec::default()
+        };
+        assert_eq!(
+            newest_installed(&home, "fle-cuda").unwrap().0,
+            "fle-cuda-v1.3.0"
+        );
+        assert_eq!(
+            newest_installed_for(&home, &v, &moe).unwrap().0,
+            "fle-cuda-v1.2.6"
+        );
+        assert_eq!(
+            newest_installed_for(&home, &v, &dense).unwrap().0,
+            "fle-cuda-v1.3.0"
+        );
+        let capped = EngineSpec {
+            max_version: Some("v1.2.5".into()),
+            ..EngineSpec::default()
+        };
+        assert_eq!(
+            newest_installed_for(&home, &v, &capped).unwrap().0,
+            "fle-cuda-v1.2.5"
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn an_update_stays_in_the_line() {
+        use crate::recipe::{EngineLine, EngineSpec};
+        let moe = EngineSpec::default();
+        let dense = EngineSpec {
+            line: EngineLine::Dense,
+            ..EngineSpec::default()
+        };
+        let tags = [
+            "v1.3.1",
+            "v1.3.0",
+            "v1.2.7",
+            "v1.2.6",
+            "v1.4.0-rc1",
+            "v1.2.10",
+            "nightly",
+        ];
+        assert_eq!(pick_tag(tags, &moe).as_deref(), Some("v1.2.10"));
+        assert_eq!(pick_tag(tags, &dense).as_deref(), Some("v1.3.1"));
+        assert_eq!(pick_tag(["v1.2.6"], &dense), None);
+        let capped = EngineSpec {
+            max_version: Some("v1.2.7".into()),
+            ..EngineSpec::default()
+        };
+        assert_eq!(pick_tag(tags, &capped).as_deref(), Some("v1.2.7"));
+        assert!(newer_in_line("fle-cuda-v1.2.6", "v1.2.7", &moe));
+        assert!(
+            !newer_in_line("fle-cuda-v1.2.6", "v1.3.0", &moe),
+            "dense is no update of moe"
+        );
+        assert!(newer_in_line("fle-cuda-v1.3.0", "v1.3.1", &dense));
+        assert!(!newer_in_line("fle-cuda-v1.3.1", "v1.3.1", &dense));
+    }
+
+    #[test]
+    fn the_release_feed_names_its_tags() {
+        let xml = r#"<feed><entry><link rel="alternate" type="text/html" href="https://github.com/sirfyyn/FastLocalExperts/releases/tag/v1.3.0"/>
+            <id>tag:github.com,2008:Repository/1/v1.3.0</id></entry>
+            <entry><link rel="alternate" type="text/html" href="https://github.com/sirfyyn/FastLocalExperts/releases/tag/v1.2.6"/></entry>
+            <entry><link href="https://github.com/sirfyyn/FastLocalExperts/releases/tag/v1.2.6"/></entry></feed>"#;
+        assert_eq!(
+            parse_atom_tags(xml, "sirfyyn/FastLocalExperts"),
+            vec!["v1.3.0".to_string(), "v1.2.6".to_string()]
+        );
+    }
+
+    /// Live: the newest release of each line (`cargo test -p flelink-core -- --ignored line_live`).
+    #[test]
+    #[ignore]
+    fn line_live_fle_releases() {
+        use crate::recipe::EngineSpec;
+        let t = release_for(crate::adapter::FLE_REPO, &EngineSpec::default()).unwrap();
+        assert!(t.starts_with("v1.2."), "{t}");
     }
 }
 

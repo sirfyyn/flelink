@@ -200,6 +200,11 @@ A recipe is one TOML file: model, engine, start values, chat defaults, and optio
 A recipe sets only the engine's own switches, but it does choose the files and the engine arguments, so treat one from someone else like a program: `flelink run my.recipe.toml` shows what it sets and asks first. Keep the settings that work for you in `<data>/recipes/` and share the file to reproduce them elsewhere. Format and places: [docs/RECIPES.md](docs/RECIPES.md). Plugins add recipes and engines as files:
 [docs/PLUGINS.md](docs/PLUGINS.md).
 
+The FLE engine comes in two lines, `moe` (v1.2.x, for mixture-of-experts models such as Rin) and `dense` (v1.3.0 and
+newer, for dense models such as Kate). A recipe names its line (`[engine] line = "dense"`; missing: `moe`), and FLE Link
+installs, updates and starts only engines of that line for it; both lines can be installed at once
+([docs/RECIPES.md, Engine lines](docs/RECIPES.md#engine-lines)).
+
 ## In the Studio
 
 - **Chat** with live tokens per second, prompt speed and context fill.

@@ -544,8 +544,10 @@ impl Updates {
         }
         let fle: Vec<&Value> = installed.iter().filter(|e| e["kind"] == "fle").collect();
         if state["error"] == "" && !fle.is_empty() {
-            state["engines"] = match self.get(&format!("{ENGINE_REPO}/releases/latest")) {
-                Ok(rel) => json!(engine_updates(&fle, &rel)),
+            // the release list, not the latest release: the FLE engine has two lines (moe, dense), each build is updated
+            // within its own
+            state["engines"] = match self.get(&format!("{ENGINE_REPO}/releases?per_page=100")) {
+                Ok(list) => json!(engine_updates(&fle, &list)),
                 Err(_) => json!([]), // the engine notice is a bonus; a failure is not shown
             };
         } else if fle.is_empty() {
@@ -883,43 +885,104 @@ pub fn cli(
     ))
 }
 
-/// FLE engines that have a newer build in `release`, one entry per installed variant.
-fn engine_updates(installed: &[&Value], release: &Value) -> Vec<Value> {
-    let latest = release["tag_name"].as_str().unwrap_or("");
+/// FLE engines that have a newer build in `releases` (GitHub's release list), one entry per installed variant and engine
+/// line: a moe build (v1.2.x) is offered the newest moe release, a dense build (v1.3.0 and newer) the newest dense one,
+/// never the other line's.
+fn engine_updates(installed: &[&Value], releases: &Value) -> Vec<Value> {
+    use flelink_core::recipe::{EngineLine, EngineSpec};
     let ok = regex::Regex::new(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,60}$").unwrap();
-    if !ok.is_match(latest) {
-        return vec![];
-    }
-    let mut variants: Vec<String> = installed
-        .iter()
-        .filter_map(|e| e["variant"].as_str().map(String::from))
+    let tags: Vec<&str> = releases
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["draft"] != true && r["prerelease"] != true)
+        .filter_map(|r| r["tag_name"].as_str())
+        .filter(|t| ok.is_match(t))
         .collect();
-    variants.sort();
-    variants.dedup();
+    let mut groups: Vec<(String, EngineLine)> = installed
+        .iter()
+        .filter_map(|e| {
+            let v = e["variant"].as_str()?;
+            let line = EngineLine::of(&crate::engines::entry_release(e)).unwrap_or_default();
+            Some((v.to_string(), line))
+        })
+        .collect();
+    groups.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.as_str().cmp(b.1.as_str())));
+    groups.dedup();
     let mut out = vec![];
-    for v in variants {
+    for (v, line) in groups {
+        let spec = EngineSpec {
+            line,
+            ..EngineSpec::default()
+        };
+        let Some(latest) = flelink_core::engines::pick_tag(tags.iter().copied(), &spec) else {
+            continue;
+        };
         let have: Vec<&&Value> = installed
             .iter()
-            .filter(|e| e["variant"] == v.as_str())
+            .filter(|e| {
+                e["variant"] == v.as_str()
+                    && EngineLine::of(&crate::engines::entry_release(e)).unwrap_or_default() == line
+            })
             .collect();
-        if have.iter().any(|e| e["tag"] == latest) {
+        if have.iter().any(|e| e["tag"] == latest.as_str()) {
             continue;
         }
         let newest = have
             .iter()
             .max_by(|a, b| {
-                a["installed"]
-                    .as_f64()
-                    .unwrap_or(0.0)
-                    .total_cmp(&b["installed"].as_f64().unwrap_or(0.0))
+                flelink_core::recipe::engine_version(&crate::engines::entry_release(a))
+                    .cmp(&flelink_core::recipe::engine_version(
+                        &crate::engines::entry_release(b),
+                    ))
+                    .then(
+                        a["installed"]
+                            .as_f64()
+                            .unwrap_or(0.0)
+                            .total_cmp(&b["installed"].as_f64().unwrap_or(0.0)),
+                    )
             })
             .unwrap();
+        let installed_tag = newest["tag"].as_str().unwrap_or("");
+        if !flelink_core::engines::newer_in_line(&format!("x-{installed_tag}"), &latest, &spec) {
+            continue;
+        }
         let backend = newest["backend"].as_str().unwrap_or(&v).to_string();
-        out.push(json!({"id": format!("{v}@{latest}"), "variant": v, "label": format!("FLE engine ({backend})"),
-            "installed": newest["tag"].as_str().unwrap_or(""), "latest": latest,
-            "url": format!("https://github.com/{ENGINE_REPO}/releases/tag/{latest}")}));
+        out.push(
+            json!({"id": format!("{v}@{latest}"), "variant": v, "line": line.as_str(),
+            "label": format!("FLE engine ({backend}, {line} line)"),
+            "installed": installed_tag, "latest": latest,
+            "url": format!("https://github.com/{ENGINE_REPO}/releases/tag/{latest}")}),
+        );
     }
     out
+}
+
+#[cfg(test)]
+mod engine_line_tests {
+    use super::*;
+
+    #[test]
+    fn each_installed_line_is_offered_the_newest_release_of_its_own() {
+        let e = |tag: &str| json!({"variant": "fle-cuda", "kind": "fle", "backend": "cuda", "tag": tag, "installed": 1.0});
+        let rels = json!([
+            {"tag_name": "v1.3.1"}, {"tag_name": "v1.3.0"}, {"tag_name": "v1.2.7"},
+            {"tag_name": "v1.2.6"}, {"tag_name": "v1.4.0", "draft": true}
+        ]);
+        let (a, b) = (e("v1.2.6"), e("v1.3.0"));
+        let out = engine_updates(&[&a, &b], &rels);
+        assert_eq!(out.len(), 2, "{out:?}");
+        let moe = out.iter().find(|x| x["line"] == "moe").unwrap();
+        assert_eq!(
+            (moe["installed"].as_str(), moe["latest"].as_str()),
+            (Some("v1.2.6"), Some("v1.2.7"))
+        );
+        let dense = out.iter().find(|x| x["line"] == "dense").unwrap();
+        assert_eq!(dense["latest"], "v1.3.1");
+        // only a moe build installed and no newer moe release: v1.3.x is not offered as its update
+        let only = engine_updates(&[&e("v1.2.7")], &rels);
+        assert!(only.is_empty(), "{only:?}");
+    }
 }
 
 /// Start this program again with the same arguments (no second browser tab). Unix replaces the process; Windows starts a
